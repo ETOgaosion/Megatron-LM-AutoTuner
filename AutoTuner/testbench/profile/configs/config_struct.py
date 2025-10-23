@@ -20,6 +20,7 @@ class ProfileConfig:
         ProfileMode.collect_data
     )  # 0: collect data, 1: nsys profile, 2: torch profiler
     warmup_iters: int = 2  # warmup_iters operator executions
+    repeat: int = 1  # number of repeat iterations for each op
 
 
 @dataclass

@@ -5,11 +5,12 @@ import torch
 
 
 class TimerContext:
-    def __init__(self, name: str = "", cuda_sync: bool = False):
+    def __init__(self, name: str = "", cuda_sync: bool = False, repeat: int = 1):
         self.name: str = name
         self.start_time: Optional[float] = None
         self.end_time: Optional[float] = None
         self.cuda_sync: bool = cuda_sync
+        self.repeat: int = repeat
 
     def __enter__(self) -> "TimerContext":
         if self.cuda_sync:
@@ -22,8 +23,20 @@ class TimerContext:
             torch.cuda.synchronize()
         self.end_time = time.time()
         self.elapsed_time = self.end_time - self.start_time
-        self.result = str(self.elapsed_time) + " seconds"
-        print(f"{self.name} took {self.elapsed_time:.6f} seconds")
+
+        if self.repeat > 1:
+            avg_time = self.elapsed_time / self.repeat
+            self.result = (
+                f"avg {avg_time:.6f}s "
+                f"({self.elapsed_time:.6f} seconds over {self.repeat} runs)"
+            )
+            print(
+                f"{self.name} took avg {avg_time:.6f}s "
+                f"({self.elapsed_time:.6f} seconds over {self.repeat} runs)"
+            )
+        else:
+            self.result = str(self.elapsed_time) + " seconds"
+            print(f"{self.name} took {self.elapsed_time:.6f} seconds")
 
     def get_result(self) -> str:
         return self.result

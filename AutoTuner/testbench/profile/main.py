@@ -164,6 +164,13 @@ def parse_args():
         required=False,
         help="warmup op iterations",
     )
+    parser.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        required=False,
+        help="number of repeat iterations for each op",
+    )
 
     # test choices for flexibility
     parser.add_argument("--test-ops-list", type=int, nargs="+", default=None)
@@ -196,7 +203,7 @@ def handle_test_cases(args) -> List[InputTestCase]:
 
 
 def handle_profile_configs(args) -> ProfileConfig:
-    return ProfileConfig(args.profile_mode, args.warmup_iters)
+    return ProfileConfig(args.profile_mode, args.warmup_iters, args.repeat)
 
 
 def handle_model_config(args) -> dict:

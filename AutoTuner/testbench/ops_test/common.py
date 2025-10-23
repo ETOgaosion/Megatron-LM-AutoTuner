@@ -27,6 +27,7 @@ class TestCommon(ABC):
         hf_config: PretrainedConfig,
         profile_mode: int = 0,
         warmup_iters: int = 2,
+        repeat: int = 1,
     ):
         self.op: CommonOpsForTest = None
         self.module_name = "common"
@@ -72,6 +73,7 @@ class TestCommon(ABC):
         self.model_config = hf_config
         self.profile_mode = profile_mode
         self.warmup_iters = warmup_iters
+        self.repeat = repeat
 
     @abc.abstractclassmethod
     def prepare_input(self, test_case: InputTestCase, batch_data_generator: Iterator):
@@ -134,8 +136,9 @@ class TestCommon(ABC):
 
             # Call forward function - force output to require grad
             name = f"{self.module_name} forward {test_case}"
-            with TimerContext(name) as timer_ctx:
-                output = self.op(*inputs)
+            with TimerContext(name, repeat=self.repeat) as timer_ctx:
+                for _ in range(self.repeat):
+                    output = self.op(*inputs)
             self.timing_db[self.module_name]["forward"] = test_case.set_nested_dict(
                 self.timing_db[self.module_name]["forward"], timer_ctx.result
             )
@@ -143,10 +146,12 @@ class TestCommon(ABC):
             # Call backward function - force output to require grad
             output.requires_grad_(True)
             name = f"{self.module_name} backward {test_case}"
-            with TimerContext(name) as timer_ctx:
-                # Create a dummy loss tensor and call backward
-                loss = output.sum()
-                loss.backward()
+            with TimerContext(name, repeat=self.repeat) as timer_ctx:
+                for i in range(self.repeat):
+                    # Create a dummy loss tensor and call backward
+                    loss = output.sum()
+                    loss.backward(retain_graph=(i < self.repeat - 1))
+                    output.grad = None
             self.timing_db[self.module_name]["backward"] = test_case.set_nested_dict(
                 self.timing_db[self.module_name]["backward"], timer_ctx.result
             )
