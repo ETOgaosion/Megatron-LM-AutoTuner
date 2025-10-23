@@ -1,9 +1,7 @@
 from AutoTuner.utils.structs import InputTestCase
 
-from ..configs.config_struct import ProfileConfig
+from ..configs.config_struct import ProfileConfig, ProfileMode
 from .launcher import Launcher
-
-from ..configs.config_struct import ProfileMode
 
 
 class LaunchNsysProfileForOps(Launcher):

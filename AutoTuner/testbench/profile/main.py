@@ -8,10 +8,10 @@ from typing import List
 import torch
 
 from AutoTuner.testbench.profile.configs.config_struct import (
+    PROFILE_MODEL_MAP,
     ProfileConfig,
     ProfileMode,
     TorchProfilerConfig,
-    PROFILE_MODEL_MAP,
 )
 from AutoTuner.testbench.profile.launcher.get_data_launch import (
     LaunchDataCollectionForOps,
@@ -251,7 +251,7 @@ def call_launcher(
                     args.model_name,
                     "torch_profiler",
                     # f"rank_{torch.distributed.get_rank()}",
-                )
+                ),
             )
         }
     launcher = launcher_cls(
@@ -263,7 +263,10 @@ def call_launcher(
         **torch_profiler_config_kwargs,
     )
 
-    if profile_config.profile_mode == ProfileMode.nsys_profile or profile_config.profile_mode == ProfileMode.torch_profiler:
+    if (
+        profile_config.profile_mode == ProfileMode.nsys_profile
+        or profile_config.profile_mode == ProfileMode.torch_profiler
+    ):
         enable_nvtx_profiling()
 
     if args.test_case_idxs is None and args.test_ops_list is None:
@@ -289,8 +292,17 @@ def call_launcher(
         print(f"results dumped to {output_dir}")
     else:
         print("Profiling finished.")
-        with open(os.path.join(args.output_dir, args.model_name, PROFILE_MODEL_MAP[profile_config.profile_mode], "args.txt"), "w") as fp:
+        with open(
+            os.path.join(
+                args.output_dir,
+                args.model_name,
+                PROFILE_MODEL_MAP[profile_config.profile_mode],
+                "args.txt",
+            ),
+            "w",
+        ) as fp:
             fp.write(str(args))
+
 
 if __name__ == "__main__":
     print(f"Parsing args ...")

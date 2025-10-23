@@ -2,11 +2,9 @@ import torch
 
 from AutoTuner.utils.structs import InputTestCase
 
-from ..configs.config_struct import ProfileConfig, TorchProfilerConfig
+from ..configs.config_struct import ProfileConfig, ProfileMode, TorchProfilerConfig
 from ..op_mapping import OP_TEST_MAPPING
 from .launcher import Launcher
-
-from ..configs.config_struct import ProfileMode
 
 
 class LaunchTorchProfileForOps(Launcher):
@@ -37,7 +35,9 @@ class LaunchTorchProfileForOps(Launcher):
             repeat=1,
         )
         self.torch_profiler_config.on_trace_ready = (
-            torch.profiler.tensorboard_trace_handler(self.torch_profiler_config.output_dir)
+            torch.profiler.tensorboard_trace_handler(
+                self.torch_profiler_config.output_dir
+            )
         )
         self.prof = torch.profiler.profile(
             activities=self.torch_profiler_config.activities,
@@ -101,7 +101,12 @@ class LaunchTorchProfileForOps(Launcher):
             self.prof.stop()
         return op_class_instance
 
-    def run_op_list(self, op_name_list: list[str], test_case_idxs: list[int], inner_prof: bool = True):
+    def run_op_list(
+        self,
+        op_name_list: list[str],
+        test_case_idxs: list[int],
+        inner_prof: bool = True,
+    ):
         if op_name_list is None:
             op_name_list = self.all_supported_ops
         if not inner_prof:
