@@ -8,6 +8,7 @@ VERL_HASH=$(git -C "verl" rev-parse --short=6 HEAD)
 
 MODEL_NAME="Qwen/Qwen3-0.6B"
 TEST_CASES_FILE="qwen3_0_6b.json"
+REPEAT=8
 
 TEST_OPS_LIST=None
 TEST_CASE_IDXES=None
@@ -26,9 +27,9 @@ NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NUM_NODES))
 
 DISTRIBUTED_ARGS=(
-    --nproc_per_node $GPUS_PER_NODE 
-    --nnodes $NUM_NODES 
-    --master_addr $MASTER_ADDR 
+    --nproc_per_node $GPUS_PER_NODE
+    --nnodes $NUM_NODES
+    --master_addr $MASTER_ADDR
     --master_port $MASTER_PORT
 )
 
@@ -45,6 +46,7 @@ PROFILE_ARGS=(
     --model-name $MODEL_NAME
     --test-cases-file $TEST_CASES_FILE
     --output-dir $OUTPUT_DIR
+    --repeat $REPEAT
     --profile-mode 0
 )
 

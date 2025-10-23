@@ -55,6 +55,7 @@ class Launcher:
             tp_group=self.tp_group,
             profile_mode=self.profile_config.profile_mode,
             warmup_iters=self.profile_config.warmup_iters,
+            repeat=self.profile_config.repeat,
         )
         if test_case_idxs is None:
             test_case_idxs = list(range(len(self.test_cases)))

@@ -29,9 +29,13 @@ class TestLanguageModelEmbedding(TestCommon):
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
         profile_mode: int = 0,
         warmup_iters: int = 2,
+        repeat: int = 1,
     ):
         super().__init__(
-            hf_config=hf_config, profile_mode=profile_mode, warmup_iters=warmup_iters
+            hf_config=hf_config,
+            profile_mode=profile_mode,
+            warmup_iters=warmup_iters,
+            repeat=repeat,
         )
         with MemoryTrackerContext("Embedding init") as memory_tracker_ctx:
             self.op = LanguageModelEmbeddingForTest(
