@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import Any, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Tuple, Optional
 
 from .nested_dict import NestedDict
 
@@ -27,6 +27,14 @@ class InputTestCase:
                 self.system,
             )
         )
+
+    tensor_model_parallel_size: int = field(default=1)
+    pipeline_model_parallel_size: int = field(default=1)
+    virtual_pipeline_model_parallel_size: Optional[int] = field(default=None)
+    context_parallel_size: int = field(default=1)
+    expert_parallel_size: int = field(default=1)
+    expert_tensor_parallel_size: int = field(default=1)
+    sequence_parallel_enabled: bool = field(default=False)
 
     def set_nested_dict(self, nested_dict: NestedDict, value: Any) -> NestedDict:
         """
