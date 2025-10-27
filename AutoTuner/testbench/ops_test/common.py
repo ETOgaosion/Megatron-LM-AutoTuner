@@ -16,13 +16,12 @@ from AutoTuner.utils.structs import InputTestCase
 from AutoTuner.utils.timing import Timer, TimerContext
 
 from ..ops.common import CommonOpsForTest
-from ..ops.theoretical_base import TheoreticalCalculation
 from ..profile.configs.config_struct import ProfileMode
 
 os.environ["NVTE_NVTX_ENABLED"] = "1"
 
 
-class TestCommon(TheoreticalCalculation):
+class TestCommon(ABC):
     def __init__(
         self,
         hf_config: PretrainedConfig,
@@ -70,12 +69,11 @@ class TestCommon(TheoreticalCalculation):
         if profile_mode == ProfileMode.collect_data:
             self.timing_db = NestedDict()
             self.memory_db = {"weights": {}, "activations": NestedDict()}
-            self.theoretical_db = NestedDict()
         self.model_config = hf_config
         self.profile_mode = profile_mode
         self.warmup_iters = warmup_iters
 
-    @abc.abstractmethod
+    @abc.abstractclassmethod
     def prepare_input(self, test_case: InputTestCase, batch_data_generator: Iterator):
         pass
 
@@ -157,26 +155,9 @@ class TestCommon(TheoreticalCalculation):
                 self.memory_db["activations"],
                 {self.module_name: self.op.get_activation_memory()},
             )
-            
-            # Calculate theoretical memory
-            theo_mem = self.calc_theoretical_memory(test_case)
-            if theo_mem:
-                # Use direct assignment for the nested dictionary.
-                self.theoretical_db[self.module_name]["memory"] = test_case.set_nested_dict(
-                    self.theoretical_db[self.module_name]["memory"], theo_mem
-                )
 
-            # Calculate theoretical FLOPs
-            theo_flops = self.calc_theoretical_flops(test_case)
-            if theo_flops:
-                # Use direct assignment for the nested dictionary.
-                self.theoretical_db[self.module_name]["flops"] = test_case.set_nested_dict(
-                    self.theoretical_db[self.module_name]["flops"], theo_flops
-                )
-
-
-    def get_results(self) -> Tuple[dict, dict, dict]:
+    def get_results(self) -> Tuple[dict, dict]:
         assert (
             not self.profile_mode
         ), f"Nothing to return when not using data collection mode"
-        return self.timing_db, self.memory_db, self.theoretical_db
+        return self.timing_db, self.memory_db

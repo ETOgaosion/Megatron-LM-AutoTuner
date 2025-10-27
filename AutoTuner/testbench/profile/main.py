@@ -191,12 +191,6 @@ def handle_test_cases(args) -> List[InputTestCase]:
     test_cases = []
     for json_test_case in json_test_cases["cases"]:
         test_case = InputTestCase(**json_test_case)
-        test_case.tensor_model_parallel_size = args.tensor_model_parallel_size
-        test_case.pipeline_model_parallel_size = args.pipeline_model_parallel_size
-        test_case.virtual_pipeline_model_parallel_size = args.virtual_pipeline_model_parallel_size
-        test_case.context_parallel_size = args.context_parallel_size
-        test_case.expert_parallel_size = args.expert_parallel_size
-        test_case.expert_tensor_parallel_size = args.expert_tensor_parallel_size
         test_cases.append(test_case)
     return test_cases
 
@@ -281,7 +275,7 @@ def call_launcher(
         launcher.run_op_list(args.test_ops_list, args.test_case_idxs)
 
     if profile_config.profile_mode == ProfileMode.collect_data:
-        total_timing_db, total_memory_db, total_theoretical_db = launcher.return_results()
+        total_timing_db, total_memory_db = launcher.return_results()
         output_dir = os.path.join(
             args.output_dir,
             args.model_name,
@@ -295,8 +289,6 @@ def call_launcher(
             json.dump(total_memory_db["activations"], fp, indent=4)
         with open(os.path.join(output_dir, "memory_weights.json"), "a+") as fp:
             json.dump(total_memory_db["weights"], fp, indent=4)
-        with open(os.path.join(output_dir, "theoretical_performance.json"), "w") as fp:
-            json.dump(total_theoretical_db, fp, indent=4)
         print(f"results dumped to {output_dir}")
     else:
         print("Profiling finished.")
