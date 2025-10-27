@@ -64,20 +64,20 @@ class TestLanguageModelEmbedding(TestCommon):
         """
         Calculate theoretical memory usage from the perspective of a single rank.
         """
-        # 1. Get dimensions and configuration
+        # Get dimensions and configuration
         vocab_size = self.model_config.vocab_size
         hidden_size = self.model_config.hidden_size
         micro_batch_size = test_case.micro_batch_size
         seq_len = test_case.seqlen
         bytes_per_param = 2  # Assume float16
 
-        # 2. Get all parallel parameters
+        # Get all parallel parameters
         tp_size = test_case.tensor_model_parallel_size
         sp_is_enabled = self.op.config.sequence_parallel
         cp_size = test_case.context_parallel_size
         
 
-        # 3. Calculate weight memory
+        # Calculate weight memory
         current_stage_has_embedding = (
             mpu.get_pipeline_model_parallel_rank() == 0
         )
@@ -85,15 +85,15 @@ class TestLanguageModelEmbedding(TestCommon):
         
         total_weight_mem = 0
         if current_stage_has_embedding:
-            total_weight_mem = (vocab_size / tp_size) * hidden_size * bytes_per_param
+            total_weight_mem = (vocab_size // tp_size) * hidden_size * bytes_per_param
 
-        # 4. Calculate activation memory
+        # Calculate activation memory
         activation_mem = micro_batch_size * seq_len * hidden_size * bytes_per_param
         if sp_is_enabled:
-            activation_mem = activation_mem / tp_size
+            activation_mem = activation_mem // tp_size
 
         if cp_size > 1:
-            activation_mem = activation_mem / cp_size
+            activation_mem = activation_mem // cp_size
         return {
             "weights": total_weight_mem,
             "activations": activation_mem
@@ -109,7 +109,7 @@ class TestLanguageModelEmbedding(TestCommon):
         hidden_size = self.model_config.hidden_size
         cp_size = test_case.context_parallel_size
 
-        local_seq_len = seq_len / cp_size
+        local_seq_len = seq_len // cp_size
         forward_flops = micro_batch_size * local_seq_len * hidden_size
         
         backward_flops = 2 * forward_flops

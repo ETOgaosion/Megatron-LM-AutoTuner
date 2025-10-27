@@ -296,7 +296,7 @@ def call_launcher(
         with open(os.path.join(output_dir, "memory_weights.json"), "a+") as fp:
             json.dump(total_memory_db["weights"], fp, indent=4)
         with open(os.path.join(output_dir, "theoretical_performance.json"), "w") as fp:
-                json.dump(total_theoretical_db, fp, indent=4)
+            json.dump(total_theoretical_db, fp, indent=4)
         print(f"results dumped to {output_dir}")
     else:
         print("Profiling finished.")
