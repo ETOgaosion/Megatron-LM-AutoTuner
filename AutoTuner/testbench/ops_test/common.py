@@ -6,9 +6,10 @@ from typing import Any, Iterator, List, Optional, Tuple
 import torch
 from megatron.core import tensor_parallel
 from megatron.core.transformer.transformer_config import TransformerConfig
+from tensordict import TensorDict
 from transformers import PretrainedConfig
 
-from AutoTuner.utils.memory import MemoryTracker, MemoryTrackerContext
+from AutoTuner.utils.memory import MemoryTracker, MemoryTrackerContext, get_memory_str
 from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
 from AutoTuner.utils.nested_dict import NestedDict
 from AutoTuner.utils.nvtx import nvtx_decorator, nvtx_range_pop, nvtx_range_push
@@ -69,6 +70,7 @@ class TestCommon(ABC):
         if profile_mode == ProfileMode.collect_data:
             self.timing_db = NestedDict()
             self.memory_db = {"weights": {}, "activations": NestedDict()}
+            self.micro_batch_results = []
         self.model_config = hf_config
         self.profile_mode = profile_mode
         self.warmup_iters = warmup_iters
@@ -77,11 +79,7 @@ class TestCommon(ABC):
     def prepare_input(self, test_case: InputTestCase, batch_data_generator: Iterator):
         pass
 
-    def run_test(self, test_case: InputTestCase, batch_data_generator: Iterator):
-        inputs = self.prepare_input(
-            test_case=test_case, batch_data_generator=batch_data_generator
-        )
-
+    def run_micro_batch(self, test_case: InputTestCase, inputs: TensorDict):
         if self.profile_mode == ProfileMode.nsys_profile:
             """
             When using nsys profile
@@ -122,6 +120,8 @@ class TestCommon(ABC):
             """
             When collecting data
             """
+            self.micro_batch_results.append({})
+
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats()
@@ -136,9 +136,7 @@ class TestCommon(ABC):
             name = f"{self.module_name} forward {test_case}"
             with TimerContext(name) as timer_ctx:
                 output = self.op(*inputs)
-            self.timing_db[self.module_name]["forward"] = test_case.set_nested_dict(
-                self.timing_db[self.module_name]["forward"], timer_ctx.result
-            )
+            self.micro_batch_results[-1]["forward"] = timer_ctx.elapsed_time
 
             # Call backward function - force output to require grad
             output.requires_grad_(True)
@@ -147,14 +145,51 @@ class TestCommon(ABC):
                 # Create a dummy loss tensor and call backward
                 loss = output.sum()
                 loss.backward()
-            self.timing_db[self.module_name]["backward"] = test_case.set_nested_dict(
-                self.timing_db[self.module_name]["backward"], timer_ctx.result
+            self.micro_batch_results[-1]["backward"] = timer_ctx.elapsed_time
+
+            self.micro_batch_results[-1]["activation_memory"] = (
+                # self.op.get_activation_memory()
+                self.op.activation_hook.get_activation_memory()
             )
 
+    def run_test(self, test_case: InputTestCase, batch_data_generator: Iterator):
+        inputs_generator = self.prepare_input(
+            test_case=test_case, batch_data_generator=batch_data_generator
+        )
+
+        for inputs in inputs_generator:
+            self.run_micro_batch(test_case, inputs)
+
+        def average_microbatch_metric(micro_batch_results: List[dict], key: str):
+            assert len(micro_batch_results) > 0, "No micro batch results to average."
+            total = 0.0
+            for result in micro_batch_results:
+                total += result[key]
+            return total / len(micro_batch_results)
+
+        if self.profile_mode == ProfileMode.collect_data:
+            # Average the micro batch results
+            self.timing_db[self.module_name]["forward"] = test_case.set_nested_dict(
+                self.timing_db[self.module_name]["forward"],
+                f"avg {average_microbatch_metric(self.micro_batch_results, 'forward'):.6f}s"
+                f" ({len(self.micro_batch_results)} micro batches)",
+            )
+            self.timing_db[self.module_name]["backward"] = test_case.set_nested_dict(
+                self.timing_db[self.module_name]["backward"],
+                f"avg {average_microbatch_metric(self.micro_batch_results, 'backward'):.6f}s "
+                f"({len(self.micro_batch_results)} micro batches)",
+            )
             self.memory_db["activations"] = test_case.set_nested_dict(
                 self.memory_db["activations"],
-                {self.module_name: self.op.get_activation_memory()},
+                {
+                    self.module_name: (
+                        f"avg {get_memory_str(average_microbatch_metric(self.micro_batch_results, 'activation_memory'), human_readable=True)}"
+                        f" ({len(self.micro_batch_results)} micro batches)"
+                    )
+                },
             )
+            # Clear micro batch results
+            self.micro_batch_results = []
 
     def get_results(self) -> Tuple[dict, dict]:
         assert (

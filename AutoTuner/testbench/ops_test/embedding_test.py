@@ -50,10 +50,10 @@ class TestLanguageModelEmbedding(TestCommon):
 
     @override
     def prepare_input(self, test_case: InputTestCase, batch_data_generator: Iterator):
-        batch = next(batch_data_generator)
-        batch = batch.to(torch.cuda.current_device())
-        batch = batch.contiguous()
-        input_ids_rmpad, attention_mask, position_ids_rmpad, packed_seq_params = (
-            get_thd_model_input_from_bshd(batch)
-        )
-        return input_ids_rmpad, position_ids_rmpad
+        for micro_batch in batch_data_generator:
+            micro_batch = micro_batch.to(torch.cuda.current_device())
+            micro_batch = micro_batch.contiguous()
+            input_ids_rmpad, attention_mask, position_ids_rmpad, packed_seq_params = (
+                get_thd_model_input_from_bshd(micro_batch)
+            )
+            yield input_ids_rmpad, position_ids_rmpad

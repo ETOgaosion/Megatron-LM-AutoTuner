@@ -15,7 +15,7 @@ from .structs import InputTestCase
 
 """
     Follow some convinient implementation in verl
-    
+
     Return:
     - input_ids: (b, s) or (1, total_nnz) if thd
     - attention_mask: (b, s) or None if thd
@@ -153,7 +153,7 @@ class DataSets:
             )
             if shape == "bshd":
                 micro_batches = batch.split(micro_batch_size)
-                self.data[(batch_size, seqlen, max_token_len)] = micro_batches
+                self.data[test_case] = micro_batches
             else:
                 assert shape == "thd", f"shape {shape} not supported"
                 micro_batches, _ = rearrange_micro_batches(
@@ -163,15 +163,11 @@ class DataSets:
                     use_dynamic_bsz_balance=self.use_dynamic_bsz_balance,
                     same_micro_num_in_dp=True,
                 )
-                self.data[(batch_size, seqlen, max_token_len)] = micro_batches
-            self.data_batch_generators[(batch_size, seqlen, max_token_len)] = (
-                make_batch_generator(
-                    self.data[(batch_size, seqlen, max_token_len)],
-                    vpp_size=self.vpp_size if self.vpp_size is not None else 1,
-                )
+                self.data[test_case] = micro_batches
+            self.data_batch_generators[test_case] = make_batch_generator(
+                self.data[test_case],
+                vpp_size=self.vpp_size if self.vpp_size is not None else 1,
             )
 
-    def get_batch_generator(
-        self, batch_size: int, seqlen: int, max_token_len: int | None
-    ):
-        return self.data_batch_generators[(batch_size, seqlen, max_token_len)]
+    def get_batch_generator(self, test_case: InputTestCase):
+        return self.data_batch_generators[test_case]
