@@ -9,6 +9,7 @@ from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
 
+from AutoTuner.utils.batch import average_microbatch_metric
 from AutoTuner.utils.memory import MemoryTracker, MemoryTrackerContext, get_memory_str
 from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
 from AutoTuner.utils.nested_dict import NestedDict
@@ -76,7 +77,7 @@ class TestCommon(ABC):
         self.warmup_iters = warmup_iters
 
     @abc.abstractclassmethod
-    def prepare_input(self, test_case: InputTestCase, batch_data_generator: Iterator):
+    def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
         pass
 
     def run_micro_batch(self, test_case: InputTestCase, inputs: TensorDict):
@@ -147,25 +148,14 @@ class TestCommon(ABC):
                 loss.backward()
             self.micro_batch_results[-1]["backward"] = timer_ctx.elapsed_time
 
-            self.micro_batch_results[-1]["activation_memory"] = (
-                # self.op.get_activation_memory()
-                self.op.activation_hook.get_activation_memory()
-            )
+            self.micro_batch_results[-1][
+                "activation_memory"
+            ] = self.op.activation_hook.get_activation_memory()
 
     def run_test(self, test_case: InputTestCase, batch_data_generator: Iterator):
-        inputs_generator = self.prepare_input(
-            test_case=test_case, batch_data_generator=batch_data_generator
-        )
-
-        for inputs in inputs_generator:
+        for batch_data in batch_data_generator:
+            inputs = self.prepare_input(test_case, batch_data)
             self.run_micro_batch(test_case, inputs)
-
-        def average_microbatch_metric(micro_batch_results: List[dict], key: str):
-            assert len(micro_batch_results) > 0, "No micro batch results to average."
-            total = 0.0
-            for result in micro_batch_results:
-                total += result[key]
-            return total / len(micro_batch_results)
 
         if self.profile_mode == ProfileMode.collect_data:
             # Average the micro batch results
