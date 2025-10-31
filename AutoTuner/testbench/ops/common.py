@@ -1,6 +1,7 @@
 import abc
 import logging
 from abc import ABC
+from typing import Dict
 
 from AutoTuner.utils.memory import ActivationHook, MemoryTracker, get_memory_str
 
@@ -15,9 +16,7 @@ class CommonOpsForTest(ABC):
         self.activation_hook = ActivationHook(
             enable=hook_activation, module_name=module_name, logging_level=logging_level
         )
-        self.activation_tensors = []
 
-    def get_activation_memory(self) -> int:
-        return get_memory_str(
-            self.activation_hook.get_activation_memory(), human_readable=True
-        )
+    def get_activation_memory(self) -> Dict[str, int]:
+        return {"activations": self.activation_hook.get_activation_memory()}
+        

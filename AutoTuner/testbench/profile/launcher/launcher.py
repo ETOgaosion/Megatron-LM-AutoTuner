@@ -24,6 +24,8 @@ class Launcher:
         model_name: str,
         override_model_kwargs: dict,
         override_tf_config_kwargs: dict,
+        theoretical_flops: bool = False,
+        theoretical_activations: bool = False,
     ):
         self.model_name = model_name
         self.profile_config = profile_config
@@ -44,6 +46,8 @@ class Launcher:
         )
 
         self.all_supported_ops = list(OP_TEST_MAPPING.keys())
+        self.theoretical_flops = theoretical_flops
+        self.theoretical_activations = theoretical_activations
 
     def run_op(self, op_name: str, test_case_idxs: list[int]):
         op_test_class = OP_TEST_MAPPING.get(op_name)
@@ -55,6 +59,8 @@ class Launcher:
             tp_group=self.tp_group,
             profile_mode=self.profile_config.profile_mode,
             warmup_iters=self.profile_config.warmup_iters,
+            theoretical_flops=self.theoretical_flops,
+            theoretical_activations=self.theoretical_activations,
         )
         if test_case_idxs is None:
             test_case_idxs = list(range(len(self.test_cases)))
