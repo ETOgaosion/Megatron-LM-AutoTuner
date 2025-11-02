@@ -133,21 +133,27 @@ class TestCommon(ABC):
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats()
 
+            print("ok before forward")
             # Call forward function - force output to require grad
             name = f"{self.module_name} forward {test_case}"
             with TimerContext(name) as timer_ctx:
                 output = self.op(*inputs)
             self.micro_batch_results[-1]["forward"] = timer_ctx.elapsed_time
+            print("ok after forward")
+            # Notice that an op may have multiple outputs
+            if isinstance(output, tuple):
+                output = output[0]
 
             # Call backward function - force output to require grad
             output.requires_grad_(True)
+            print("ok before backward")
             name = f"{self.module_name} backward {test_case}"
             with TimerContext(name) as timer_ctx:
                 # Create a dummy loss tensor and call backward
                 loss = output.sum()
                 loss.backward()
             self.micro_batch_results[-1]["backward"] = timer_ctx.elapsed_time
-
+            print("ok after backward")
             self.micro_batch_results[-1][
                 "activation_memory"
             ] = self.op.activation_hook.get_activation_memory()

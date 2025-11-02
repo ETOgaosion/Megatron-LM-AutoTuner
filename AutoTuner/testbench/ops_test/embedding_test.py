@@ -53,6 +53,7 @@ class TestLanguageModelEmbedding(TestCommon):
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
         micro_batch = micro_batch.to(torch.cuda.current_device())
         micro_batch = micro_batch.contiguous()
+        print("Micro batch input_ids shape:", micro_batch["input_ids"].shape)
         input_ids_rmpad, attention_mask, position_ids_rmpad, packed_seq_params = (
             get_thd_model_input_from_bshd(micro_batch)
         )

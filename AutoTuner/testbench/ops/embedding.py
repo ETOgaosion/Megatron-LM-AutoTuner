@@ -61,11 +61,14 @@ class LanguageModelEmbeddingForTest(LanguageModelEmbedding, CommonOpsForTest):
         Returns:
             Tensor: The output embeddings
         """
+        print("Input IDs shape:", input_ids.shape)
         nvtx_range_push(suffix="word_embeddings")
         word_embeddings = self.word_embeddings(input_ids)
+        print("Word Embeddings shape:", word_embeddings.shape)
         nvtx_range_pop(suffix="word_embeddings")
         if self.add_position_embedding:
             position_embeddings = self.position_embeddings(position_ids)
+            print("Position Embeddings shape:", position_embeddings.shape)
             embeddings = word_embeddings + position_embeddings
         else:
             embeddings = word_embeddings
@@ -111,6 +114,8 @@ class LanguageModelEmbeddingForTest(LanguageModelEmbedding, CommonOpsForTest):
             embeddings = self.embedding_dropout(embeddings)
             nvtx_range_pop(suffix="dropout")
 
+        # get embedding output from here
+        print("Embedding output shape:", embeddings.shape)
         return embeddings
 
     def forward(

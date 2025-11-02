@@ -6,6 +6,27 @@ import time
 from typing import List
 
 import torch
+torch.backends.cudnn.deterministic = True
+# --- 关键修改：在设置设备后强制 CUDA 激活 ---
+# if 'LOCAL_RANK' in os.environ:
+#     local_rank = int(os.environ['LOCAL_RANK'])
+    
+#     # 1. 明确设置设备
+#     torch.cuda.set_device(local_rank)
+    
+#     # 2. **强制 CUDA 激活** (通过创建一个张量并将其移到 GPU)
+#     try:
+#         dummy_tensor = torch.zeros(1).cuda()
+#         print(f"[{os.getpid()}] Rank {local_rank}: CUDA Context Activated on GPU {torch.cuda.current_device()}")
+#         sys.stdout.flush()
+#     except Exception as e:
+#         print(f"[{os.getpid()}] Rank {local_rank}: FAILED to activate CUDA Context. Error: {e}")
+#         sys.exit(1)
+
+# print("CUDA available:", torch.cuda.is_available())
+# print("CUDA device count:", torch.cuda.device_count())
+
+
 
 from AutoTuner.testbench.profile.configs.config_struct import (
     PROFILE_MODEL_MAP,

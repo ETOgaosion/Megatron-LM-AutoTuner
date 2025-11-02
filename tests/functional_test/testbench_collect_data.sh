@@ -10,6 +10,7 @@ MODEL_NAME="Qwen/Qwen3-0.6B"
 TEST_CASES_FILE="qwen3_0_6b.json"
 
 TEST_OPS_LIST=None
+# TEST_OPS_LIST=["1"]
 TEST_CASE_IDXES=None
 
 TIMESTAMP_VAR=$(date +"%Y-%m-%d_%H-%M-%S")
@@ -17,7 +18,7 @@ OUTPUT_DIR=outputs/${TIMESTAMP_VAR}
 
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
-GPUS_PER_NODE=4
+GPUS_PER_NODE=2
 # Change for multinode config
 MASTER_ADDR=localhost
 MASTER_PORT=6000
