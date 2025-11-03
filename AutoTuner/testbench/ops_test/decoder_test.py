@@ -1,33 +1,31 @@
 import os
 from typing import Iterator, Optional
 
-from AutoTuner.testbench.ops.decoder import DecoderForTest
-# from mbridge.memory_estimator.moe_mem_estimator.layers import TransformerBlock
-from megatron.core.transformer.transformer_block import TransformerBlock
-from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
-from megatron.core.process_groups_config import ProcessGroupCollection
 import torch
-
-from megatron.core.transformer.transformer_config import TransformerConfig
-from transformers import PretrainedConfig
-from typing_extensions import override
-
-from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
-
-from AutoTuner.utils.structs import InputTestCase
-from tensordict import TensorDict
-
-
-from ..ops.preprocess import PreprocessForTest
-
-from .common import TestCommon
-
 from megatron.core.models.common.embeddings.language_model_embedding import (
     LanguageModelEmbedding,
 )
-from megatron.core.models.common.embeddings.rotary_pos_embedding import(
+from megatron.core.models.common.embeddings.rotary_pos_embedding import (
     RotaryEmbedding,
 )
+from megatron.core.models.gpt.gpt_layer_specs import (
+    get_gpt_layer_with_transformer_engine_spec,
+)
+from megatron.core.process_groups_config import ProcessGroupCollection
+
+# from mbridge.memory_estimator.moe_mem_estimator.layers import TransformerBlock
+from megatron.core.transformer.transformer_block import TransformerBlock
+from megatron.core.transformer.transformer_config import TransformerConfig
+from tensordict import TensorDict
+from transformers import PretrainedConfig
+from typing_extensions import override
+
+from AutoTuner.testbench.ops.decoder import DecoderForTest
+from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
+from AutoTuner.utils.structs import InputTestCase
+
+from ..ops.preprocess import PreprocessForTest
+from .common import TestCommon
 
 os.environ["NVTE_NVTX_ENABLED"] = "1"
 
@@ -41,7 +39,6 @@ class TestDecoder(TestCommon):
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
         profile_mode: int = 0,
         warmup_iters: int = 2,
-        
         rotary_percent: float = 1.0,
         rotary_base: int = 10000,
         rope_scaling: bool = False,
@@ -74,8 +71,8 @@ class TestDecoder(TestCommon):
                 rope_scaling=rope_scaling,
                 rope_scaling_factor=rope_scaling_factor,
                 use_cpu_initialization=tf_config.use_cpu_initialization,
-                # cp_group=pg_collection.cp, 
-                cp_group=None
+                # cp_group=pg_collection.cp,
+                cp_group=None,
             ),
             tf_config,
         )
@@ -89,7 +86,19 @@ class TestDecoder(TestCommon):
         input_ids_rmpad, attention_mask, position_ids_rmpad, packed_seq_params = (
             get_thd_model_input_from_bshd(micro_batch)
         )
-        decoder_input, rotary_pos_emb, sequence_len_offset, attention_mask, packed_seq_params = self.preprocess(input_ids_rmpad, position_ids_rmpad, attention_mask, packed_seq_params)
-        return decoder_input, attention_mask, rotary_pos_emb, packed_seq_params, sequence_len_offset
-
-
+        (
+            decoder_input,
+            rotary_pos_emb,
+            sequence_len_offset,
+            attention_mask,
+            packed_seq_params,
+        ) = self.preprocess(
+            input_ids_rmpad, position_ids_rmpad, attention_mask, packed_seq_params
+        )
+        return (
+            decoder_input,
+            attention_mask,
+            rotary_pos_emb,
+            packed_seq_params,
+            sequence_len_offset,
+        )

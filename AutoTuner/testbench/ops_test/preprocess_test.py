@@ -1,13 +1,20 @@
 import os
 from typing import Any, Iterator, List, Optional, Tuple
 
-from megatron.core.process_groups_config import ProcessGroupCollection
 import torch
 from megatron.core import tensor_parallel
+from megatron.core.models.common.embeddings.language_model_embedding import (
+    LanguageModelEmbedding,
+)
+from megatron.core.models.common.embeddings.rotary_pos_embedding import (
+    RotaryEmbedding,
+)
+from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.transformer_config import TransformerConfig
+from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
-from tensordict import TensorDict
+
 from AutoTuner.utils.memory import MemoryTracker, MemoryTrackerContext
 from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
 from AutoTuner.utils.nested_dict import NestedDict
@@ -19,15 +26,7 @@ from ..ops.preprocess import PreprocessForTest
 from ..profile.configs.config_struct import ProfileMode
 from .common import TestCommon
 
-from megatron.core.models.common.embeddings.language_model_embedding import (
-    LanguageModelEmbedding,
-)
-from megatron.core.models.common.embeddings.rotary_pos_embedding import(
-    RotaryEmbedding,
-)
-
 os.environ["NVTE_NVTX_ENABLED"] = "1"
-
 
 
 class TestPreprocess(TestCommon):
@@ -39,7 +38,6 @@ class TestPreprocess(TestCommon):
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
         profile_mode: int = 0,
         warmup_iters: int = 2,
-        
         rotary_percent: float = 1.0,
         rotary_base: int = 10000,
         rope_scaling: bool = False,
@@ -72,8 +70,8 @@ class TestPreprocess(TestCommon):
                     rope_scaling=rope_scaling,
                     rope_scaling_factor=rope_scaling_factor,
                     use_cpu_initialization=tf_config.use_cpu_initialization,
-                    # cp_group=pg_collection.cp, 
-                    cp_group=None
+                    # cp_group=pg_collection.cp,
+                    cp_group=None,
                 ),
                 tf_config,
             )
@@ -83,7 +81,7 @@ class TestPreprocess(TestCommon):
             self.memory_db["weights"][
                 self.module_name
             ] = memory_tracker_ctx.get_result()
-        
+
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
         micro_batch = micro_batch.to(torch.cuda.current_device())

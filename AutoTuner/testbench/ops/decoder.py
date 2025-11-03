@@ -1,26 +1,38 @@
-from contextlib import nullcontext
 import logging
 import os
+from contextlib import nullcontext
 from typing import Optional, Union
 
-from AutoTuner.testbench.ops.preprocess import PreprocessForTest
+import torch
+from megatron.core import parallel_state, tensor_parallel
 from megatron.core.enums import Fp8Recipe
 from megatron.core.fp4_utils import get_fp4_context
 from megatron.core.fp8_utils import get_fp8_context
 from megatron.core.inference.contexts.base_context import BaseInferenceContext
-from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
+from megatron.core.models.gpt.gpt_layer_specs import (
+    get_gpt_layer_with_transformer_engine_spec,
+)
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.spec_utils import ModuleSpec
-from megatron.core.transformer.transformer_block import TransformerBlock, TransformerBlockSubmodules
-# from tests.unit_tests.test_utilities import Utils
-from megatron.core.utils import WrappedTensor, make_viewless_tensor, nvtx_decorator, nvtx_range_pop, nvtx_range_push
-import torch
-
+from megatron.core.transformer.transformer_block import (
+    TransformerBlock,
+    TransformerBlockSubmodules,
+)
 from megatron.core.transformer.transformer_config import TransformerConfig
+
+# from tests.unit_tests.test_utilities import Utils
+from megatron.core.utils import (
+    WrappedTensor,
+    make_viewless_tensor,
+    nvtx_decorator,
+    nvtx_range_pop,
+    nvtx_range_push,
+)
 from torch import Tensor
 from transformers import PretrainedConfig
-from megatron.core import parallel_state, tensor_parallel
+
+from AutoTuner.testbench.ops.preprocess import PreprocessForTest
 
 from .common import CommonOpsForTest
 
@@ -33,7 +45,7 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
         TransformerBlock.__init__(
             self,
             config,
-            spec = get_gpt_layer_with_transformer_engine_spec(),
+            spec=get_gpt_layer_with_transformer_engine_spec(),
             post_process=False,
         )
         CommonOpsForTest.__init__(
@@ -78,7 +90,9 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
 
         if isinstance(hidden_states, WrappedTensor):
             hidden_states = hidden_states.unwrap()
-        hidden_states = make_viewless_tensor(inp=hidden_states, requires_grad=True, keep_graph=True)
+        hidden_states = make_viewless_tensor(
+            inp=hidden_states, requires_grad=True, keep_graph=True
+        )
 
         if self.config.sequence_parallel:
             rng_context = tensor_parallel.get_cuda_rng_tracker().fork()
@@ -95,7 +109,9 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
             use_outer_quantization_context = self.config.fp8_recipe == Fp8Recipe.delayed
             use_inner_quantization_context = self.config.fp8_recipe != Fp8Recipe.delayed
             outer_quantization_context = (
-                get_fp8_context(self.config) if use_outer_quantization_context else nullcontext()
+                get_fp8_context(self.config)
+                if use_outer_quantization_context
+                else nullcontext()
             )
         elif self.config.fp4:
             use_outer_quantization_context = False
@@ -134,13 +150,14 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
                         sequence_len_offset=sequence_len_offset,
                     )
 
-
                 if (
                     torch.is_grad_enabled()
                     and self.config.cpu_offloading
                     and self.group_prefetch_offload_commit_async is not None
                 ):
-                    hidden_states = self.group_prefetch_offload_commit_async(hidden_states)
+                    hidden_states = self.group_prefetch_offload_commit_async(
+                        hidden_states
+                    )
             nvtx_range_pop(suffix="Transformer Layers")
 
         return hidden_states
@@ -162,10 +179,16 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
         *,
         inference_params: Optional[BaseInferenceContext] = None,
         dynamic_inference_decode_only: Optional[bool] = None,
-        ) -> Tensor:
+    ) -> Tensor:
         self.activation_hook.clear()
         with torch.autograd.graph.saved_tensors_hooks(
             self.activation_hook.save_hook, self.activation_hook.load_hook
         ):
-            ret = self._forward(hidden_states, attention_mask, rotary_pos_emb, packed_seq_params, sequence_len_offset)
+            ret = self._forward(
+                hidden_states,
+                attention_mask,
+                rotary_pos_emb,
+                packed_seq_params,
+                sequence_len_offset,
+            )
         return ret

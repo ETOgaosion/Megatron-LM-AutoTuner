@@ -1,8 +1,8 @@
 import os
 from typing import Dict
 
-from megatron.core.transformer.enums import AttnBackend
 import torch
+from megatron.core.transformer.enums import AttnBackend
 from transformers import AutoConfig
 
 from verl.models.mcore.registry import hf_to_mcore_config

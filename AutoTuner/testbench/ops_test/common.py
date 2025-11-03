@@ -138,7 +138,7 @@ class TestCommon(ABC):
             with TimerContext(name) as timer_ctx:
                 output = self.op(*inputs)
             self.micro_batch_results[-1]["forward"] = timer_ctx.elapsed_time
-            
+
             # Notice that an operator may have multiple outputs
             if isinstance(output, tuple):
                 output = output[0]
