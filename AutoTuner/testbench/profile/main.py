@@ -6,6 +6,9 @@ import time
 from typing import List
 
 import torch
+torch.backends.cudnn.deterministic = True
+
+
 
 from AutoTuner.testbench.profile.configs.config_struct import (
     PROFILE_MODEL_MAP,
