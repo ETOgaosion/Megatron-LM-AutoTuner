@@ -2,23 +2,21 @@ import os
 from typing import Optional
 
 import torch
-from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
-from AutoTuner.utils.memory import MemoryTrackerContext
 from megatron.core.models.common.embeddings.language_model_embedding import (
     LanguageModelEmbedding,
 )
 from megatron.core.models.common.embeddings.rotary_pos_embedding import (
     RotaryEmbedding,
 )
-
 from megatron.core.process_groups_config import ProcessGroupCollection
-
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
 
 from AutoTuner.testbench.ops.decoder import DecoderForTest
+from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
+from AutoTuner.utils.memory import MemoryTrackerContext
 from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
 from AutoTuner.utils.structs import InputTestCase
 
@@ -71,11 +69,11 @@ class TestDecoder(TestCommon):
                 # cp_group=pg_collection.cp,
                 cp_group=None,
             ),
-            tf_config,  
+            tf_config,
         )
         with MemoryTrackerContext("Preprocess init") as memory_tracker_ctx:
             self.op = DecoderForTest(tf_config)
-        
+
         if profile_mode == ProfileMode.collect_data:
             self.memory_db["weights"][
                 self.module_name

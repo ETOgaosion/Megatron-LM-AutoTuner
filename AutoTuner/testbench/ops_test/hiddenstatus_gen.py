@@ -18,7 +18,6 @@ from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
 from AutoTuner.utils.structs import InputTestCase
 
 from ..ops.preprocess import PreprocessForTest
-
 from .common import TestCommon
 
 os.environ["NVTE_NVTX_ENABLED"] = "1"
@@ -26,14 +25,14 @@ os.environ["NVTE_NVTX_ENABLED"] = "1"
 # Using PreprocessForTest as GenHidden for HiddenStatusGenerator
 GenHidden = PreprocessForTest
 
-class HiddenStatusGenerator():
+
+class HiddenStatusGenerator:
     def __init__(
         self,
         # These args are given by launcher
         tf_config: TransformerConfig,
         hf_config: PretrainedConfig,
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
-
         # These args are given by user and have default values
         scatter_to_sequence_parallel: bool = True,
         rotary_percent: float = 1.0,
@@ -67,7 +66,7 @@ class HiddenStatusGenerator():
             ),
             tf_config,
         )
-    
+
     # We get inputs for decoder after preprocess
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):

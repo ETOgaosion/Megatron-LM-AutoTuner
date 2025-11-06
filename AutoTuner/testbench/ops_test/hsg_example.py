@@ -2,16 +2,13 @@ import os
 from typing import Optional
 
 import torch
-from AutoTuner.testbench.ops_test.hiddenstatus_gen import HiddenStatusGenerator
-
-
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
 
 from AutoTuner.testbench.ops.decoder import DecoderForTest
-
+from AutoTuner.testbench.ops_test.hiddenstatus_gen import HiddenStatusGenerator
 from AutoTuner.utils.structs import InputTestCase
 
 from .common import TestCommon
