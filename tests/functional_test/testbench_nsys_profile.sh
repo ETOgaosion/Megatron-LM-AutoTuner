@@ -76,6 +76,8 @@ NSYS_ARGS=(
     --python-sampling=true
 )
 
+export NVTE_FLASH_ATTN=1
+export NVTE_FUSED_ATTN=0
 if [ "$SINGLE_NODES" = "True" ]; then
     python3 -m AutoTuner.testbench.profile.nsys_main \
         ${PROFILE_ARGS[@]}

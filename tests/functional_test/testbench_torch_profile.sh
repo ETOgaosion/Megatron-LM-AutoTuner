@@ -56,6 +56,8 @@ if [[ "${TEST_CASE_IDXES}" != "None" ]]; then
     OPTIONAL_PROFILE_ARGS+=(--test-case-idxes ${TEST_CASE_IDXES})
 fi
 
+export NVTE_FLASH_ATTN=1
+export NVTE_FUSED_ATTN=0
 torchrun ${DISTRIBUTED_ARGS[@]} -m AutoTuner.testbench.profile.main \
     ${PROFILE_ARGS[@]} \
     ${OPTIONAL_PROFILE_ARGS[@]} \
