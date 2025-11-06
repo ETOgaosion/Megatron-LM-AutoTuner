@@ -12,7 +12,6 @@ from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
-from typing_extensions import override
 
 # from AutoTuner.testbench.ops_test.common import TestCommon
 from AutoTuner.testbench.ops_test.preprocess_test import PreprocessForTest

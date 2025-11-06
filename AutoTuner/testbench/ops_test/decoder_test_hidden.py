@@ -32,7 +32,7 @@ class TestDecoderWithHiddenInputs(TestWithHiddenInputs):
 
         self.module_name = "Decoder"
 
-        with MemoryTrackerContext("Preprocess init") as memory_tracker_ctx:
+        with MemoryTrackerContext("Decoder init") as memory_tracker_ctx:
             self.op = DecoderForTest(tf_config)
 
         if profile_mode == ProfileMode.collect_data:
