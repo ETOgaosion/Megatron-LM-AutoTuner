@@ -2,41 +2,40 @@ import os
 from typing import Optional
 
 import torch
-from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
-from AutoTuner.utils.memory import MemoryTrackerContext
 from megatron.core.models.common.embeddings.language_model_embedding import (
     LanguageModelEmbedding,
 )
 from megatron.core.models.common.embeddings.rotary_pos_embedding import (
     RotaryEmbedding,
 )
-
 from megatron.core.process_groups_config import ProcessGroupCollection
-
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
 
-from AutoTuner.testbench.ops.decoder import DecoderForTest
 from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
 from AutoTuner.utils.structs import InputTestCase
 
 from ..ops.preprocess import PreprocessForTest
+
 from .common import TestCommon
 
 os.environ["NVTE_NVTX_ENABLED"] = "1"
 
+# Using PreprocessForTest as GenHidden for HiddenStatusGenerator
+GenHidden = PreprocessForTest
 
-class TestDecoder(TestCommon):
+class HiddenStatusGenerator():
     def __init__(
         self,
+        # These args are given by launcher
         tf_config: TransformerConfig,
         hf_config: PretrainedConfig,
-        scatter_to_sequence_parallel: bool = True,
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
-        profile_mode: int = 0,
-        warmup_iters: int = 2,
+
+        # These args are given by user and have default values
+        scatter_to_sequence_parallel: bool = True,
         rotary_percent: float = 1.0,
         rotary_base: int = 10000,
         rope_scaling: bool = False,
@@ -44,12 +43,7 @@ class TestDecoder(TestCommon):
         seq_len_interpolation_factor: Optional[float] = None,
         pg_collection: Optional[ProcessGroupCollection] = None,
     ):
-        super().__init__(
-            hf_config=hf_config, profile_mode=profile_mode, warmup_iters=warmup_iters
-        )
-
-        self.module_name = "Decoder"
-        self.preprocess = PreprocessForTest(
+        self.genhidden = GenHidden(
             LanguageModelEmbedding(
                 config=tf_config,
                 vocab_size=hf_config.vocab_size,
@@ -71,16 +65,9 @@ class TestDecoder(TestCommon):
                 # cp_group=pg_collection.cp,
                 cp_group=None,
             ),
-            tf_config,  
+            tf_config,
         )
-        with MemoryTrackerContext("Preprocess init") as memory_tracker_ctx:
-            self.op = DecoderForTest(tf_config)
-        
-        if profile_mode == ProfileMode.collect_data:
-            self.memory_db["weights"][
-                self.module_name
-            ] = memory_tracker_ctx.get_result()
-
+    
     # We get inputs for decoder after preprocess
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
@@ -95,9 +82,11 @@ class TestDecoder(TestCommon):
             sequence_len_offset,
             attention_mask,
             packed_seq_params,
-        ) = self.preprocess(
+        ) = self.genhidden(
             input_ids_rmpad, position_ids_rmpad, attention_mask, packed_seq_params
         )
+
+        # decoder input is what we need as hidden states, and others are for attention mask and rotary embedding
         return (
             decoder_input,
             attention_mask,

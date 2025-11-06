@@ -1,9 +1,11 @@
 from AutoTuner.testbench.ops_test.decoder_test import TestDecoder
 from AutoTuner.testbench.ops_test.embedding_test import TestLanguageModelEmbedding
+from AutoTuner.testbench.ops_test.hsg_example import TestDecoderUsingHSG
 from AutoTuner.testbench.ops_test.preprocess_test import TestPreprocess
 
 OP_TEST_MAPPING = {
     # "Embedding": TestLanguageModelEmbedding,
     # "Preprocess": TestPreprocess,
-    "Decoder": TestDecoder,
+    # "Decoder": TestDecoder,
+    "DecoderUsingHSG": TestDecoderUsingHSG,
 }
