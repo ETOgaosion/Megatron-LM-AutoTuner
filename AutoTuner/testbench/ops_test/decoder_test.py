@@ -1,5 +1,5 @@
 import os
-from typing import Iterator, Optional
+from typing import Optional
 
 import torch
 from megatron.core.models.common.embeddings.language_model_embedding import (
@@ -8,13 +8,9 @@ from megatron.core.models.common.embeddings.language_model_embedding import (
 from megatron.core.models.common.embeddings.rotary_pos_embedding import (
     RotaryEmbedding,
 )
-from megatron.core.models.gpt.gpt_layer_specs import (
-    get_gpt_layer_with_transformer_engine_spec,
-)
+
 from megatron.core.process_groups_config import ProcessGroupCollection
 
-# from mbridge.memory_estimator.moe_mem_estimator.layers import TransformerBlock
-from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
@@ -44,7 +40,6 @@ class TestDecoder(TestCommon):
         rope_scaling: bool = False,
         rope_scaling_factor: float = 8.0,
         seq_len_interpolation_factor: Optional[float] = None,
-        # pg_collection: Optional[ProcessGroupCollection] = None,
         pg_collection: Optional[ProcessGroupCollection] = None,
     ):
         super().__init__(

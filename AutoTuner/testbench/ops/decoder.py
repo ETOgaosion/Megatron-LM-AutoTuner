@@ -1,10 +1,9 @@
 import logging
-import os
 from contextlib import nullcontext
 from typing import Optional, Union
 
 import torch
-from megatron.core import parallel_state, tensor_parallel
+from megatron.core import tensor_parallel
 from megatron.core.enums import Fp8Recipe
 from megatron.core.fp4_utils import get_fp4_context
 from megatron.core.fp8_utils import get_fp8_context
@@ -13,11 +12,8 @@ from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
 from megatron.core.packed_seq_params import PackedSeqParams
-from megatron.core.process_groups_config import ProcessGroupCollection
-from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_block import (
     TransformerBlock,
-    TransformerBlockSubmodules,
 )
 from megatron.core.transformer.transformer_config import TransformerConfig
 
@@ -30,10 +26,6 @@ from megatron.core.utils import (
     nvtx_range_push,
 )
 from torch import Tensor
-from transformers import PretrainedConfig
-
-from AutoTuner.testbench.ops.preprocess import PreprocessForTest
-
 from .common import CommonOpsForTest
 
 
@@ -114,12 +106,12 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
                 else nullcontext()
             )
         elif self.config.fp4:
-            use_outer_quantization_context = False
+            # use_outer_quantization_context = False
             use_inner_quantization_context = True
             outer_quantization_context = nullcontext()
         else:
             # No quantization
-            use_outer_quantization_context = False
+            # use_outer_quantization_context = False
             use_inner_quantization_context = False
             outer_quantization_context = nullcontext()
 
@@ -142,6 +134,7 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
                 else:
                     inner_quantization_context = nullcontext()
                 with self.offload_context, inner_quantization_context:
+                    nvtx_range_push(suffix="Transformer Layer")
                     hidden_states, context = layer(
                         hidden_states=hidden_states,
                         attention_mask=attention_mask,
@@ -149,7 +142,7 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
                         packed_seq_params=packed_seq_params,
                         sequence_len_offset=sequence_len_offset,
                     )
-
+                    nvtx_range_pop(suffix="Transformer Layer")
                 if (
                     torch.is_grad_enabled()
                     and self.config.cpu_offloading

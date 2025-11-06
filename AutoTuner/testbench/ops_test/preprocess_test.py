@@ -1,8 +1,7 @@
 import os
-from typing import Any, Iterator, List, Optional, Tuple
+from typing import Optional
 
 import torch
-from megatron.core import tensor_parallel
 from megatron.core.models.common.embeddings.language_model_embedding import (
     LanguageModelEmbedding,
 )
@@ -15,13 +14,10 @@ from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
 
-from AutoTuner.utils.memory import MemoryTracker, MemoryTrackerContext
+from AutoTuner.utils.memory import MemoryTrackerContext
 from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
-from AutoTuner.utils.nested_dict import NestedDict
 from AutoTuner.utils.structs import InputTestCase
-from AutoTuner.utils.timing import Timer, TimerContext
 
-from ..ops.embedding import LanguageModelEmbeddingForTest
 from ..ops.preprocess import PreprocessForTest
 from ..profile.configs.config_struct import ProfileMode
 from .common import TestCommon
@@ -43,7 +39,6 @@ class TestPreprocess(TestCommon):
         rope_scaling: bool = False,
         rope_scaling_factor: float = 8.0,
         seq_len_interpolation_factor: Optional[float] = None,
-        # pg_collection: Optional[ProcessGroupCollection] = None,
         pg_collection: Optional[ProcessGroupCollection] = None,
     ):
         super().__init__(
@@ -60,7 +55,6 @@ class TestPreprocess(TestCommon):
                     scatter_to_sequence_parallel=scatter_to_sequence_parallel,
                     tp_group=tp_group,
                 ),
-                # need check the ags are true or not
                 RotaryEmbedding(
                     kv_channels=tf_config.kv_channels,
                     rotary_percent=rotary_percent,
