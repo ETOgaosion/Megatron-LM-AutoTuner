@@ -14,11 +14,10 @@ from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
 
+# from AutoTuner.testbench.ops_test.common import TestCommon
+from AutoTuner.testbench.ops_test.preprocess_test import PreprocessForTest
 from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
 from AutoTuner.utils.structs import InputTestCase
-
-from ..ops.preprocess import PreprocessForTest
-from .common import TestCommon
 
 os.environ["NVTE_NVTX_ENABLED"] = "1"
 
@@ -68,7 +67,6 @@ class HiddenStatusGenerator:
         )
 
     # We get inputs for decoder after preprocess
-    @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
         micro_batch = micro_batch.to(torch.cuda.current_device())
         micro_batch = micro_batch.contiguous()
