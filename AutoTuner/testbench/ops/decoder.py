@@ -171,7 +171,6 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
         rotary_pos_cos_sin: Optional[Tensor] = None,
         attention_bias: Optional[Tensor] = None,
         inference_context: Optional[BaseInferenceContext] = None,
-
         *,
         inference_params: Optional[BaseInferenceContext] = None,
         dynamic_inference_decode_only: Optional[bool] = None,

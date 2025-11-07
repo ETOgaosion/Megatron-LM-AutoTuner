@@ -57,6 +57,15 @@ def validate_args(args):
 
     return args
 
+def str_to_bool(value):
+    val_processed = value.strip().lower()
+    if val_processed == 'true':
+        return True
+    elif val_processed == 'false':
+        return False
+    else:
+        raise argparse.ArgumentTypeError(f"Value must be 'true' or 'false', but got '{value}'.")
+
 
 def parse_distributed_args(parser: argparse.ArgumentParser):
     parser.add_argument(
@@ -178,6 +187,20 @@ def parse_args():
         help="output directory to save the database results and nsys profile results, actual output_dir is args.output_dir/model_name/profile_mode",
     )
 
+    parser.add_argument(
+        "--theoretical-flops",
+        type=str_to_bool,
+        default=False,
+        metavar="[true|false]",
+        help="Enable/disable theoretical FLOPS calculation. Default: false"
+    )
+    parser.add_argument(
+        "--theoretical-activations",
+        type=str_to_bool,
+        default=True,
+        metavar="[true|false]",
+        help="Enable/disable theoretical activations calculation. Default: true"
+    )
     # distributed
     parser = parse_distributed_args(parser)
     args = parser.parse_args()
@@ -191,6 +214,12 @@ def handle_test_cases(args) -> List[InputTestCase]:
     test_cases = []
     for json_test_case in json_test_cases["cases"]:
         test_case = InputTestCase(**json_test_case)
+        test_case.tensor_model_parallel_size = args.tensor_model_parallel_size
+        test_case.pipeline_model_parallel_size = args.pipeline_model_parallel_size
+        test_case.virtual_pipeline_model_parallel_size = args.virtual_pipeline_model_parallel_size
+        test_case.context_parallel_size = args.context_parallel_size
+        test_case.expert_parallel_size = args.expert_parallel_size
+        test_case.expert_tensor_parallel_size = args.expert_tensor_parallel_size
         test_cases.append(test_case)
     return test_cases
 
@@ -227,6 +256,18 @@ def call_launcher(
         launcher_cls = LaunchTorchProfileForOps
     else:
         raise ValueError(f"Unsupported profile mode: {profile_config.profile_mode}")
+    
+    launcher_kwargs = {
+        "profile_config": profile_config,
+        "test_cases": test_cases,
+        "model_name": args.model_name,
+        "override_model_kwargs": override_model_config,
+        "override_tf_config_kwargs": override_tf_config,
+    }
+    if profile_config.profile_mode == ProfileMode.collect_data:
+        launcher_kwargs["theoretical_flops"] = args.theoretical_flops
+        launcher_kwargs["theoretical_activations"] = args.theoretical_activations
+
     torch_profiler_config_kwargs = {}
     if profile_config.profile_mode == ProfileMode.torch_profiler:
         torch_profiler_config_kwargs = {
@@ -254,14 +295,8 @@ def call_launcher(
                 ),
             )
         }
-    launcher = launcher_cls(
-        profile_config,
-        test_cases,
-        model_name=args.model_name,
-        override_model_kwargs=override_model_config,
-        override_tf_config_kwargs=override_tf_config,
-        **torch_profiler_config_kwargs,
-    )
+        launcher_kwargs.update(torch_profiler_config_kwargs)
+    launcher = launcher_cls(**launcher_kwargs)
 
     if (
         profile_config.profile_mode == ProfileMode.nsys_profile
