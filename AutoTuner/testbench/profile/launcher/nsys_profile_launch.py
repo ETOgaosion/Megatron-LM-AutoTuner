@@ -12,6 +12,7 @@ class LaunchNsysProfileForOps(Launcher):
         model_name: str,
         override_model_kwargs: dict,
         override_tf_config_kwargs: dict,
+        tp_comm_overlap_cfg: str = None,
     ):
         assert (
             profile_config.profile_mode == ProfileMode.nsys_profile
@@ -22,4 +23,5 @@ class LaunchNsysProfileForOps(Launcher):
             model_name=model_name,
             override_model_kwargs=override_model_kwargs,
             override_tf_config_kwargs=override_tf_config_kwargs,
+            tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )

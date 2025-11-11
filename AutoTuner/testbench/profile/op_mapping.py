@@ -3,7 +3,7 @@ from AutoTuner.testbench.ops_test.embedding_test import TestLanguageModelEmbeddi
 from AutoTuner.testbench.ops_test.preprocess_test import TestPreprocess
 
 OP_TEST_MAPPING = {
-    # "Embedding": TestLanguageModelEmbedding,
-    # "Preprocess": TestPreprocess,
-    "DecoderWithHiddens": TestDecoderWithHiddenInputs,
+    "Embedding": TestLanguageModelEmbedding,
+    "Preprocess": TestPreprocess,
+    "Decoder": TestDecoderWithHiddenInputs,
 }

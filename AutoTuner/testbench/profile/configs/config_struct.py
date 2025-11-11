@@ -20,6 +20,8 @@ class ProfileConfig:
         ProfileMode.collect_data
     )  # 0: collect data, 1: nsys profile, 2: torch profiler
     warmup_iters: int = 2  # warmup_iters operator executions
+    theoretical_flops: bool = False
+    theoretical_activations: bool = False
 
 
 @dataclass

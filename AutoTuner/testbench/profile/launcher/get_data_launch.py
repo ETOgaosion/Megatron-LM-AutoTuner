@@ -13,8 +13,7 @@ class LaunchDataCollectionForOps(Launcher):
         model_name: str,
         override_model_kwargs: dict,
         override_tf_config_kwargs: dict,
-        theoretical_flops: bool = False,
-        theoretical_activations: bool = False,
+        tp_comm_overlap_cfg: str = None,
     ):
         assert (
             profile_config.profile_mode == ProfileMode.collect_data
@@ -25,8 +24,7 @@ class LaunchDataCollectionForOps(Launcher):
             model_name=model_name,
             override_model_kwargs=override_model_kwargs,
             override_tf_config_kwargs=override_tf_config_kwargs,
-            theoretical_flops=theoretical_flops,
-            theoretical_activations=theoretical_activations,
+            tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
 
         self.total_timing_db = NestedDict()

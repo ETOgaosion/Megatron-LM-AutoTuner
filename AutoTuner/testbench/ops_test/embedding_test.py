@@ -52,7 +52,7 @@ class TestLanguageModelEmbedding(TestCommon):
                     tp_group=tp_group,
                     hook_activation=(profile_mode == ProfileMode.collect_data),
                 )
-            
+
             detailed_mem_report = memory_tracker_ctx.get_result()
             vocab_size = self.model_config.vocab_size
             hidden_size = self.model_config.hidden_size
@@ -62,12 +62,16 @@ class TestLanguageModelEmbedding(TestCommon):
 
             estimated_weight_mem_bytes = 0
             if mpu.get_pipeline_model_parallel_rank() == 0:
-                estimated_weight_mem_bytes = (vocab_size // tp_size) * hidden_size * bytes_per_param
+                estimated_weight_mem_bytes = (
+                    (vocab_size // tp_size) * hidden_size * bytes_per_param
+                )
 
-            estimated_weight_mem_str = get_memory_str(estimated_weight_mem_bytes, human_readable=True)
-            detailed_mem_report['estimated_peak_mem_diff'] = estimated_weight_mem_str
+            estimated_weight_mem_str = get_memory_str(
+                estimated_weight_mem_bytes, human_readable=True
+            )
+            detailed_mem_report["estimated_peak_mem_diff"] = estimated_weight_mem_str
             self.memory_db["weights"][self.module_name] = detailed_mem_report
-            
+
         else:
             self.op = LanguageModelEmbeddingForTest(
                 tf_config,
@@ -77,7 +81,6 @@ class TestLanguageModelEmbedding(TestCommon):
                 hook_activation=False,
             )
 
-        
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
         micro_batch = micro_batch.to(torch.cuda.current_device())
@@ -98,12 +101,12 @@ class TestLanguageModelEmbedding(TestCommon):
         seq_len = test_case.seqlen
         dtype = getattr(self.model_config, "dtype", torch.float16)
         bytes_per_param = torch.tensor([], dtype=dtype).element_size()
-        
+
         # Get all parallel parameters
         tp_size = test_case.tensor_model_parallel_size
         sp_is_enabled = self.op.config.sequence_parallel
         cp_size = test_case.context_parallel_size
-        
+
         # Calculate activation memory
         activation_mem = micro_batch_size * seq_len * hidden_size * bytes_per_param
         if sp_is_enabled:
@@ -111,11 +114,7 @@ class TestLanguageModelEmbedding(TestCommon):
 
         if cp_size > 1:
             activation_mem = activation_mem // cp_size
-        return {
-            "activations": {
-                "activations": activation_mem
-            }
-        }
+        return {"activations": {"activations": activation_mem}}
 
     @override
     def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:
@@ -129,10 +128,7 @@ class TestLanguageModelEmbedding(TestCommon):
 
         local_seq_len = seq_len // cp_size
         forward_flops = micro_batch_size * local_seq_len * hidden_size
-        
+
         backward_flops = 2 * forward_flops
-        
-        return {
-            "forward": forward_flops,
-            "backward": backward_flops
-        }
+
+        return {"forward": forward_flops, "backward": backward_flops}

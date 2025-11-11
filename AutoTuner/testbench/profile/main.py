@@ -49,6 +49,7 @@ def validate_args(args):
     ), f"{args.real_override_tf_config_file} not found"
 
     os.makedirs(args.output_dir, exist_ok=True)
+    print(f"output to {args.output_dir}")
 
     # Validate distributed
     assert os.environ.get("WORLD_SIZE") is not None, "WORLD_SIZE is not set"
@@ -57,14 +58,17 @@ def validate_args(args):
 
     return args
 
+
 def str_to_bool(value):
     val_processed = value.strip().lower()
-    if val_processed == 'true':
+    if val_processed == "true":
         return True
-    elif val_processed == 'false':
+    elif val_processed == "false":
         return False
     else:
-        raise argparse.ArgumentTypeError(f"Value must be 'true' or 'false', but got '{value}'.")
+        raise argparse.ArgumentTypeError(
+            f"Value must be 'true' or 'false', but got '{value}'."
+        )
 
 
 def parse_distributed_args(parser: argparse.ArgumentParser):
@@ -175,7 +179,7 @@ def parse_args():
     )
 
     # test choices for flexibility
-    parser.add_argument("--test-ops-list", type=int, nargs="+", default=None)
+    parser.add_argument("--test-ops-list", type=str, nargs="+", default=None)
     parser.add_argument("--test-case-idxs", type=int, nargs="+", default=None)
 
     # output
@@ -192,14 +196,14 @@ def parse_args():
         type=str_to_bool,
         default=False,
         metavar="[true|false]",
-        help="Enable/disable theoretical FLOPS calculation. Default: false"
+        help="Enable/disable theoretical FLOPS calculation. Default: false",
     )
     parser.add_argument(
         "--theoretical-activations",
         type=str_to_bool,
         default=True,
         metavar="[true|false]",
-        help="Enable/disable theoretical activations calculation. Default: true"
+        help="Enable/disable theoretical activations calculation. Default: true",
     )
     # distributed
     parser = parse_distributed_args(parser)
@@ -216,7 +220,9 @@ def handle_test_cases(args) -> List[InputTestCase]:
         test_case = InputTestCase(**json_test_case)
         test_case.tensor_model_parallel_size = args.tensor_model_parallel_size
         test_case.pipeline_model_parallel_size = args.pipeline_model_parallel_size
-        test_case.virtual_pipeline_model_parallel_size = args.virtual_pipeline_model_parallel_size
+        test_case.virtual_pipeline_model_parallel_size = (
+            args.virtual_pipeline_model_parallel_size
+        )
         test_case.context_parallel_size = args.context_parallel_size
         test_case.expert_parallel_size = args.expert_parallel_size
         test_case.expert_tensor_parallel_size = args.expert_tensor_parallel_size
@@ -225,7 +231,12 @@ def handle_test_cases(args) -> List[InputTestCase]:
 
 
 def handle_profile_configs(args) -> ProfileConfig:
-    return ProfileConfig(args.profile_mode, args.warmup_iters)
+    return ProfileConfig(
+        args.profile_mode,
+        args.warmup_iters,
+        args.theoretical_flops,
+        args.theoretical_activations,
+    )
 
 
 def handle_model_config(args) -> dict:
@@ -256,7 +267,7 @@ def call_launcher(
         launcher_cls = LaunchTorchProfileForOps
     else:
         raise ValueError(f"Unsupported profile mode: {profile_config.profile_mode}")
-    
+
     launcher_kwargs = {
         "profile_config": profile_config,
         "test_cases": test_cases,
@@ -264,9 +275,9 @@ def call_launcher(
         "override_model_kwargs": override_model_config,
         "override_tf_config_kwargs": override_tf_config,
     }
-    if profile_config.profile_mode == ProfileMode.collect_data:
-        launcher_kwargs["theoretical_flops"] = args.theoretical_flops
-        launcher_kwargs["theoretical_activations"] = args.theoretical_activations
+    launcher_kwargs["tp_comm_overlap_cfg"] = (
+        "AutoTuner/testbench/profile/configs/tp_comm_overlap_cfg.yaml"
+    )
 
     torch_profiler_config_kwargs = {}
     if profile_config.profile_mode == ProfileMode.torch_profiler:

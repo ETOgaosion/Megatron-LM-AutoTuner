@@ -1,3 +1,4 @@
+import copy
 from typing import Any, Tuple
 
 import tensordict
@@ -170,4 +171,4 @@ class DataSets:
             )
 
     def get_batch_generator(self, test_case: InputTestCase):
-        return self.data_batch_generators[test_case]
+        return copy.deepcopy(self.data_batch_generators[test_case])

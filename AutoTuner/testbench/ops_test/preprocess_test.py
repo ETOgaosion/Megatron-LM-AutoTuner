@@ -44,8 +44,8 @@ class TestPreprocess(TestCommon):
         theoretical_activations: bool = False,
     ):
         super().__init__(
-            hf_config=hf_config, 
-            profile_mode=profile_mode, 
+            hf_config=hf_config,
+            profile_mode=profile_mode,
             warmup_iters=warmup_iters,
             theoretical_flops=theoretical_flops,
             theoretical_activations=theoretical_activations,
@@ -80,8 +80,10 @@ class TestPreprocess(TestCommon):
             # TODO: theoretical weight memory
             estimated_weight_mem_bytes = 0
 
-            estimated_weight_mem_str = get_memory_str(estimated_weight_mem_bytes, human_readable=True)
-            detailed_mem_report['estimated_peak_mem_diff'] = estimated_weight_mem_str
+            estimated_weight_mem_str = get_memory_str(
+                estimated_weight_mem_bytes, human_readable=True
+            )
+            detailed_mem_report["estimated_peak_mem_diff"] = estimated_weight_mem_str
             self.memory_db["weights"][self.module_name] = detailed_mem_report
         else:
             self.op = PreprocessForTest(
@@ -107,6 +109,7 @@ class TestPreprocess(TestCommon):
                 ),
                 tf_config,
             )
+
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
         micro_batch = micro_batch.to(torch.cuda.current_device())
@@ -121,18 +124,11 @@ class TestPreprocess(TestCommon):
         """
         TODO: theoretical FLOPS
         """
-        return {
-            "forward": 0,
-            "backward": 0
-        }
+        return {"forward": 0, "backward": 0}
 
     @override
     def calc_theoretical_memory(self, test_case: InputTestCase) -> Dict[str, int]:
         """
         TODO: theoretical activation memory
         """
-        return {
-            "activations": {
-                "activations": 0
-            }
-        }
+        return {"activations": {"activations": 0}}

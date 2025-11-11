@@ -37,8 +37,8 @@ class TestWithHiddenInputs(TestCommon):
         theoretical_activations: bool = False,
     ):
         super().__init__(
-            hf_config=hf_config, 
-            profile_mode=profile_mode, 
+            hf_config=hf_config,
+            profile_mode=profile_mode,
             warmup_iters=warmup_iters,
             theoretical_flops=theoretical_flops,
             theoretical_activations=theoretical_activations,

@@ -19,4 +19,3 @@ class CommonOpsForTest(ABC):
 
     def get_activation_memory(self) -> Dict[str, int]:
         return {"activations": self.activation_hook.get_activation_memory()}
-        

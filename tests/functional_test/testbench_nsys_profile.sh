@@ -9,8 +9,15 @@ VERL_HASH=$(git -C "verl" rev-parse --short=6 HEAD)
 MODEL_NAME="Qwen/Qwen3-0.6B"
 TEST_CASES_FILE="qwen3_0_6b.json"
 
-TEST_OPS_LIST=None
-TEST_CASE_IDXES=None
+# Use the test environment settings if available
+if [ -f tests/functional_test/test_env.sh ]; then
+    source tests/functional_test/test_env.sh
+else
+    echo "Warning: tests/functional_test/test_env.sh not found. Using default settings."
+    TEST_OPS_LIST=None
+    TEST_CASE_IDXES=None
+    TP_COMM_OVERLAP=False
+fi
 
 TIMESTAMP_VAR=$(date +"%Y-%m-%d_%H-%M-%S")
 OUTPUT_DIR=outputs/${TIMESTAMP_VAR}
@@ -45,14 +52,14 @@ PROFILE_ARGS=(
 
 OPTIONAL_PROFILE_ARGS=()
 if [[ "${TEST_OPS_LIST}" != "None" ]]; then
-    OPTIONAL_PROFILE_ARGS+=(--test-ops-list ${TEST_OPS_LIST})
+    OPTIONAL_PROFILE_ARGS+=(--test-ops-list ${TEST_OPS_LIST[@]})
 fi
 if [[ "${TEST_CASE_IDXES}" != "None" ]]; then
-    OPTIONAL_PROFILE_ARGS+=(--test-case-idxes ${TEST_CASE_IDXES})
+    OPTIONAL_PROFILE_ARGS+=(--test-case-idxes ${TEST_CASE_IDXES[@]})
 fi
 
 PARALLEL_ARGS=(
-    --tensor-model-parallel-size 1
+    --tensor-model-parallel-size 2
     --pipeline-model-parallel-size 1
     # --virtual-pipeline-model-parallel-size None
     --context-parallel-size 1
@@ -75,6 +82,13 @@ NSYS_ARGS=(
     --enable network_interface
     --python-sampling=true
 )
+
+if [[ "${TP_COMM_OVERLAP}" == "True" ]]; then
+    export NCCL_SHM_DISABLE=1
+    export NCCL_P2P_DISABLE=1
+    export UB_SKIPMC=1
+    echo "Notice that the overlap can only enable if you enable the config field in AutoTuner/testbench/profile/configs/override_tf_config.json"
+fi
 
 export NVTE_FLASH_ATTN=1
 export NVTE_FUSED_ATTN=0

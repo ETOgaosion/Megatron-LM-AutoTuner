@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Tuple, Optional
+from typing import Any, Optional, Tuple
 
 from .nested_dict import NestedDict
 

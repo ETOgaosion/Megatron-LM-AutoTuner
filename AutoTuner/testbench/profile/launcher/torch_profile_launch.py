@@ -1,3 +1,5 @@
+import os
+
 import torch
 
 from AutoTuner.utils.structs import InputTestCase
@@ -16,6 +18,7 @@ class LaunchTorchProfileForOps(Launcher):
         override_model_kwargs: dict,
         override_tf_config_kwargs: dict,
         torch_profiler_config: TorchProfilerConfig,
+        tp_comm_overlap_cfg: str = None,
     ):
         assert (
             profile_config.profile_mode == ProfileMode.torch_profiler
@@ -26,6 +29,7 @@ class LaunchTorchProfileForOps(Launcher):
             model_name=model_name,
             override_model_kwargs=override_model_kwargs,
             override_tf_config_kwargs=override_tf_config_kwargs,
+            tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
         self.torch_profiler_config = torch_profiler_config
         self.torch_profiler_config.schedule = torch.profiler.schedule(
@@ -34,6 +38,7 @@ class LaunchTorchProfileForOps(Launcher):
             active=1,
             repeat=1,
         )
+        os.makedirs(self.torch_profiler_config.output_dir, exist_ok=True)
         self.torch_profiler_config.on_trace_ready = (
             torch.profiler.tensorboard_trace_handler(
                 self.torch_profiler_config.output_dir
@@ -66,9 +71,7 @@ class LaunchTorchProfileForOps(Launcher):
             test_case_idxs = list(range(len(self.test_cases)))
         test_cases = [self.test_cases[i] for i in test_case_idxs]
         for test_case in test_cases:
-            batch_data_generator = self.datasets.get_batch_generator(
-                test_case
-            )
+            batch_data_generator = self.datasets.get_batch_generator(test_case)
             op_class_instance.run_test(test_case, batch_data_generator)
         return op_class_instance
 
@@ -91,14 +94,15 @@ class LaunchTorchProfileForOps(Launcher):
             self.prof.start()
         for i in range(self.profile_config.warmup_iters + 1):
             for test_case in test_cases:
-                batch_data_generator = self.datasets.get_batch_generator(
-                    test_case
-                )
+                batch_data_generator = self.datasets.get_batch_generator(test_case)
                 op_class_instance.run_test(test_case, batch_data_generator)
             if inner_prof:
                 self.prof.step()
         if inner_prof:
             self.prof.stop()
+        print(
+            f"Torch profiling completed, trace saved to {self.torch_profiler_config.output_dir}."
+        )
         return op_class_instance
 
     def run_op_list(
@@ -117,6 +121,12 @@ class LaunchTorchProfileForOps(Launcher):
                 self.run_op(op_name, test_case_idxs, inner_prof=inner_prof)
         if not inner_prof:
             self.prof.stop()
+        print(
+            f"Torch profiling completed, trace saved to {self.torch_profiler_config.output_dir}."
+        )
 
     def run_all_supported_ops(self, test_case_idxs: list[int]):
         self.run_op_list(self.all_supported_ops, test_case_idxs)
+        print(
+            f"Torch profiling completed, trace saved to {self.torch_profiler_config.output_dir}."
+        )

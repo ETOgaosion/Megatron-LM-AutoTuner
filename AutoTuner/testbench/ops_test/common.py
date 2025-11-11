@@ -10,6 +10,7 @@ from tensordict import TensorDict
 from transformers import PretrainedConfig
 
 from AutoTuner.utils.batch import average_microbatch_metric
+from AutoTuner.utils.gpu_info import GPU_PEAK_FLOPS
 from AutoTuner.utils.memory import MemoryTracker, MemoryTrackerContext, get_memory_str
 from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
 from AutoTuner.utils.nested_dict import NestedDict
@@ -20,9 +21,9 @@ from AutoTuner.utils.timing import Timer, TimerContext
 from ..ops.common import CommonOpsForTest
 from ..ops.theoretical_base import TheoreticalCalculation
 from ..profile.configs.config_struct import ProfileMode
-from AutoTuner.utils.gpu_info import GPU_PEAK_FLOPS
 
 os.environ["NVTE_NVTX_ENABLED"] = "1"
+
 
 class TestCommon(TheoreticalCalculation):
     def __init__(
@@ -31,7 +32,7 @@ class TestCommon(TheoreticalCalculation):
         profile_mode: int = 0,
         warmup_iters: int = 2,
         theoretical_flops: bool = False,
-        theoretical_activations: bool = False
+        theoretical_activations: bool = False,
     ):
         super().__init__()
         self.op: CommonOpsForTest = None
@@ -45,7 +46,7 @@ class TestCommon(TheoreticalCalculation):
         self.warmup_iters = warmup_iters
         self.theoretical_flops = theoretical_flops
         self.theoretical_activations = theoretical_activations
-        
+
         """
         timing_db structure:
         {
@@ -81,7 +82,6 @@ class TestCommon(TheoreticalCalculation):
             }
         }
         """
-
 
     @abc.abstractmethod
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
@@ -170,51 +170,69 @@ class TestCommon(TheoreticalCalculation):
             self.run_micro_batch(test_case, inputs)
 
         if self.profile_mode == ProfileMode.collect_data:
-            avg_forward_time = average_microbatch_metric(self.micro_batch_results, 'forward')
-            avg_backward_time = average_microbatch_metric(self.micro_batch_results, 'backward')
+            avg_forward_time = average_microbatch_metric(
+                self.micro_batch_results, "forward"
+            )
+            avg_backward_time = average_microbatch_metric(
+                self.micro_batch_results, "backward"
+            )
             if self.theoretical_flops:
                 theo_flops = self.calc_theoretical_flops(test_case)
                 forward_flops = theo_flops.get("forward", 0)
                 backward_flops = theo_flops.get("backward", 0)
-                
+
                 # forward
                 forward_leaf = {
                     "real": f"avg {avg_forward_time:.6f}s",
                     "estimated_flops": forward_flops,
-                    "estimated_time": forward_flops / GPU_PEAK_FLOPS if forward_flops > 0 else 0
+                    "estimated_time": (
+                        forward_flops / GPU_PEAK_FLOPS if forward_flops > 0 else 0
+                    ),
                 }
                 # backward
                 backward_leaf = {
                     "real": f"avg {avg_backward_time:.6f}s",
                     "estimated_flops": backward_flops,
-                    "estimated_time": backward_flops / GPU_PEAK_FLOPS if backward_flops > 0 else 0
+                    "estimated_time": (
+                        backward_flops / GPU_PEAK_FLOPS if backward_flops > 0 else 0
+                    ),
                 }
-                
+
                 self.timing_db[self.module_name]["forward"] = test_case.set_nested_dict(
                     self.timing_db[self.module_name]["forward"], forward_leaf
                 )
-                self.timing_db[self.module_name]["backward"] = test_case.set_nested_dict(
-                    self.timing_db[self.module_name]["backward"], backward_leaf
+                self.timing_db[self.module_name]["backward"] = (
+                    test_case.set_nested_dict(
+                        self.timing_db[self.module_name]["backward"], backward_leaf
+                    )
                 )
             else:
                 self.timing_db[self.module_name]["forward"] = test_case.set_nested_dict(
                     self.timing_db[self.module_name]["forward"],
-                    f"avg {avg_forward_time:.6f}s"
+                    f"avg {avg_forward_time:.6f}s",
                 )
-                self.timing_db[self.module_name]["backward"] = test_case.set_nested_dict(
-                    self.timing_db[self.module_name]["backward"],
-                    f"avg {avg_backward_time:.6f}s"
+                self.timing_db[self.module_name]["backward"] = (
+                    test_case.set_nested_dict(
+                        self.timing_db[self.module_name]["backward"],
+                        f"avg {avg_backward_time:.6f}s",
+                    )
                 )
-            avg_activation_bytes = average_microbatch_metric(self.micro_batch_results, 'activation_memory')
+            avg_activation_bytes = average_microbatch_metric(
+                self.micro_batch_results, "activation_memory"
+            )
             if self.theoretical_activations:
 
                 theo_mem = self.calc_theoretical_memory(test_case)
-                estimated_activations = theo_mem.get("activations", {}).get("activations", 0)
-                
+                estimated_activations = theo_mem.get("activations", {}).get(
+                    "activations", 0
+                )
+
                 leaf_data_full = {
                     self.module_name: {
                         "real": f"avg {get_memory_str(avg_activation_bytes, human_readable=True)}",
-                        "estimated": get_memory_str(estimated_activations, human_readable=True)
+                        "estimated": get_memory_str(
+                            estimated_activations, human_readable=True
+                        ),
                     }
                 }
                 temp_db_full = test_case.set_nested_dict(NestedDict(), leaf_data_full)
