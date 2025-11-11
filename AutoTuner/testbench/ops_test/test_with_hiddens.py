@@ -33,9 +33,15 @@ class TestWithHiddenInputs(TestCommon):
         rope_scaling_factor: float = 8.0,
         seq_len_interpolation_factor: Optional[float] = None,
         pg_collection: Optional[ProcessGroupCollection] = None,
+        theoretical_flops: bool = False,
+        theoretical_activations: bool = False,
     ):
         super().__init__(
-            hf_config=hf_config, profile_mode=profile_mode, warmup_iters=warmup_iters
+            hf_config=hf_config, 
+            profile_mode=profile_mode, 
+            warmup_iters=warmup_iters,
+            theoretical_flops=theoretical_flops,
+            theoretical_activations=theoretical_activations,
         )
         # Initialize HiddenStatusGenerator with your own configurations
         self.hiddenstatus_generator = HiddenStatusGenerator(

@@ -105,6 +105,8 @@ class TestCommon(TheoreticalCalculation):
             torch.cuda.profiler.stop()
 
             # Call backward function - force output to require grad
+            if isinstance(output, tuple):
+                output = output[0]
             output.requires_grad_(True)
             torch.cuda.profiler.start()
             nvtx_range_push("backward")
@@ -120,6 +122,8 @@ class TestCommon(TheoreticalCalculation):
             output = self.op(*inputs)
 
             # Backward pass
+            if isinstance(output, tuple):
+                output = output[0]
             output.requires_grad_(True)
             nvtx_range_push("backward")
             output.sum().backward()

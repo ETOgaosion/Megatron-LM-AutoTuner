@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Dict, Optional
 
 import torch
 from megatron.core.models.common.embeddings.language_model_embedding import (
@@ -14,7 +14,7 @@ from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
 
-from AutoTuner.utils.memory import MemoryTrackerContext
+from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
 from AutoTuner.utils.model_inputs import get_thd_model_input_from_bshd
 from AutoTuner.utils.structs import InputTestCase
 
@@ -40,11 +40,50 @@ class TestPreprocess(TestCommon):
         rope_scaling_factor: float = 8.0,
         seq_len_interpolation_factor: Optional[float] = None,
         pg_collection: Optional[ProcessGroupCollection] = None,
+        theoretical_flops: bool = False,
+        theoretical_activations: bool = False,
     ):
         super().__init__(
-            hf_config=hf_config, profile_mode=profile_mode, warmup_iters=warmup_iters
+            hf_config=hf_config, 
+            profile_mode=profile_mode, 
+            warmup_iters=warmup_iters,
+            theoretical_flops=theoretical_flops,
+            theoretical_activations=theoretical_activations,
         )
-        with MemoryTrackerContext("Preprocess init") as memory_tracker_ctx:
+        self.module_name = "Preprocess"
+        if profile_mode == ProfileMode.collect_data:
+            with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
+                self.op = PreprocessForTest(
+                    LanguageModelEmbedding(
+                        config=tf_config,
+                        vocab_size=hf_config.vocab_size,
+                        max_sequence_length=hf_config.max_position_embeddings,
+                        position_embedding_type="rope",
+                        num_tokentypes=0,
+                        scatter_to_sequence_parallel=scatter_to_sequence_parallel,
+                        tp_group=tp_group,
+                    ),
+                    RotaryEmbedding(
+                        kv_channels=tf_config.kv_channels,
+                        rotary_percent=rotary_percent,
+                        rotary_interleaved=tf_config.rotary_interleaved,
+                        seq_len_interpolation_factor=seq_len_interpolation_factor,
+                        rotary_base=rotary_base,
+                        rope_scaling=rope_scaling,
+                        rope_scaling_factor=rope_scaling_factor,
+                        use_cpu_initialization=tf_config.use_cpu_initialization,
+                        cp_group=None,
+                    ),
+                    tf_config,
+                )
+            detailed_mem_report = memory_tracker_ctx.get_result()
+            # TODO: theoretical weight memory
+            estimated_weight_mem_bytes = 0
+
+            estimated_weight_mem_str = get_memory_str(estimated_weight_mem_bytes, human_readable=True)
+            detailed_mem_report['estimated_peak_mem_diff'] = estimated_weight_mem_str
+            self.memory_db["weights"][self.module_name] = detailed_mem_report
+        else:
             self.op = PreprocessForTest(
                 LanguageModelEmbedding(
                     config=tf_config,
@@ -64,18 +103,10 @@ class TestPreprocess(TestCommon):
                     rope_scaling=rope_scaling,
                     rope_scaling_factor=rope_scaling_factor,
                     use_cpu_initialization=tf_config.use_cpu_initialization,
-                    # cp_group=pg_collection.cp,
                     cp_group=None,
                 ),
                 tf_config,
             )
-        self.module_name = "Preprocess"
-
-        if profile_mode == ProfileMode.collect_data:
-            self.memory_db["weights"][
-                self.module_name
-            ] = memory_tracker_ctx.get_result()
-
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
         micro_batch = micro_batch.to(torch.cuda.current_device())
@@ -84,3 +115,24 @@ class TestPreprocess(TestCommon):
             get_thd_model_input_from_bshd(micro_batch)
         )
         return input_ids_rmpad, position_ids_rmpad, attention_mask, packed_seq_params
+
+    @override
+    def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:
+        """
+        TODO: theoretical FLOPS
+        """
+        return {
+            "forward": 0,
+            "backward": 0
+        }
+
+    @override
+    def calc_theoretical_memory(self, test_case: InputTestCase) -> Dict[str, int]:
+        """
+        TODO: theoretical activation memory
+        """
+        return {
+            "activations": {
+                "activations": 0
+            }
+        }

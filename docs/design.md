@@ -22,7 +22,7 @@ First, a brief overview of the current operator testing framework:
 
 `TestWithHiddenInputs` is designed to serve as a base class for your **TestOP** classes. It provides an implementation of the `prepare_input` method that automatically supplies `HiddenStatus`.
 
-The **only step** required is to initialize `TestWithHiddenInputs` within your custom **TestOP** class.
+The only additional step required to use `TestWithHiddenInputs` is to initialize it within your custom **TestOP** class.
 
 Here is an example demonstrating how to test a Decoder operator:
 

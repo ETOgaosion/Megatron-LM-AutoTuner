@@ -163,7 +163,6 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
         rotary_pos_emb: Optional[Tensor] = None,
         packed_seq_params: Optional[PackedSeqParams] = None,
         sequence_len_offset: Optional[Tensor] = None,
-        
         context: Optional[Tensor] = None,
         context_mask: Optional[Tensor] = None,
         rotary_pos_cos: Optional[Tensor] = None,
