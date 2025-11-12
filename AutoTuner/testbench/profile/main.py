@@ -282,7 +282,7 @@ def call_launcher(
         "override_tf_config_kwargs": override_tf_config,
     }
     launcher_kwargs["tp_comm_overlap_cfg"] = (
-        "AutoTuner/testbench/profile/configs/tp_comm_overlap_cfg.yaml"
+        "AutoTuner/testbench/profile/configs/local/tp_comm_overlap_cfg.yaml"
     )
 
     torch_profiler_config_kwargs = {}
