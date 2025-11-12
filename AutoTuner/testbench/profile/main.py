@@ -40,7 +40,7 @@ def validate_args(args):
     )
     assert os.path.exists(
         args.real_override_model_config_file
-    ), f"{args.real_override_model_config_file} not found"
+    ), f"{args.real_override_model_config_file} not found, please place your override model config file in {args.config_dir}"
     args.real_override_tf_config_file = os.path.join(
         args.config_dir, args.override_tf_config_file
     )
@@ -138,7 +138,7 @@ def parse_args():
         "--config-dir",
         type=str,
         required=False,
-        default="AutoTuner/testbench/profile/configs/",
+        default="AutoTuner/testbench/profile/configs/local/",
         help="Base dir holds the config files, shall not modify this",
     )
     parser.add_argument(
