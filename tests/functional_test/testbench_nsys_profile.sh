@@ -17,6 +17,15 @@ else
     TEST_OPS_LIST=None
     TEST_CASE_IDXES=None
     TP_COMM_OVERLAP=False
+
+    GPUS_PER_NODE=4
+    
+    TP_SIZE=1
+    CP_SIZE=1
+    EP_SIZE=1
+    ETP_SIZE=1
+    PP_SIZE=1
+    VPP_SIZE=None
 fi
 
 TIMESTAMP_VAR=$(date +"%Y-%m-%d_%H-%M-%S")
@@ -28,7 +37,6 @@ mkdir -p "${OUTPUT_DIR}/${MODEL_NAME}/nsys_profile"
 export NVTE_NVTX_ENABLED=1
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
-GPUS_PER_NODE=4
 # Change for multinode config
 MASTER_ADDR=localhost
 MASTER_PORT=6000
@@ -59,13 +67,17 @@ if [[ "${TEST_CASE_IDXES}" != "None" ]]; then
 fi
 
 PARALLEL_ARGS=(
-    --tensor-model-parallel-size 2
-    --pipeline-model-parallel-size 1
+    --tensor-model-parallel-size $TP_SIZE
+    --pipeline-model-parallel-size $PP_SIZE
     # --virtual-pipeline-model-parallel-size None
-    --context-parallel-size 1
-    --expert-parallel-size 1
-    --expert-tensor-parallel-size 1
+    --context-parallel-size $CP_SIZE
+    --expert-parallel-size $EP_SIZE
+    --expert-tensor-parallel-size $ETP_SIZE
 )
+
+if [[ "${VPP_SIZE}" != "None" ]]; then
+    PARALLEL_ARGS+=(--virtual-pipeline-model-parallel-size $VPP_SIZE)
+fi
 
 NSYS_ARGS=(
     --run-as root
@@ -84,10 +96,8 @@ NSYS_ARGS=(
 )
 
 if [[ "${TP_COMM_OVERLAP}" == "True" ]]; then
-    export NCCL_SHM_DISABLE=1
-    export NCCL_P2P_DISABLE=1
     export UB_SKIPMC=1
-    echo "Notice that the overlap can only enable if you enable the config field in AutoTuner/testbench/profile/configs/override_tf_config.json"
+    echo "Notice that the overlap can only be enabled if you enable the config field in AutoTuner/testbench/profile/configs/override_tf_config.json"
 fi
 
 export NVTE_FLASH_ATTN=1

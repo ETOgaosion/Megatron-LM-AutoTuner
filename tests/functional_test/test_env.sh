@@ -1,4 +1,0 @@
-TEST_OPS_LIST=("Decoder")
-TEST_CASE_IDXES=None
-
-TP_COMM_OVERLAP=True

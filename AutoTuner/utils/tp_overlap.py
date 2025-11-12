@@ -48,7 +48,7 @@ def initialize_tp_communicators(
             UserBufferQuantizationMode.FP8 if fp8 else UserBufferQuantizationMode.NONE
         ]
         if (
-            fp8 is not None
+            fp8
             and first_last_layers_bf16
             and (num_layers_at_start_in_bf16 > 0 or num_layers_at_end_in_bf16 > 0)
         ):

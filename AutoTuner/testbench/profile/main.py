@@ -179,7 +179,13 @@ def parse_args():
     )
 
     # test choices for flexibility
-    parser.add_argument("--test-ops-list", type=str, nargs="+", default=None)
+    parser.add_argument(
+        "--test-ops-list",
+        type=str,
+        nargs="+",
+        default=None,
+        help="List of operator names (strings) to test. Previously accepted integer indices; now expects operator names. If migrating from older scripts, replace indices with operator names.",
+    )
     parser.add_argument("--test-case-idxs", type=int, nargs="+", default=None)
 
     # output
