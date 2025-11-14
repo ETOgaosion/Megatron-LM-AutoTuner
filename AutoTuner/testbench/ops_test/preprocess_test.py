@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 import torch
 from megatron.core.models.common.embeddings.language_model_embedding import (
@@ -42,13 +42,16 @@ class TestPreprocess(TestCommon):
         pg_collection: Optional[ProcessGroupCollection] = None,
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
+        tp_comm_overlap_cfg: str = None,
     ):
         super().__init__(
+            tf_config=tf_config,
             hf_config=hf_config,
             profile_mode=profile_mode,
             warmup_iters=warmup_iters,
             theoretical_flops=theoretical_flops,
             theoretical_activations=theoretical_activations,
+            tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
         self.module_name = "Preprocess"
         if profile_mode == ProfileMode.collect_data:
@@ -118,6 +121,11 @@ class TestPreprocess(TestCommon):
             get_thd_model_input_from_bshd(micro_batch)
         )
         return input_ids_rmpad, position_ids_rmpad, attention_mask, packed_seq_params
+    
+    @override
+    def calculate_tokens(self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any) -> int:
+        attention_mask = micro_batch["input_ids"].shape[0]
+        return attention_mask.sum().item()
 
     @override
     def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:

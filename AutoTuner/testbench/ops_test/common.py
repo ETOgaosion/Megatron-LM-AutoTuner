@@ -5,6 +5,7 @@ from typing import Any, Iterator, List, Optional, Tuple
 
 import torch
 from megatron.core import tensor_parallel
+import megatron.core.parallel_state as mpu
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
@@ -17,6 +18,7 @@ from AutoTuner.utils.nested_dict import NestedDict
 from AutoTuner.utils.nvtx import nvtx_decorator, nvtx_range_pop, nvtx_range_push
 from AutoTuner.utils.structs import InputTestCase
 from AutoTuner.utils.timing import Timer, TimerContext
+from AutoTuner.utils.tp_overlap import initialize_tp_communicators, destroy_ub
 
 from ..ops.common import CommonOpsForTest
 from ..ops.theoretical_base import TheoreticalCalculation
@@ -28,11 +30,13 @@ os.environ["NVTE_NVTX_ENABLED"] = "1"
 class TestCommon(TheoreticalCalculation):
     def __init__(
         self,
+        tf_config: TransformerConfig,
         hf_config: PretrainedConfig,
         profile_mode: int = 0,
         warmup_iters: int = 2,
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
+        tp_comm_overlap_cfg: str = None,
     ):
         super().__init__()
         self.op: CommonOpsForTest = None
@@ -41,11 +45,13 @@ class TestCommon(TheoreticalCalculation):
             self.timing_db = NestedDict()
             self.memory_db = {"weights": {}, "activations": NestedDict()}
             self.micro_batch_results = []
-        self.model_config = hf_config
+        self.tf_config = tf_config
+        self.hf_config = hf_config
         self.profile_mode = profile_mode
         self.warmup_iters = warmup_iters
         self.theoretical_flops = theoretical_flops
         self.theoretical_activations = theoretical_activations
+        self.tp_comm_overlap_cfg = tp_comm_overlap_cfg
 
         """
         timing_db structure:
@@ -85,9 +91,25 @@ class TestCommon(TheoreticalCalculation):
 
     @abc.abstractmethod
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
-        pass
+        raise NotImplementedError
+    
 
-    def run_micro_batch(self, test_case: InputTestCase, inputs: TensorDict):
+    @abc.abstractmethod
+    def calculate_tokens(self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any) -> int:
+        raise NotImplementedError
+
+    def run_micro_batch(self, test_case: InputTestCase, inputs: List[Any], tokens: int):
+        if (
+            mpu.get_tensor_model_parallel_world_size() > 1
+            and self.tf_config.tp_comm_overlap
+            and test_case.shape == "thd"
+            and tokens is not None and tokens > 0
+        ):
+            initialize_tp_communicators(
+                tp_comm_overlap_cfg=self.tp_comm_overlap_cfg,
+                tokens=tokens,
+                hidden_size=self.hf_config.hidden_size,
+            )
         if self.profile_mode == ProfileMode.nsys_profile:
             """
             When using nsys profile
@@ -163,11 +185,19 @@ class TestCommon(TheoreticalCalculation):
             self.micro_batch_results[-1][
                 "activation_memory"
             ] = self.op.activation_hook.get_activation_memory()
+        if (
+            mpu.get_tensor_model_parallel_world_size() > 1
+            and self.tf_config.tp_comm_overlap
+            and test_case.shape == "thd"
+            and tokens is not None and tokens > 0
+        ):
+            destroy_ub()
 
     def run_test(self, test_case: InputTestCase, batch_data_generator: Iterator):
         for batch_data in batch_data_generator:
             inputs = self.prepare_input(test_case, batch_data)
-            self.run_micro_batch(test_case, inputs)
+            tokens = self.calculate_tokens(test_case, batch_data, inputs)
+            self.run_micro_batch(test_case, inputs, tokens)
 
         if self.profile_mode == ProfileMode.collect_data:
             avg_forward_time = average_microbatch_metric(

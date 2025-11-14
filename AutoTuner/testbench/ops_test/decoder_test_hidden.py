@@ -25,6 +25,7 @@ class TestDecoderWithHiddenInputs(TestWithHiddenInputs):
         warmup_iters: int = 2,
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
+        tp_comm_overlap_cfg: str = None,
     ):
         super().__init__(
             hf_config=hf_config,
@@ -34,6 +35,7 @@ class TestDecoderWithHiddenInputs(TestWithHiddenInputs):
             tp_group=tp_group,
             theoretical_flops=theoretical_flops,
             theoretical_activations=theoretical_activations,
+            tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
 
         self.module_name = "Decoder"
@@ -68,3 +70,4 @@ class TestDecoderWithHiddenInputs(TestWithHiddenInputs):
         TODO: theoretical activation memory
         """
         return {"activations": {"activations": 0}}
+    

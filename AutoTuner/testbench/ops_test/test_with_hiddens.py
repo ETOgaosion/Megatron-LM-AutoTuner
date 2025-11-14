@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, Any
 
 import torch
 from megatron.core.process_groups_config import ProcessGroupCollection
@@ -35,13 +35,16 @@ class TestWithHiddenInputs(TestCommon):
         pg_collection: Optional[ProcessGroupCollection] = None,
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
+        tp_comm_overlap_cfg: str = None,
     ):
         super().__init__(
+            tf_config=tf_config,
             hf_config=hf_config,
             profile_mode=profile_mode,
             warmup_iters=warmup_iters,
             theoretical_flops=theoretical_flops,
             theoretical_activations=theoretical_activations,
+            tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
         # Initialize HiddenStatusGenerator with your own configurations
         self.hiddenstatus_generator = HiddenStatusGenerator(
@@ -62,3 +65,8 @@ class TestWithHiddenInputs(TestCommon):
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
         return self.hiddenstatus_generator.prepare_input(test_case, micro_batch)
+
+    @override
+    def calculate_tokens(self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any) -> int:
+        tokens = inputs[0].shape[0]
+        return tokens

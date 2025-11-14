@@ -33,13 +33,16 @@ class TestLanguageModelEmbedding(TestCommon):
         warmup_iters: int = 2,
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
+        tp_comm_overlap_cfg: str = None,
     ):
         super().__init__(
             hf_config=hf_config,
+            tf_config=tf_config,
             profile_mode=profile_mode,
             warmup_iters=warmup_iters,
             theoretical_flops=theoretical_flops,
             theoretical_activations=theoretical_activations,
+            tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
         self.module_name = "Embedding"
 
@@ -89,6 +92,11 @@ class TestLanguageModelEmbedding(TestCommon):
             get_thd_model_input_from_bshd(micro_batch)
         )
         return input_ids_rmpad, position_ids_rmpad
+    
+    @override
+    def calculate_tokens(self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any) -> int:
+        attention_mask = micro_batch["input_ids"].shape[0]
+        return attention_mask.sum().item()
 
     @override
     def calc_theoretical_memory(self, test_case: InputTestCase) -> Dict[str, int]:

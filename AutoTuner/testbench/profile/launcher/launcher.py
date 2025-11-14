@@ -11,7 +11,7 @@ from AutoTuner.utils.config import (
 from AutoTuner.utils.model_inputs import DataSets
 from AutoTuner.utils.nested_dict import NestedDict
 from AutoTuner.utils.structs import InputTestCase
-from AutoTuner.utils.tp_overlap import initialize_tp_communicators
+from AutoTuner.utils.tp_overlap import initialize_tp_communicators, destroy_ub
 
 from ..configs.config_struct import ProfileConfig
 from ..op_mapping import OP_TEST_MAPPING
@@ -64,22 +64,27 @@ class Launcher:
         if test_case_idxs is None:
             test_case_idxs = list(range(len(self.test_cases)))
         test_cases = [self.test_cases[i] for i in test_case_idxs]
-        max_seqlen = max(tc.seqlen for tc in test_cases)
-        max_batch_size = max(tc.micro_batch_size for tc in test_cases)
-        if (
-            mpu.get_tensor_model_parallel_world_size() > 1
-            and self.tf_config.tp_comm_overlap
-        ):
-            initialize_tp_communicators(
-                tp_comm_overlap_cfg=self.tp_comm_overlap_cfg,
-                seq_length=max_seqlen,
-                micro_batch_size=max_batch_size,
-                hidden_size=self.hf_config.hidden_size,
-            )
         for test_case in test_cases:
+            if (
+                mpu.get_tensor_model_parallel_world_size() > 1
+                and self.tf_config.tp_comm_overlap
+                and test_case.shape == "bshd"
+            ):
+                initialize_tp_communicators(
+                    tp_comm_overlap_cfg=self.tp_comm_overlap_cfg,
+                    seq_length=test_case.seqlen,
+                    micro_batch_size=test_case.micro_batch_size,
+                    hidden_size=self.hf_config.hidden_size,
+                )
             print(f"Running operator: {op_name}, test case: {test_case}")
             batch_data_generator = self.datasets.get_batch_generator(test_case)
             op_class_instance.run_test(test_case, batch_data_generator)
+            if (
+                mpu.get_tensor_model_parallel_world_size() > 1
+                and self.tf_config.tp_comm_overlap
+                and test_case.shape == "bshd"
+            ):
+                destroy_ub()
         return op_class_instance
 
     def run_op_list(self, op_name_list: list[str], test_case_idxs: list[int]):
