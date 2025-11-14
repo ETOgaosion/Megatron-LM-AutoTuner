@@ -74,3 +74,4 @@ Found 2 JSON files. Starting processing...
     
 
 You will now be able to view events from all ranks on a single timeline.
+![torch_profiler_merged](./figs/tools/torch_profiler_merged.png)
