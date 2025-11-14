@@ -62,4 +62,9 @@ def initialize_tp_communicators(
 
 def destroy_ub():
     """Destroy the user buffers created by Transformer Engine."""
-    te_module.base.destroy_ub()
+    try:
+        from transformer_engine.pytorch import module as te_module
+        te_module.base.destroy_ub()
+    except ImportError:
+        warnings.warn("Transformer Engine is not installed, skip destroying user buffers.")
+        traceback.print_exc()
