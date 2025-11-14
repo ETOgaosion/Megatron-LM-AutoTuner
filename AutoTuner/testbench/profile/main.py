@@ -281,8 +281,8 @@ def call_launcher(
         "override_model_kwargs": override_model_config,
         "override_tf_config_kwargs": override_tf_config,
     }
-    launcher_kwargs["tp_comm_overlap_cfg"] = (
-        os.path.join(args.config_dir, "tp_comm_overlap_cfg.yaml")
+    launcher_kwargs["tp_comm_overlap_cfg"] = os.path.join(
+        args.config_dir, "tp_comm_overlap_cfg.yaml"
     )
 
     torch_profiler_config_kwargs = {}

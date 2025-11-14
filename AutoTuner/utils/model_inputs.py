@@ -1,14 +1,13 @@
 import copy
-from typing import Any, Tuple, Iterable
+from typing import Any, Iterable, Tuple
 
+import megatron.core.parallel_state as mpu
 import tensordict
 import torch
 from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
+from megatron.core.packed_seq_params import PackedSeqParams
 from tensordict import TensorDict
 from transformers import PretrainedConfig
-
-import megatron.core.parallel_state as mpu
-from megatron.core.packed_seq_params import PackedSeqParams
 
 from verl.utils.megatron.pipeline_parallel import make_batch_generator
 from verl.utils.model import compute_position_id_with_mask, create_random_mask
@@ -111,6 +110,7 @@ def get_thd_model_input_from_bshd(
     else:
         raise ValueError(f"system {system} not supported")
 
+
 class DataSets:
     """
     For real RLHF training, sequence packing shall use this simulated dataset to prepare inputs.
@@ -173,16 +173,16 @@ class DataSets:
                     self.data[test_case],
                     vpp_size=self.vpp_size if self.vpp_size is not None else 1,
                 )
-            test_cases_micro_batches = [self.data[test_case] for test_case in self.test_cases]
-            torch.distributed.broadcast_object_list(
-                test_cases_micro_batches, src=0
-            )
+            test_cases_micro_batches = [
+                self.data[test_case] for test_case in self.test_cases
+            ]
+            torch.distributed.broadcast_object_list(test_cases_micro_batches, src=0)
         else:
             test_cases_micro_batches = [None for _ in self.test_cases]
-            torch.distributed.broadcast_object_list(
-                test_cases_micro_batches, src=0
-            )
-            for test_case, micro_batches in zip(self.test_cases, test_cases_micro_batches):
+            torch.distributed.broadcast_object_list(test_cases_micro_batches, src=0)
+            for test_case, micro_batches in zip(
+                self.test_cases, test_cases_micro_batches
+            ):
                 self.data[test_case] = micro_batches
                 self.data_batch_generators[test_case] = make_batch_generator(
                     self.data[test_case],
