@@ -32,12 +32,12 @@ class Launcher:
         self.hf_config = get_hf_model_config(model_name, **override_model_kwargs)
         
         # default transformer config optimization
-        override_tf_config_kwargs["persist_layer_norm"] = True
-        override_tf_config_kwargs["bias_activation_fusion"] = True
-        override_tf_config_kwargs["apply_rope_fusion"] = True
-        override_tf_config_kwargs["moe_permute_fusion"] = True
-        override_tf_config_kwargs["deallocate_pipeline_outputs"] = True
-        override_tf_config_kwargs["gradients_accumulation_fusion"] = True
+        override_tf_config_kwargs.setdefault("persist_layer_norm", True)
+        override_tf_config_kwargs.setdefault("bias_activation_fusion", True)
+        override_tf_config_kwargs.setdefault("apply_rope_fusion", True)
+        override_tf_config_kwargs.setdefault("moe_permute_fusion", True)
+        override_tf_config_kwargs.setdefault("deallocate_pipeline_outputs", True)
+        override_tf_config_kwargs.setdefault("gradients_accumulation_fusion", True)
 
         self.tf_config = get_mcore_model_config_from_hf_config(
             self.hf_config, **override_tf_config_kwargs
