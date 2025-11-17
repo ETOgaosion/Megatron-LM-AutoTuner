@@ -11,6 +11,7 @@ import json
 import os
 import glob
 import argparse
+from pathlib import Path
 
 def merge_traces(input_dir, output_file):
     """
@@ -52,6 +53,12 @@ def merge_traces(input_dir, output_file):
                 continue
             
             rank_id = distributed_info.get('rank')
+            
+            # Validate rank_id is non-negative
+            if rank_id is None or rank_id < 0:
+                print(f"Warning: Invalid rank_id ({rank_id}) in file {file_path}. Skipping this file.")
+                continue
+            
             if rank_id in processed_ranks:
                 # Warning if a Rank ID is processed more than once
                 print(f"Warning: Rank {rank_id} seems duplicated. Skipping this file.")
@@ -119,8 +126,7 @@ def merge_traces(input_dir, output_file):
 
     try:
         with open(output_file, 'w') as f:
-            json.dump(final_trace, f) # Standard JSON output (can use indent=2 for debugging)
-            # json.dump(final_trace, f, indent=2) # Use for easier reading/debugging
+            json.dump(final_trace, f, indent=2)  # Pretty-printed JSON for readability
             
         print("\n" + "="*30)
         print(f" Merge successful! Processed {len(processed_ranks)} Ranks.")
@@ -131,27 +137,22 @@ def merge_traces(input_dir, output_file):
     except IOError as e:
         print(f"Error: Could not write to output file {output_file}. Error: {e}")
 
-from pathlib import Path 
 # --- Script Execution Entry Point ---
 if __name__ == "__main__":
     # Initialize Argument Parser with a description
     parser = argparse.ArgumentParser(description="Merges Profiler JSON trace files.")
     
-    # # Default input directory for convenience
-    # default_input_dir = "outputs/2025-10-19_23-52-57/Qwen/Qwen3-0.6B/torch_profiler"
-    
     parser.add_argument(
         "-i", "--input_dir", 
         type=str, 
-        # default=default_input_dir,
-        help=f"Directory containing profiler .json files."
+        required=True,
+        help="Directory containing profiler .json files."
     )
     
     # Output file argument (no default value here, as it's calculated later)
     parser.add_argument(
         "-o", "--output_file", 
         type=str, 
-        # Help message explains the dynamic default behavior
         help="Merged JSON output filename. If only a filename is specified, it is saved to the parent directory of the input path."
     )
     
@@ -175,7 +176,7 @@ if __name__ == "__main__":
     if args.output_file:
         output_path = Path(args.output_file)
         # If the user specified a filename without a directory, place it in the parent_dir
-        if not output_path.parent.name:
+        if output_path.parent == Path('.'):
              final_output_path = parent_dir / output_path
         else:
              # If the user specified a full path (e.g., /tmp/data.json), use it directly
