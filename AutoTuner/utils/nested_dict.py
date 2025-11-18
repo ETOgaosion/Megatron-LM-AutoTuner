@@ -13,11 +13,24 @@ class NestedDict(dict):
         if key not in self:
             self[key] = NestedDict()
         return super().__getitem__(key)
+    
+    def get_depth(self):
+        """Return the depth of the nested dict."""
+        v_depth = []
+        for v in self.values():
+            if isinstance(v, NestedDict):
+                v_depth.append(v.get_depth())
+        if len(v_depth) > 0:
+            return 1 + max(v_depth)
+        else:
+            return 0
 
     def merge(self, other):
         """Merge another NestedDict into this one (structure assumed same)."""
+        # assert self.get_depth() == other.get_depth(), f"NestedDict depth mismatch, {self.get_depth()} != {other.get_depth()}."
+
         for k, v in other.items():
-            if isinstance(v, dict) and isinstance(self.get(k), dict):
+            if isinstance(v, NestedDict) and isinstance(self.get(k), NestedDict):
                 # 递归合并
                 self[k].merge(v)
             else:

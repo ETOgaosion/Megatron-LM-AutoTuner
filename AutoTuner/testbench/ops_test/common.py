@@ -266,6 +266,7 @@ class TestCommon(TheoreticalCalculation):
                     }
                 }
                 temp_db_full = test_case.set_nested_dict(NestedDict(), leaf_data_full)
+                print(self.memory_db, type(self.memory_db["activations"]))
                 self.memory_db["activations"].merge(temp_db_full)
             else:
                 leaf_data = {
