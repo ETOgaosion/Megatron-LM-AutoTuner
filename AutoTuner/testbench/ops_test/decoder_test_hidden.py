@@ -70,4 +70,3 @@ class TestDecoderWithHiddenInputs(TestWithHiddenInputs):
         TODO: theoretical activation memory
         """
         return {"activations": {"activations": 0}}
-    

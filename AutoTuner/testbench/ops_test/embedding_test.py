@@ -92,9 +92,11 @@ class TestLanguageModelEmbedding(TestCommon):
             get_thd_model_input_from_bshd(micro_batch)
         )
         return input_ids_rmpad, position_ids_rmpad
-    
+
     @override
-    def calculate_tokens(self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any) -> int:
+    def calculate_tokens(
+        self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any
+    ) -> int:
         attention_mask = micro_batch["input_ids"].shape[0]
         return attention_mask.sum().item()
 

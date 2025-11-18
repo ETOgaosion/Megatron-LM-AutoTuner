@@ -57,6 +57,7 @@ PROFILE_ARGS=(
     --test-cases-file $TEST_CASES_FILE
     --output-dir $OUTPUT_DIR
     --profile-mode 0
+    --fix-compute-amount
     # --theoretical-flops true
     # --theoretical-activations false
 )

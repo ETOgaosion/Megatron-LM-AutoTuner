@@ -3,9 +3,9 @@ import os
 from abc import ABC
 from typing import Any, Iterator, List, Optional, Tuple
 
+import megatron.core.parallel_state as mpu
 import torch
 from megatron.core import tensor_parallel
-import megatron.core.parallel_state as mpu
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
@@ -18,11 +18,11 @@ from AutoTuner.utils.nested_dict import NestedDict
 from AutoTuner.utils.nvtx import nvtx_decorator, nvtx_range_pop, nvtx_range_push
 from AutoTuner.utils.structs import InputTestCase
 from AutoTuner.utils.timing import Timer, TimerContext
-from AutoTuner.utils.tp_overlap import initialize_tp_communicators, destroy_ub
+from AutoTuner.utils.tp_overlap import destroy_ub, initialize_tp_communicators
 
 from ..ops.common import CommonOpsForTest
-from .theoretical_base import TheoreticalCalculation
 from ..profile.configs.config_struct import ProfileMode
+from .theoretical_base import TheoreticalCalculation
 
 os.environ["NVTE_NVTX_ENABLED"] = "1"
 
@@ -92,10 +92,11 @@ class TestCommon(TheoreticalCalculation):
     @abc.abstractmethod
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
         raise NotImplementedError
-    
 
     @abc.abstractmethod
-    def calculate_tokens(self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any) -> int:
+    def calculate_tokens(
+        self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any
+    ) -> int:
         raise NotImplementedError
 
     def run_micro_batch(self, test_case: InputTestCase, inputs: List[Any], tokens: int):
@@ -103,7 +104,8 @@ class TestCommon(TheoreticalCalculation):
             mpu.get_tensor_model_parallel_world_size() > 1
             and self.tf_config.tp_comm_overlap
             and test_case.shape == "thd"
-            and tokens is not None and tokens > 0
+            and tokens is not None
+            and tokens > 0
         ):
             initialize_tp_communicators(
                 tp_comm_overlap_cfg=self.tp_comm_overlap_cfg,
@@ -189,7 +191,8 @@ class TestCommon(TheoreticalCalculation):
             mpu.get_tensor_model_parallel_world_size() > 1
             and self.tf_config.tp_comm_overlap
             and test_case.shape == "thd"
-            and tokens is not None and tokens > 0
+            and tokens is not None
+            and tokens > 0
         ):
             destroy_ub()
 

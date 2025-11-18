@@ -165,6 +165,12 @@ def parse_args():
 
     # Profile configs
     parser.add_argument(
+        "--fix-compute-amount",
+        action="store_true",
+        help="fix compute amount for each run",
+    )
+
+    parser.add_argument(
         "--profile-mode",
         type=int,
         help="0: collect data, 1: nsys profile, 2: torch profiler",
@@ -280,6 +286,7 @@ def call_launcher(
         "model_name": args.model_name,
         "override_model_kwargs": override_model_config,
         "override_tf_config_kwargs": override_tf_config,
+        "fix_compute_amount": args.fix_compute_amount,
     }
     launcher_kwargs["tp_comm_overlap_cfg"] = os.path.join(
         args.config_dir, "tp_comm_overlap_cfg.yaml"

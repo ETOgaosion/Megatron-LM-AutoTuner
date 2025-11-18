@@ -18,6 +18,7 @@ class LaunchTorchProfileForOps(Launcher):
         override_model_kwargs: dict,
         override_tf_config_kwargs: dict,
         torch_profiler_config: TorchProfilerConfig,
+        fix_compute_amount: bool = True,
         tp_comm_overlap_cfg: str = None,
     ):
         assert (
@@ -29,6 +30,7 @@ class LaunchTorchProfileForOps(Launcher):
             model_name=model_name,
             override_model_kwargs=override_model_kwargs,
             override_tf_config_kwargs=override_tf_config_kwargs,
+            fix_compute_amount=fix_compute_amount,
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
         self.torch_profiler_config = torch_profiler_config

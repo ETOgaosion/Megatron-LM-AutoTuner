@@ -13,7 +13,7 @@ class NestedDict(dict):
         if key not in self:
             self[key] = NestedDict()
         return super().__getitem__(key)
-    
+
     def get_depth(self):
         """Return the depth of the nested dict."""
         v_depth = []

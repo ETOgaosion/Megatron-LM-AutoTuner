@@ -11,7 +11,7 @@ from AutoTuner.utils.config import (
 from AutoTuner.utils.model_inputs import DataSets
 from AutoTuner.utils.nested_dict import NestedDict
 from AutoTuner.utils.structs import InputTestCase
-from AutoTuner.utils.tp_overlap import initialize_tp_communicators, destroy_ub
+from AutoTuner.utils.tp_overlap import destroy_ub, initialize_tp_communicators
 
 from ..configs.config_struct import ProfileConfig
 from ..op_mapping import OP_TEST_MAPPING
@@ -25,12 +25,13 @@ class Launcher:
         model_name: str,
         override_model_kwargs: dict,
         override_tf_config_kwargs: dict,
+        fix_compute_amount: bool = True,
         tp_comm_overlap_cfg: str = None,
     ):
         self.model_name = model_name
         self.profile_config = profile_config
         self.hf_config = get_hf_model_config(model_name, **override_model_kwargs)
-        
+
         # default transformer config optimization
         override_tf_config_kwargs.setdefault("persist_layer_norm", True)
         override_tf_config_kwargs.setdefault("bias_activation_fusion", True)
@@ -50,6 +51,7 @@ class Launcher:
         self.datasets = DataSets(
             self.hf_config,
             self.test_cases,
+            fix_compute_amount=fix_compute_amount,
             use_dynamic_bsz_balance=True,
             vpp_size=mpu.get_virtual_pipeline_model_parallel_world_size(),
         )

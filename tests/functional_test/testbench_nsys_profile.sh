@@ -54,6 +54,7 @@ PROFILE_ARGS=(
     --test-cases-file $TEST_CASES_FILE
     --output-dir $OUTPUT_DIR
     --profile-mode 1
+    --fix-compute-amount
 )
 
 OPTIONAL_PROFILE_ARGS=()

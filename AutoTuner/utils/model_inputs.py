@@ -1,4 +1,5 @@
 import copy
+import os
 from typing import Any, Iterable, Tuple
 
 import megatron.core.parallel_state as mpu
@@ -27,27 +28,76 @@ from .structs import InputTestCase
 """
 
 
+def path_hash(
+    model_config: PretrainedConfig,
+    batch_size: int,
+    seqlen: int,
+    extra: str,
+    use_hash: bool = True,
+) -> str:
+    if use_hash:
+        return str(
+            hash(
+                model_config.to_json_string()
+                + ",batch_size="
+                + str(batch_size)
+                + ",seqlen="
+                + str(seqlen)
+                + ","
+                + extra
+            )
+        )
+    else:
+        return (
+            model_config.to_json_string()
+            + ",batch_size="
+            + str(batch_size)
+            + ",seqlen="
+            + str(seqlen)
+            + ","
+            + extra
+        )
+
+
 def _get_one_model_input_bshd(
-    model_config: PretrainedConfig, batch_size: int, seqlen: int
+    model_config: PretrainedConfig,
+    batch_size: int,
+    seqlen: int,
+    fix_compute_amount: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     input_ids = torch.randint(
         low=0, high=model_config.vocab_size, size=(batch_size, seqlen), device="cuda"
     )
-    attention_mask = create_random_mask(
-        input_ids=input_ids,
-        max_ratio_of_left_padding=0,
-        max_ratio_of_valid_token=0.9,
-        min_ratio_of_valid_token=0.8,
-    )
+    dir_name: str = path_hash(model_config, batch_size, seqlen, "bshd")
+    file_path = os.path.join("tmp", dir_name, "attention_mask.pt")
+    if fix_compute_amount and os.path.exists(file_path):
+        attention_mask = torch.load(file_path)
+    else:
+        attention_mask = create_random_mask(
+            input_ids=input_ids,
+            max_ratio_of_left_padding=0,
+            max_ratio_of_valid_token=0.9,
+            min_ratio_of_valid_token=0.8,
+        )
+        if fix_compute_amount:
+            os.makedirs(os.path.join("tmp", dir_name), exist_ok=True)
+            torch.save(attention_mask, file_path)
+            with open(os.path.join("tmp", dir_name, "config"), "w") as f:
+                f.write(
+                    f"model_config: {model_config.to_json_string()}\nbatch_size: {batch_size}\nseqlen: {seqlen}"
+                )
     position_ids = compute_position_id_with_mask(attention_mask)
     return input_ids, attention_mask, position_ids, None
 
 
 def _get_one_model_input_fsdp_thd(
-    model_config: PretrainedConfig, batch_size: int, seqlen: int
+    model_config: PretrainedConfig,
+    batch_size: int,
+    seqlen: int,
+    fix_compute_amount: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     input_ids, attention_mask, position_ids = _get_one_model_input_bshd(
-        model_config, batch_size, seqlen
+        model_config, batch_size, seqlen, fix_compute_amount
     )
     input_ids_rmpad, indices, *_ = unpad_input(input_ids.unsqueeze(-1), attention_mask)
     input_ids_rmpad = input_ids_rmpad.transpose(0, 1)  # (1, total_nnz)
@@ -58,10 +108,13 @@ def _get_one_model_input_fsdp_thd(
 
 
 def _get_one_model_input_megatron_thd(
-    model_config: PretrainedConfig, batch_size: int, seqlen: int
+    model_config: PretrainedConfig,
+    batch_size: int,
+    seqlen: int,
+    fix_compute_amount: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     input_ids, attention_mask, position_ids = _get_one_model_input_bshd(
-        model_config, batch_size, seqlen
+        model_config, batch_size, seqlen, fix_compute_amount
     )
     input_ids_rmpad, packed_seq_params = generate_thd_input(
         input_ids=input_ids, attention_mask=attention_mask
@@ -75,18 +128,27 @@ def get_one_model_input(
     seqlen: int,
     shape: str = "bshd",
     system: str = "megatron",
+    fix_compute_amount: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Any]:
     if shape == "thd":
         if system == "megatron":
-            return _get_one_model_input_megatron_thd(model_config, batch_size, seqlen)
+            return _get_one_model_input_megatron_thd(
+                model_config, batch_size, seqlen, fix_compute_amount
+            )
         elif system == "fsdp":
-            return _get_one_model_input_fsdp_thd(model_config, batch_size, seqlen)
+            return _get_one_model_input_fsdp_thd(
+                model_config, batch_size, seqlen, fix_compute_amount
+            )
     else:
-        return _get_one_model_input_bshd(model_config, batch_size, seqlen)
+        return _get_one_model_input_bshd(
+            model_config, batch_size, seqlen, fix_compute_amount
+        )
 
 
 def get_thd_model_input_from_bshd(
-    batch: TensorDict, system: str = "megatron"
+    batch: TensorDict,
+    system: str = "megatron",
+    fix_compute_amount: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Any]:
     input_ids = batch["input_ids"]
     attention_mask = batch["attention_mask"]
@@ -122,6 +184,7 @@ class DataSets:
         self,
         model_config: PretrainedConfig,
         test_cases: list[InputTestCase],
+        fix_compute_amount: bool = True,
         use_dynamic_bsz_balance: bool = True,
         vpp_size: int | None = None,
     ):
@@ -142,7 +205,9 @@ class DataSets:
                 system = test_case.system
 
                 input_ids, attention_mask, position_ids, packed_seq_params = (
-                    _get_one_model_input_bshd(model_config, batch_size, seqlen)
+                    _get_one_model_input_bshd(
+                        model_config, batch_size, seqlen, fix_compute_amount
+                    )
                 )
                 batch = TensorDict(
                     {

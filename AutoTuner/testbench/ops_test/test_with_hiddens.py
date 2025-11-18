@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Any
+from typing import Any, Optional
 
 import torch
 from megatron.core.process_groups_config import ProcessGroupCollection
@@ -67,6 +67,8 @@ class TestWithHiddenInputs(TestCommon):
         return self.hiddenstatus_generator.prepare_input(test_case, micro_batch)
 
     @override
-    def calculate_tokens(self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any) -> int:
+    def calculate_tokens(
+        self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any
+    ) -> int:
         tokens = inputs[0].shape[0]
         return tokens
