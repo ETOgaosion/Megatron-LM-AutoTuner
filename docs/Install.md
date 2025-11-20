@@ -51,3 +51,31 @@ You should use `Ctrl-C` to activate stop-then-continue download
 - Apply patch to TransformerEngine to enable flash_attention: `cd TransformerEngine && git apply ../patches/TransformerEngine.patch`
 - Install Megatron in current repo
 - Install verl in current repo
+
+## Environment Migration
+
+If you have an existing environment archive (e.g., megatron-lm-autotuner.tar.gz), you can quickly reuse it with the following steps:
+
+- Copy the archive and adjust permissions
+
+```sh
+sudo cp /path/to/megatron-lm-autotuner.tar.gz ~/
+sudo chown your_username:your_group ~/megatron-lm-autotuner.tar.gz
+```
+
+- Extract to the conda environment directory
+
+```sh
+tar -xzf ~/megatron-lm-autotuner.tar.gz -C ~/miniconda3/envs/megatron-lm-autotuner
+```
+
+- Activate the environment and fix path issues
+
+```sh
+conda activate megatron-lm-autotuner
+conda-unpack
+# Check for packages with incorrect paths
+pip list --editable
+# For each package with a path error, reinstall it using:
+pip install -e /path/to/package
+```

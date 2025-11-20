@@ -7,11 +7,16 @@ from transformers import AutoConfig
 
 from verl.models.mcore.registry import hf_to_mcore_config
 
-HUGGINGFACE_MODEL_DIR = os.environ.get("HUGGINGFACE_MODEL_DIR", "/data/common/")
+BASE_DATA_DIR = os.environ.get("BASE_DATA_DIR", "/data/common/")
+HUGGINGFACE_MODEL_DIR = os.environ.get(
+    "HUGGINGFACE_MODEL_DIR", os.path.join(BASE_DATA_DIR, "models")
+)
 
 
 def get_hf_model_config(model_name: str, **kwargs) -> AutoConfig:
-    config = AutoConfig.from_pretrained(model_name, **kwargs)
+    config = AutoConfig.from_pretrained(
+        os.path.join(HUGGINGFACE_MODEL_DIR, model_name), **kwargs
+    )
     return config
 
 
