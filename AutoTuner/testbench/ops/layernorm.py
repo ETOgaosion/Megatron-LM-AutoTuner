@@ -2,9 +2,10 @@ import logging
 from typing import Optional
 
 import torch
+from megatron.core.extensions.transformer_engine import TENorm
+from megatron.core.fusions.fused_layer_norm import FusedLayerNorm
 from megatron.core.transformer.torch_norm import WrappedTorchNorm
 from megatron.core.transformer.transformer_config import TransformerConfig
-from megatron.core.fusions.fused_layer_norm import FusedLayerNorm
 from torch import Tensor
 from transformers import PretrainedConfig
 
@@ -12,7 +13,7 @@ from AutoTuner.utils.memory import ActivationHook, MemoryTracker
 from AutoTuner.utils.nvtx import nvtx_decorator, nvtx_range_pop, nvtx_range_push
 
 from .common import CommonOpsForTest
-from megatron.core.extensions.transformer_engine import TENorm
+
 
 class LayerNormForTest(CommonOpsForTest):
     def __init__(
@@ -37,19 +38,19 @@ class LayerNormForTest(CommonOpsForTest):
         else:
             if normalization_type == "LayerNorm":
                 self.norm = FusedLayerNorm(
-                        config=tf_config,
-                        hidden_size=hf_config.hidden_size,
-                        eps=tf_config.layernorm_epsilon,
-                        persist_layer_norm=tf_config.persist_layer_norm,
-                        zero_centered_gamma=tf_config.layernorm_zero_centered_gamma,
-                    )
+                    config=tf_config,
+                    hidden_size=hf_config.hidden_size,
+                    eps=tf_config.layernorm_epsilon,
+                    persist_layer_norm=tf_config.persist_layer_norm,
+                    zero_centered_gamma=tf_config.layernorm_zero_centered_gamma,
+                )
             else:
                 self.norm = WrappedTorchNorm(
                     config=tf_config,
                     hidden_size=hf_config.hidden_size,
                     eps=tf_config.layernorm_epsilon,
                 )
-    
+
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
 

@@ -5,10 +5,10 @@ from typing import Any, Iterator, List, Optional, Tuple
 
 import megatron.core.parallel_state as mpu
 import torch
-from torch.cuda import cudart, check_error
 from megatron.core import tensor_parallel
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
+from torch.cuda import check_error, cudart
 from transformers import PretrainedConfig
 
 from AutoTuner.utils.batch import average_microbatch_metric

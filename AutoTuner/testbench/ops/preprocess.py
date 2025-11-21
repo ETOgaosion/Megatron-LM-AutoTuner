@@ -38,7 +38,7 @@ class PreprocessForTest(CommonOpsForTest):
         position_ids: Tensor,
         attention_mask: Tensor,
         packed_seq_params: PackedSeqParams,
-    ) -> Tensor:
+    ):
         # need decorator to track memory and time
         nvtx_range_push(suffix="embedding")
         decoder_input = self.embedding(input_ids, position_ids)
