@@ -113,6 +113,8 @@ class TestCommon(TheoreticalCalculation):
                 tokens=tokens,
                 hidden_size=self.hf_config.hidden_size,
             )
+        torch.cuda.synchronize()
+        torch.distributed.barrier()
         if self.profile_mode == ProfileMode.nsys_profile:
             """
             When using nsys profile
