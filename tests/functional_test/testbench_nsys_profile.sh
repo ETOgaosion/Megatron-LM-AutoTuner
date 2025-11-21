@@ -100,7 +100,7 @@ NSYS_ARGS=(
 )
 
 if [ $GPU_METRICS_USABLE -eq 1 ]; then
-    NSYS_ARGS=("${NSYS_ARGS[@]/--gpu-metrics-devices=all/}")
+    NSYS_ARGS=("${NSYS_ARGS[@]}" --gpu-metrics-devices=all)
 else
     echo "Warning: GPU metrics are not usable due to insufficient privileges. Proceeding without GPU metrics."
 fi
