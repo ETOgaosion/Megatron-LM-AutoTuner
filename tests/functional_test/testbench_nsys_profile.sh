@@ -37,7 +37,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 # Change for multinode config
 MASTER_ADDR=localhost
-MASTER_PORT=6000
+MASTER_PORT=6001
 NUM_NODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NUM_NODES))
@@ -90,7 +90,7 @@ NSYS_ARGS=(
     -x true
     -t cuda,nvtx,cudnn,cublas,python-gil
     --capture-range=cudaProfilerApi
-    --capture-range-end=stop
+    --capture-range-end=repeat
     --cudabacktrace=all
     --cuda-memory-usage=true
     --python-backtrace=cuda
@@ -100,7 +100,11 @@ NSYS_ARGS=(
 )
 
 if [ $GPU_METRICS_USABLE -eq 1 ]; then
-    NSYS_ARGS=("${NSYS_ARGS[@]}" --gpu-metrics-devices=all)
+    NSYS_ARGS=("${NSYS_ARGS[@]}"
+                --gpu-metrics-devices=all
+                --gpu-metrics-frequency=100
+                --cuda-event-trace=false
+              )
 else
     echo "Warning: GPU metrics are not usable due to insufficient privileges. Proceeding without GPU metrics."
 fi

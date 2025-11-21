@@ -25,6 +25,7 @@ class TestWithHiddenInputs(TestCommon):
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
         profile_mode: int = 0,
         warmup_iters: int = 2,
+        profile_iters: int = 2,
         # These args are given by user and have default values
         scatter_to_sequence_parallel: bool = True,
         rotary_percent: float = 1.0,
@@ -42,6 +43,7 @@ class TestWithHiddenInputs(TestCommon):
             hf_config=hf_config,
             profile_mode=profile_mode,
             warmup_iters=warmup_iters,
+            profile_iters=profile_iters,
             theoretical_flops=theoretical_flops,
             theoretical_activations=theoretical_activations,
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,

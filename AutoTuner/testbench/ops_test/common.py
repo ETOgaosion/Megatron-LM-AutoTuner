@@ -35,6 +35,7 @@ class TestCommon(TheoreticalCalculation):
         hf_config: PretrainedConfig,
         profile_mode: int = 0,
         warmup_iters: int = 2,
+        profile_iters: int = 2,
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
         tp_comm_overlap_cfg: str = None,
@@ -50,6 +51,8 @@ class TestCommon(TheoreticalCalculation):
         self.hf_config = hf_config
         self.profile_mode = profile_mode
         self.warmup_iters = warmup_iters
+        self.profile_iters = profile_iters
+        self.cur_iters = 0
         self.theoretical_flops = theoretical_flops
         self.theoretical_activations = theoretical_activations
         self.tp_comm_overlap_cfg = tp_comm_overlap_cfg
@@ -100,6 +103,9 @@ class TestCommon(TheoreticalCalculation):
     ) -> int:
         raise NotImplementedError
 
+    def reset_cur_iters(self):
+        self.cur_iters = 0
+
     def run_micro_batch(self, test_case: InputTestCase, inputs: List[Any], tokens: int):
         if (
             mpu.get_tensor_model_parallel_world_size() > 1
@@ -122,7 +128,6 @@ class TestCommon(TheoreticalCalculation):
 
             # Warmup iterations
             check_error(cudart().cudaProfilerStop())
-            torch.cuda.profiler.stop()
             if self.warmup_iters > 0:
                 for _ in range(self.warmup_iters):
                     output = self.op(*inputs)
@@ -132,8 +137,11 @@ class TestCommon(TheoreticalCalculation):
                     output.sum().backward(retain_graph=True)
                     self.op.zero_grad()
 
+            torch.cuda.synchronize()
+            torch.distributed.barrier()
             # Start Profile
-            check_error(cudart().cudaProfilerStart())
+            if self.cur_iters < self.profile_iters:
+                check_error(cudart().cudaProfilerStart())
             # Call forward function - force output to require grad
             nvtx_range_push("forward")
             output = self.op(*inputs)
@@ -146,7 +154,9 @@ class TestCommon(TheoreticalCalculation):
             nvtx_range_push("backward")
             output.sum().backward()
             nvtx_range_pop("backward")
-            check_error(cudart().cudaProfilerStop())
+            if self.cur_iters < self.profile_iters:
+                check_error(cudart().cudaProfilerStop())
+                self.cur_iters += 1
             self.op.zero_grad()
         elif self.profile_mode == ProfileMode.torch_profiler:
             """
@@ -180,6 +190,7 @@ class TestCommon(TheoreticalCalculation):
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats()
+            torch.distributed.barrier()
 
             # Call forward function - force output to require grad
             with TimerContext() as timer_ctx:
@@ -291,6 +302,7 @@ class TestCommon(TheoreticalCalculation):
                 self.memory_db["activations"].merge(temp_db)
             # Clear micro batch results
             self.micro_batch_results = []
+        self.reset_cur_iters()
 
     def get_results(self) -> Tuple[dict, dict]:
         assert (

@@ -183,6 +183,13 @@ def parse_args():
         required=False,
         help="warmup op iterations",
     )
+    parser.add_argument(
+        "--profile-iters",
+        type=int,
+        default=2,
+        required=False,
+        help="profile op iterations",
+    )
 
     # test choices for flexibility
     parser.add_argument(
