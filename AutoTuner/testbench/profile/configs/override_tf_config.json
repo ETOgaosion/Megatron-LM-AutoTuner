@@ -1,3 +1,5 @@
 {
-    "tp_comm_overlap": false
+    "tp_comm_overlap": false,
+    "mtp_num_layers": 2,
+    "mtp_loss_scaling_factor": 0.1
 }

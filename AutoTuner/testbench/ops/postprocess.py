@@ -50,6 +50,7 @@ class PostprocessForTest(CommonOpsForTest):
         self.mtp = mtp
         self.post_process = post_process
         self.mtp_process = mtp_process
+        self.pre_process = mtp_process  # pre_process 与 mtp_process 在这个上下文中含义相同
         self.output_layer = output_layer
         self.cp_group = cp_group
         self.pg_collection = pg_collection
@@ -61,19 +62,25 @@ class PostprocessForTest(CommonOpsForTest):
         """Computes the language model loss (Cross entropy across vocabulary)
 
         Args:
-            labels (Tensor): The labels of dimension [batch size, seq length]
+            labels (Tensor): The labels of dimension [batch size, seq length] or [total_tokens] for THD
             logits (Tensor): The final logits returned by the output layer of the transformer model
 
         Returns:
-            Tensor: Loss tensor of dimensions [batch size, sequence_length]
+            Tensor: Loss tensor of dimensions [batch size, sequence_length] or [total_tokens] for THD
         """
-        # [b s] => [s b]
-        labels = labels.transpose(0, 1).contiguous()
+        # Handle both BSHD format (2D) and THD format (1D)
+        is_thd_format = labels.dim() == 1
+        
+        if not is_thd_format:
+            # [b s] => [s b] only for BSHD format
+            labels = labels.transpose(0, 1).contiguous()
         
         if self.tf_config.cross_entropy_loss_fusion:
             if self.tf_config.cross_entropy_fusion_impl == 'te':
                 if te_parallel_cross_entropy is not None:
-                    labels = torch.as_strided(labels, labels.size(), (labels.size()[1], 1))
+                    if not is_thd_format:
+                        # as_strided only works for 2D tensors
+                        labels = torch.as_strided(labels, labels.size(), (labels.size()[1], 1))
                     loss = te_parallel_cross_entropy(
                         logits, labels, self.pg_collection.tp, False  # is_cg_capturable=False for training
                     )
@@ -84,8 +91,9 @@ class PostprocessForTest(CommonOpsForTest):
         else:
             loss = tensor_parallel.vocab_parallel_cross_entropy(logits, labels)
 
-        # [s b] => [b, s]
-        loss = loss.transpose(0, 1).contiguous()
+        if not is_thd_format:
+            # [s b] => [b, s] only for BSHD format
+            loss = loss.transpose(0, 1).contiguous()
         return loss
 
     # copy form gpt_model
@@ -143,7 +151,7 @@ class PostprocessForTest(CommonOpsForTest):
                 rotary_pos_emb=rotary_pos_emb,
                 rotary_pos_cos=None,  # Training: always None
                 rotary_pos_sin=None,  # Training: always None
-                packed_seq_params=packed_seq_params,
+                packed_seq_params=packed_seq_params,  # 传入 packed_seq_params 以支持 THD 格式
                 sequence_len_offset=None,  # Training: always None
                 embedding=self.embedding,
                 **(extra_block_kwargs or {}),
@@ -152,13 +160,17 @@ class PostprocessForTest(CommonOpsForTest):
         
         nvtx_range_push(suffix="loss computation")
         if self.mtp_process:
-            
             mtp_labels = labels.clone()
             hidden_states_list = torch.chunk(hidden_states, 1 + self.tf_config.mtp_num_layers, dim=0)
             hidden_states = hidden_states_list[0]
             
             if loss_mask is None:
                 loss_mask = torch.ones_like(mtp_labels)
+        
+        # # 将 hidden_states 从 [seq_len, batch_size, hidden_size] (SBH) 转换为 [batch_size, seq_len, hidden_size] (BSH)
+        # # 以匹配 labels 的 [batch_size, seq_len] 格式
+        # if hidden_states.dim() == 3:
+        #     hidden_states = hidden_states.transpose(0, 1).contiguous()
             
             mtp_loss_scale = self.tf_config.mtp_loss_scaling_factor / self.tf_config.mtp_num_layers
             
@@ -167,17 +179,17 @@ class PostprocessForTest(CommonOpsForTest):
                 mtp_logits, _ = self.output_layer(
                     hidden_states_list[mtp_layer_number + 1],
                     weight=output_weight,
+                    runtime_gather_output = False
                 )
                 # Calc loss for the current Multi-Token Prediction (MTP) layers.
                 mtp_labels, _ = roll_tensor(mtp_labels, shifts=-1, dims=-1, cp_group=self.cp_group)
                 loss_mask, num_tokens = roll_tensor(
                     loss_mask, shifts=-1, dims=-1, cp_group=self.cp_group
                 )
+                
                 mtp_loss = self.compute_language_model_loss(mtp_labels, mtp_logits)
                 mtp_loss = loss_mask * mtp_loss
-                if self.training:
-                    # after moving loss logging to loss_func in pretrain_gpt.py
-                    MTPLossLoggingHelper.save_loss_to_tracker(
+                MTPLossLoggingHelper.save_loss_to_tracker(
                         torch.sum(mtp_loss) / num_tokens,
                         mtp_layer_number,
                         self.tf_config.mtp_num_layers,
@@ -185,7 +197,6 @@ class PostprocessForTest(CommonOpsForTest):
                             with_context_parallel=True
                         ),
                     )
-                
                 if self.tf_config.calculate_per_token_loss:
                     hidden_states = MTPLossAutoScaler.apply(
                         hidden_states, mtp_loss_scale * mtp_loss
@@ -198,10 +209,11 @@ class PostprocessForTest(CommonOpsForTest):
         
         nvtx_range_push(suffix="output layer")
         logits, _ = self.output_layer(
-            hidden_states, weight=output_weight
+            hidden_states, weight=output_weight,runtime_gather_output = False
         )
         nvtx_range_pop(suffix="output layer")
-
+        
+        # print(f"[rank{rank}] Before compute_language_model_loss - logits.shape: {logits.shape}, labels.shape: {labels.shape}")
         loss = self.compute_language_model_loss(labels, logits)
 
         return loss

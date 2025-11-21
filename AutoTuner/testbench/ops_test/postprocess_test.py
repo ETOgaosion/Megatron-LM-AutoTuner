@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 import torch
 from megatron.core.transformer.transformer_config import TransformerConfig
@@ -45,6 +45,7 @@ class TestPostprocess(TestCommon):
 		self,
 		tf_config: TransformerConfig,
         hf_config: PretrainedConfig,
+        tp_group: Optional[torch.distributed.ProcessGroup] = None,
         profile_mode: int = 0,
         warmup_iters: int = 2,
         theoretical_flops: bool = False,
@@ -76,60 +77,45 @@ class TestPostprocess(TestCommon):
 		self.pre_process = tf_config.mtp_num_layers is not None
 		self.pg_collection = ProcessGroupCollection.use_mpu_process_groups()
 		self.cp_group = parallel_state.get_context_parallel_group()
-		self.tp_group = parallel_state.get_tensor_model_parallel_group()
-		self.output_layer = tensor_parallel.ColumnParallelLinear(
-				self.tf_config.hidden_size,
-				getattr(self.hf_config, "vocab_size", 151936),
-				config=self.tf_config,
-				init_method=self.tf_config.init_method,
-				bias=False,
-				skip_bias_add=False,
-				gather_output = not self.parallel_output,
-				skip_weight_param_allocation = self.pre_process and self.share_embeddings_and_output_weights,
-				tp_group = parallel_state.get_tensor_model_parallel_group()
-		)		
+		self.tp_group = tp_group if tp_group is not None else parallel_state.get_tensor_model_parallel_group()
+		
+		# Prepare MTP block spec before weight allocation
+		
 		mtp_block_spec = None
-		if tf_config.mtp_num_layers is not None :
-			# 1. 先构造 transformer_layer_spec
+		if tf_config.mtp_num_layers is not None:
 			use_te = getattr(tf_config, "transformer_impl", "local") == "transformer_engine"
 			if use_te:
 				transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec()
 			else:
 				transformer_layer_spec = get_gpt_layer_local_spec()
-			
-			# 2. 用 transformer_layer_spec 构造 mtp_block_spec
+    
+			transformer_layer_spec_for_mtp = transformer_layer_spec
+			if hasattr(transformer_layer_spec, 'layer_specs') and len(transformer_layer_spec.layer_specs) == 0:
+				# derive a concrete transformer layer spec from the decoder block spec
+				from megatron.core.models.gpt.gpt_layer_specs import get_gpt_decoder_block_spec
+				decoder_block_spec = get_gpt_decoder_block_spec(config=tf_config, use_transformer_engine=use_te, vp_stage=self.vp_stage)
+				transformer_layer_spec_for_mtp = decoder_block_spec.layer_specs[-1]
+
 			mtp_block_spec = get_gpt_mtp_block_spec(
 				config=tf_config,
-				spec=transformer_layer_spec,
+				spec=transformer_layer_spec_for_mtp,
 				use_transformer_engine=use_te,
 				vp_stage=self.vp_stage,
 			)
 		self.mtp_block_spec = mtp_block_spec
-		self.embedding = None
-		if self.pre_process or tf_config.mtp_num_layers is not None:
-			self.embedding = LanguageModelEmbedding(
-				config=tf_config,
-                vocab_size=hf_config.vocab_size,
-                max_sequence_length=hf_config.max_position_embeddings,
-                position_embedding_type="rope",
-                num_tokentypes=0,
-                scatter_to_sequence_parallel=scatter_to_sequence_parallel,
-                tp_group=self.tp_group,
-			)
 		self.mtp_process = mtp_block_spec is not None
-		self.mtp = MultiTokenPredictionBlock(
-                config=self.tf_config, spec=self.mtp_block_spec, vp_stage=self.vp_stage
-            )
 		
-		# 初始化 RoPE（参考 gpt_model.py）
+		# Prepare position embedding config
 		self.position_embedding_type = getattr(tf_config, 'position_embedding_type', 'rope')
+		self.scatter_to_sequence_parallel = scatter_to_sequence_parallel
+  
 		if self.position_embedding_type == 'rope':
 			rotary_percent = getattr(tf_config, 'rotary_percent', 1.0)
 			rotary_base = getattr(tf_config, 'rotary_base', 10000)
 			seq_len_interpolation_factor = getattr(tf_config, 'seq_len_interpolation_factor', None)
 			rope_scaling = getattr(tf_config, 'rope_scaling', False)
 			rope_scaling_factor = getattr(tf_config, 'rope_scaling_factor', 8.0)
-			
+				
 			self.rotary_pos_emb = RotaryEmbedding(
 				kv_channels=tf_config.kv_channels,
 				rotary_percent=rotary_percent,
@@ -142,19 +128,79 @@ class TestPostprocess(TestCommon):
 				cp_group=self.pg_collection.cp,
 			)
 		else:
-			self.rotary_pos_emb = None 
+			self.rotary_pos_emb = None
+   
+		if self.share_embeddings_and_output_weights:
+			# Create output layer
+			self.output_layer = tensor_parallel.ColumnParallelLinear(
+				self.tf_config.hidden_size,
+				getattr(self.hf_config, "vocab_size", 151936),
+				config=self.tf_config,
+				init_method=self.tf_config.init_method,
+				bias=False,
+				skip_bias_add=False,
+				gather_output = not self.parallel_output,
+				tp_group = parallel_state.get_tensor_model_parallel_group()
+			)
+		
+		if self.share_embeddings_and_output_weights:
+			# Create embedding
+			self.embedding = None
+			if self.pre_process or tf_config.mtp_num_layers is not None:
+				self.embedding = LanguageModelEmbedding(
+					config=tf_config,
+					vocab_size=hf_config.vocab_size,
+					max_sequence_length=hf_config.max_position_embeddings,
+					position_embedding_type="rope",
+					num_tokentypes=0,
+					scatter_to_sequence_parallel=self.scatter_to_sequence_parallel,
+					tp_group=self.tp_group,
+				)
+		
 
 		if profile_mode == ProfileMode.collect_data:
+			# Allocate all weights inside MemoryTrackerContext to measure from zero baseline
 			with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
+				if not self.share_embeddings_and_output_weights:
+					# Create output layer
+					self.output_layer = tensor_parallel.ColumnParallelLinear(
+						self.tf_config.hidden_size,
+						getattr(self.hf_config, "vocab_size", 151936),
+						config=self.tf_config,
+						init_method=self.tf_config.init_method,
+						bias=False,
+						skip_bias_add=False,
+						gather_output = not self.parallel_output,
+						skip_weight_param_allocation = self.pre_process and self.share_embeddings_and_output_weights,
+						tp_group = parallel_state.get_tensor_model_parallel_group()
+					)
+				
+				if not self.share_embeddings_and_output_weights:
+					# Create embedding
+					self.embedding = None
+					if self.pre_process or tf_config.mtp_num_layers is not None:
+						self.embedding = LanguageModelEmbedding(
+							config=tf_config,
+							vocab_size=hf_config.vocab_size,
+							max_sequence_length=hf_config.max_position_embeddings,
+							position_embedding_type="rope",
+							num_tokentypes=0,
+							scatter_to_sequence_parallel=self.scatter_to_sequence_parallel,
+							tp_group=self.tp_group,
+						)
+      
+				# Create the operator wrapper
 				self.op = PostprocessForTest(
 					tf_config=self.tf_config,
 					share_embeddings_and_output_weights=self.share_embeddings_and_output_weights,
-					mtp=self.mtp,
+					mtp=MultiTokenPredictionBlock(
+						config=self.tf_config, spec=self.mtp_block_spec, vp_stage=self.vp_stage
+					),
 					post_process=self.post_process,
 					mtp_process=self.pre_process,
 					output_layer=self.output_layer,
 					cp_group=self.cp_group,
-					pg_collectiosn=self.pg_collection,
+					pg_collection=self.pg_collection,
 					embedding=self.embedding,
 					hook_activation=(profile_mode == ProfileMode.collect_data),
 				)
@@ -173,40 +219,127 @@ class TestPostprocess(TestCommon):
 			bytes_per_param = torch.finfo(dtype).bits // 8
 			
 			estimated_weight_mem_bytes = 0
-			if self.post_process and not self.share_embeddings_and_output_weights:
+			if not self.share_embeddings_and_output_weights:
 				if self.output_layer.weight is not None:
 					output_layer_weight = (vocab_size // tp_size) * hidden_size * bytes_per_param
 					estimated_weight_mem_bytes += output_layer_weight
 			
-			if self.mtp_process and mtp_num_layers > 0:
-				mtp_layernorm_per_layer = 3 * 2 * hidden_size * bytes_per_param
-				mtp_eh_proj_per_layer = (2 * hidden_size) * (hidden_size // tp_size) * bytes_per_param
-				transformer_input_ln = 2 * hidden_size * bytes_per_param
-				transformer_qkv = 3 * hidden_size * (hidden_size // tp_size) * bytes_per_param
-				transformer_attn_proj = (hidden_size // tp_size) * hidden_size * bytes_per_param
-				transformer_attention = transformer_qkv + transformer_attn_proj
-				transformer_pre_mlp_ln = 2 * hidden_size * bytes_per_param
-				transformer_mlp_fc1 = hidden_size * (ffn_hidden_size // tp_size) * bytes_per_param
-				transformer_mlp_fc2 = (ffn_hidden_size // tp_size) * hidden_size * bytes_per_param
-				transformer_mlp = transformer_mlp_fc1 + transformer_mlp_fc2
-    
-				transformer_layer_weight = (transformer_input_ln + transformer_attention + transformer_pre_mlp_ln + transformer_mlp)
-				mtp_layer_weight = (mtp_layernorm_per_layer + mtp_eh_proj_per_layer + transformer_layer_weight)
-    
-				mtp_block_weight = mtp_layer_weight * mtp_num_layers
-				estimated_weight_mem_bytes += mtp_block_weight
+			if self.mtp_process and mtp_num_layers is not None and mtp_num_layers > 0:
+				# Determine how many MTP layers are actually built from the spec.
+				if self.mtp_block_spec is not None and hasattr(self.mtp_block_spec, 'layer_specs'):
+					built_mtp_layers = len(self.mtp_block_spec.layer_specs)
+				else:
+					built_mtp_layers = mtp_num_layers
+
+				# Tensor-parallel world size (fallback to 1)
+				world_tp = tp_size if tp_size and tp_size > 0 else 1
+				# local shard sizes used by Column/Row parallel layers
+				hidden_shard = hidden_size // world_tp
+				ffn_shard = ffn_hidden_size // world_tp
+
+				# Sum params by walking the logical structure used to build MTP layers.
+				mtp_block_params = 0
+				for _ in range(built_mtp_layers):
+					# MTP layer has: enorm (LN), hnorm (LN), eh_proj (2H->H column-parallel),
+					# transformer_layer (input LN, self-attn qkv, attn out proj, pre-mlp LN, mlp fc1/fc2), final_layernorm
+					# Count LayerNorm params: weight + bias
+					layernorm_params = 3 * 2 * hidden_size
+
+					# eh_proj: ColumnParallelLinear allocates weight of shape (output_size_per_partition, input_size)
+					# ColumnParallelLinear divides output dimension across TP ranks. For 2H->H, output_size=H,
+					# local output partition = H_shard => local weight params = H_shard * (2H)
+					eh_proj_params = hidden_shard * (2 * hidden_size)
+
+					# Transformer layer breakdown (follow TransformerLayer construction):
+					# input layernorm (weight+bias)
+					input_ln_params = 2 * hidden_size
+					# QKV: column-parallel linear with output 3H -> local params = 3*H*H_shard
+					qkv_params = 3 * hidden_size * hidden_shard
+					# attention output projection: row-parallel linear (local weight shape = H_shard x H)
+					attn_out_params = hidden_shard * hidden_size
+					# pre-MLP layernorm
+					pre_mlp_ln_params = 2 * hidden_size
+					# MLP: fc1 local params = H * (FFN_shard), fc2 local params = FFN_shard * H
+					mlp_fc1_params = hidden_size * ffn_shard
+					mlp_fc2_params = ffn_shard * hidden_size
+
+					transformer_layer_params = (
+						input_ln_params
+						+ qkv_params
+						+ attn_out_params
+						+ pre_mlp_ln_params
+						+ mlp_fc1_params
+						+ mlp_fc2_params
+					)
+
+					mtp_layer_params = layernorm_params + eh_proj_params + transformer_layer_params
+					mtp_block_params += mtp_layer_params
+
+				# Convert to bytes
+				mtp_block_weight_bytes = mtp_block_params * bytes_per_param
+
+				# Conservative FP8 overhead: 1 byte per param plus potential small extra tables
+				fp8_overhead_bytes = 0
+				if getattr(self.tf_config, 'fp8', False):
+					fp8_overhead_bytes = mtp_block_params * 1
+
+				estimated_weight_mem_bytes += mtp_block_weight_bytes + fp8_overhead_bytes
 			
 			if self.mtp_process and pp_rank != 0 and self.embedding is not None:
 				if self.embedding.word_embeddings.weight is not None:
 					embedding_replica_weight = (vocab_size // tp_size) * hidden_size * bytes_per_param
 					estimated_weight_mem_bytes += embedding_replica_weight
+
+			# 4. Rotary positional embedding (RoPE) inv_freq tensor
+			if self.position_embedding_type == 'rope' and getattr(self, 'rotary_pos_emb', None) is not None:
+				# inv_freq length = number of indices from 0..dim-1 step 2 -> ceil(dim/2)
+				dim = getattr(self.tf_config, 'kv_channels', None)
+				if dim is not None:
+					rotary_percent = getattr(self.tf_config, 'rotary_percent', 1.0)
+					if rotary_percent < 1.0:
+						dim = int(dim * rotary_percent)
+					inv_freq_len = (dim + 1) // 2
+					rope_mem = inv_freq_len * bytes_per_param
+					estimated_weight_mem_bytes += rope_mem
 			
 			estimated_weight_mem_str = get_memory_str(
 				estimated_weight_mem_bytes, human_readable=True
 			)
-			detailed_mem_report["postprocess_peak_mem_diff"] = estimated_weight_mem_str
+			# detailed_mem_report["estimated_weight_memory"] = mtp_block_weight
+			detailed_mem_report["estimate_peak_mem_diff"] = estimated_weight_mem_str
 			self.memory_db["weights"][self.module_name] = detailed_mem_report
 		else:
+			# Non-profile mode: allocate weights in original order
+			self.output_layer = tensor_parallel.ColumnParallelLinear(
+				self.tf_config.hidden_size,
+				getattr(self.hf_config, "vocab_size", 151936),
+				config=self.tf_config,
+				init_method=self.tf_config.init_method,
+				bias=False,
+				skip_bias_add=False,
+				gather_output = not self.parallel_output,
+				skip_weight_param_allocation = self.pre_process and self.share_embeddings_and_output_weights,
+				tp_group = parallel_state.get_tensor_model_parallel_group()
+			)
+			
+			self.embedding = None
+			if self.pre_process or tf_config.mtp_num_layers is not None:
+				self.embedding = LanguageModelEmbedding(
+					config=tf_config,
+					vocab_size=hf_config.vocab_size,
+					max_sequence_length=hf_config.max_position_embeddings,
+					position_embedding_type="rope",
+					num_tokentypes=0,
+					scatter_to_sequence_parallel=self.scatter_to_sequence_parallel,
+					tp_group=self.tp_group,
+				)
+			
+			self.mtp = None
+			if self.mtp_block_spec is not None:
+				self.mtp = MultiTokenPredictionBlock(
+					config=self.tf_config, spec=self.mtp_block_spec, vp_stage=self.vp_stage
+				)
+			
 			self.op = PostprocessForTest(
 					tf_config=self.tf_config,
 					share_embeddings_and_output_weights=self.share_embeddings_and_output_weights,
@@ -222,29 +355,35 @@ class TestPostprocess(TestCommon):
 
 	@override
 	def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
-		"""
-		Prepare inputs for postprocessing, mimicking the output from decoder.
-		准备后处理所需的输入，模拟从 decoder 输出的数据。
-		
-		参考 gpt_model.py 中的完整 forward 流程：
-		1. _preprocess: 使用 embedding 获取 decoder_input
-		2. decoder: 处理得到 hidden_states
-		3. _postprocess: 使用 hidden_states 生成 logits/loss
-		"""
 		micro_batch = micro_batch.to(torch.cuda.current_device())
 		micro_batch = micro_batch.contiguous()
   
-		input_ids, attention_mask, position_ids, packed_seq_params = (
-            get_thd_model_input_from_bshd(micro_batch)
-        )
+		# 禁用 sequence packing，使用标准的 BSHD 格式以支持 MTP
+		# MTP + sequence packing 目前不被 Megatron 支持
+		input_ids = micro_batch["input_ids"]
+		attention_mask = micro_batch["attention_mask"]
+		position_ids = micro_batch["position_ids"]
+		packed_seq_params = None  # 禁用 sequence packing
   
 		if self.pre_process or self.mtp_process:
 			with torch.no_grad():
+				# embedding 返回 [seq_len, batch_size, hidden_size] (SBH)
 				decoder_input = self.embedding(input_ids=input_ids, position_ids=position_ids)
+		else:
+			# 当没有 embedding 时，生成模拟的 decoder hidden states
+			# Shape: [seq_len, batch_size, hidden_size] (SBH) for MTP compatibility
+			batch_size, seq_len = input_ids.shape
+			hidden_size = self.tf_config.hidden_size
+			decoder_input = torch.randn(
+				seq_len, batch_size, hidden_size,
+				dtype=self.tf_config.params_dtype,
+				device=torch.cuda.current_device()
+			)
 		
-		hidden_states = decoder_input.clone()  # 模拟 decoder 处理
+		# 模拟 decoder 处理后的 hidden states (保持 SBH 格式)
+		hidden_states = decoder_input.clone()
 		
-		# 从原始 micro_batch 获取 labels（BSHD 格式）
+		# 从原始 micro_batch 获取 labels（保持 BSHD 格式）
 		if "labels" in micro_batch:
 			labels = micro_batch["labels"]
 		else:
@@ -253,16 +392,17 @@ class TestPostprocess(TestCommon):
 		rotary_pos_emb = None
 		# 获取 RoPE embeddings（参考 gpt_model.py _preprocess 方法）
 		if self.position_embedding_type == 'rope' and self.rotary_pos_emb is not None:
-			if packed_seq_params is not None and packed_seq_params.qkv_format == 'thd':
-				rotary_seq_len = input_ids.shape[0]  # total_tokens
-			else:
-				rotary_seq_len = position_ids.shape[1] if position_ids.dim() > 1 else position_ids.shape[0]
+			rotary_seq_len = position_ids.shape[1] if position_ids.dim() > 1 else position_ids.shape[0]
 			rotary_pos_emb = self.rotary_pos_emb(
 				rotary_seq_len,
-				packed_seq=packed_seq_params is not None and packed_seq_params.qkv_format == 'thd'
+				packed_seq=False  # 不使用 sequence packing
 			)
 		
-		mtp_in_postprocess = self.mtp_process
+		# 当启用 MTP 时，根据情况设置 mtp_in_postprocess
+		# mtp_in_postprocess=True 表示在 postprocess 中运行 MTP block
+		# mtp_in_postprocess=False 表示 MTP 已在之前运行，现在只处理 MTP 的输出
+		mtp_in_postprocess = self.mtp_process  # 如果启用了 MTP，则设置为 True
+		
 		loss_mask = torch.ones_like(labels, dtype=self.tf_config.params_dtype)
 		extra_block_kwargs = None
 		
