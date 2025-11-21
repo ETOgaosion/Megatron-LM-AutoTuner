@@ -99,9 +99,10 @@ NSYS_ARGS=(
     --nic-metrics=true
 )
 
-if [ $GPU_METRICS_USABLE -eq 0 ]; then
-    echo "Warning: GPU metrics are not usable due to insufficient privileges. Disabling GPU metrics collection."
+if [ $GPU_METRICS_USABLE -eq 1 ]; then
     NSYS_ARGS=("${NSYS_ARGS[@]/--gpu-metrics-devices=all/}")
+else
+    echo "Warning: GPU metrics are not usable due to insufficient privileges. Proceeding without GPU metrics."
 fi
 
 if [[ "${TP_COMM_OVERLAP}" == "True" ]]; then
