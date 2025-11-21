@@ -1,17 +1,12 @@
 import logging
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import NoReturn, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from einops import rearrange
-from megatron.core import tensor_parallel
-from megatron.core.extensions.transformer_engine import get_cpu_offload_context
 from megatron.core.inference.contexts import BaseInferenceContext
 from megatron.core.inference.contexts.base_context import BaseInferenceContext
 from megatron.core.models.common.embeddings.rope_utils import (
     apply_rotary_pos_emb,
-    apply_rotary_pos_emb_with_cos_sin,
 )
 from megatron.core.models.common.embeddings.yarn_rotary_pos_embedding import (
     _yarn_get_concentration_factor_from_config,
@@ -20,29 +15,12 @@ from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
 from megatron.core.packed_seq_params import PackedSeqParams
-from megatron.core.parallel_state import (
-    get_data_parallel_group,
-    get_data_parallel_rank,
-    get_data_parallel_world_size,
-    get_tensor_model_parallel_group,
-    get_tensor_model_parallel_rank,
-    get_tensor_model_parallel_world_size,
-)
 from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.attention import HAVE_FUSED_QKV_ROPE, SelfAttention
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.identity_op import IdentityOp
-from megatron.core.transformer.module import MegatronModule
-from megatron.core.transformer.spec_utils import ModuleSpec, build_module
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import (
-    WrappedTensor,
-    deprecate_inference_params,
-    divide,
-    get_pg_size,
-    is_fa_min_version,
-    is_te_min_version,
-    make_viewless_tensor,
     nvtx_decorator,
     nvtx_range_pop,
     nvtx_range_push,
@@ -51,61 +29,17 @@ from torch import Tensor
 
 from .common import CommonOpsForTest
 
-# Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
-
-
-# from ..models.common.embeddings.yarn_rotary_pos_embedding import (
-#     _yarn_get_concentration_factor_from_config,
-# )
-# from .enums import AttnMaskType
-# from .transformer_config import TransformerConfig
-
 try:
     from einops import rearrange
 except ImportError:
     rearrange = None
 
 try:
-    from flashattn_hopper.flash_attn_interface import (
-        _flash_attn_forward,
-    )
-    from flashattn_hopper.flash_attn_interface import (
-        flash_attn_with_kvcache as flash_attn3_with_kvcache,
-    )
-
-    HAVE_FA3 = True
-except:
-    HAVE_FA3 = False
-
-try:
-    from flash_mla import flash_mla_with_kvcache, get_mla_metadata
-
-    HAVE_FMLA = True
-except ImportError:
-    flash_mla_with_kvcache = None
-    get_mla_metadata = None
-    HAVE_FMLA = False
-
-from megatron.core.transformer.transformer_config import MLATransformerConfig
-
-try:
-    from flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
-except:
-    flash_attn_varlen_func = None
-    flash_attn_with_kvcache = None
-
-try:
     import transformer_engine  # pylint: disable=unused-import
 
     HAVE_TE = True
-    from megatron.core.extensions.transformer_engine import (
-        SplitAlongDim,
-        TELinear,
-        set_save_original_input,
-    )
 except ImportError:
     HAVE_TE = False
-    SplitAlongDim, TELinear, set_save_original_input = None, None, None
 
 try:
     from transformer_engine.pytorch.attention.rope import apply_fused_qkv_rotary_pos_emb
