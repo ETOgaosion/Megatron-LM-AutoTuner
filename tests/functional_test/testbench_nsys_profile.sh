@@ -72,6 +72,16 @@ PARALLEL_ARGS=(
     --expert-tensor-parallel-size $ETP_SIZE
 )
 
+# Run the command and capture stderr/stdout
+NSYS_OUTPUT=$(nsys profile --gpu-metrics-devices=help 2>&1)
+
+# Check if output contains "Insufficient privilege"
+if echo "$NSYS_OUTPUT" | grep -q "Insufficient privilege"; then
+    GPU_METRICS_USABLE=0
+else
+    GPU_METRICS_USABLE=1
+fi
+
 NSYS_ARGS=(
     # --run-as root
     -w true
@@ -86,7 +96,13 @@ NSYS_ARGS=(
     --python-backtrace=cuda
     --enable network_interface
     --python-sampling=true
+    --nic-metrics=true
 )
+
+if [ $GPU_METRICS_USABLE -eq 0 ]; then
+    echo "Warning: GPU metrics are not usable due to insufficient privileges. Disabling GPU metrics collection."
+    NSYS_ARGS=("${NSYS_ARGS[@]/--gpu-metrics-devices=all/}")
+fi
 
 if [[ "${TP_COMM_OVERLAP}" == "True" ]]; then
     export UB_SKIPMC=1
