@@ -127,7 +127,7 @@ class TestCommon(TheoreticalCalculation):
                     if isinstance(output, tuple):
                         output = output[0]
                     output.requires_grad_(True)
-                    output.sum().backward()
+                    output.sum().backward(retain_graph=True)
                     self.op.zero_grad()
 
             # Start Profile
