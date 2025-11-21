@@ -31,7 +31,9 @@ class NestedDict(dict):
 
         for k, v in other.items():
             if k in self:
-                if isinstance(v, (dict, NestedDict)) and isinstance(self[k], (dict, NestedDict)):
+                if isinstance(v, (dict, NestedDict)) and isinstance(
+                    self[k], (dict, NestedDict)
+                ):
                     if not isinstance(self[k], NestedDict):
                         self[k] = NestedDict(self[k])
                     source = v if isinstance(v, NestedDict) else NestedDict(v)

@@ -2,8 +2,13 @@ import os
 
 import torch
 
+from AutoTuner.utils.memory_snapshots import (
+    MemorySnapshotSampler,
+    aggressive_empty_cache,
+    enable_memory_visualize,
+)
 from AutoTuner.utils.structs import InputTestCase
-from AutoTuner.utils.memory_snapshots import MemorySnapshotSampler, enable_memory_visualize, aggressive_empty_cache
+
 from ..configs.config_struct import ProfileConfig, ProfileMode, TorchProfilerConfig
 from ..op_mapping import OP_TEST_MAPPING
 from .launcher import Launcher
@@ -56,11 +61,11 @@ class LaunchTorchProfileForOps(Launcher):
             with_flops=self.torch_profiler_config.with_flops,
             with_modules=self.torch_profiler_config.with_modules,
         )
-        self.snapshot_sampler = MemorySnapshotSampler(out_dir=self.torch_profiler_config.output_dir)
+        self.snapshot_sampler = MemorySnapshotSampler(
+            out_dir=self.torch_profiler_config.output_dir
+        )
         enable_memory_visualize(
-            trace_alloc_max_entries=100000,
-            context='all',
-            stacks='all'
+            trace_alloc_max_entries=100000, context="all", stacks="all"
         )
 
     def _run_op(self, op_name: str, test_case_idxs: list[int]):
@@ -134,7 +139,7 @@ class LaunchTorchProfileForOps(Launcher):
         self.snapshot_sampler.dump_memory_snapshot(
             tag=combined_tag,
             out_dir=self.torch_profiler_config.output_dir,
-            sub_dir="memory_snapshot"
+            sub_dir="memory_snapshot",
         )
         print(
             f"Torch profiling completed, trace saved to {self.torch_profiler_config.output_dir}."

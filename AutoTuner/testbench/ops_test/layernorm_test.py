@@ -62,7 +62,9 @@ class TestLayerNorm(TestCommon):
             dtype = self.op.norm.weight.dtype
             bytes_per_param = torch.tensor([], dtype=dtype).element_size()
             total_param_bytes = num_params * bytes_per_param
-            estimated_weight_mem_str = get_memory_str(total_param_bytes, human_readable=True)
+            estimated_weight_mem_str = get_memory_str(
+                total_param_bytes, human_readable=True
+            )
             detailed_mem_report["estimated_peak_mem_diff"] = estimated_weight_mem_str
             self.memory_db["weights"][self.module_name] = detailed_mem_report
 
@@ -84,23 +86,26 @@ class TestLayerNorm(TestCommon):
                 num_tokens = cu_seqlens[-1].item() - cu_seqlens[0].item()
             else:
                 num_tokens = test_case.batch_size * test_case.seqlen
-                
+
             hidden_states = torch.randn(
-                num_tokens, hidden_size,
-                device=device, dtype=dtype, requires_grad=True
+                num_tokens, hidden_size, device=device, dtype=dtype, requires_grad=True
             )
         elif test_case.shape == "bshd":
             hidden_states = torch.randn(
                 test_case.micro_batch_size,
                 test_case.seqlen,
                 hidden_size,
-                device=device, dtype=dtype, requires_grad=True
+                device=device,
+                dtype=dtype,
+                requires_grad=True,
             )
             hidden_states = hidden_states.transpose(0, 1).contiguous()
         else:
-            raise ValueError(f"Unsupported shape format: {test_case.shape}. "
-                           f"Supported: 'thd', 'bshd'")
-        
+            raise ValueError(
+                f"Unsupported shape format: {test_case.shape}. "
+                f"Supported: 'thd', 'bshd'"
+            )
+
         return (hidden_states,)
 
     @override
@@ -108,10 +113,10 @@ class TestLayerNorm(TestCommon):
         self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any
     ) -> int:
         hidden_states = inputs[0]
-        
+
         if test_case.shape == "thd":
             num_tokens = hidden_states.size(0)
-            
+
         elif test_case.shape == "bshd":
             if test_case.sequence_parallel_enabled:
                 seq_len_local = hidden_states.size(0)
@@ -130,7 +135,7 @@ class TestLayerNorm(TestCommon):
     @override
     def calc_theoretical_memory(self, test_case: InputTestCase) -> Dict[str, int]:
         return {"activations": {"activations": 0}}
-    
+
     @override
     def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:
         """
@@ -138,10 +143,10 @@ class TestLayerNorm(TestCommon):
         """
         hidden_size = self.hf_config.hidden_size
         num_tokens = test_case.micro_batch_size * test_case.seqlen
-        
+
         if test_case.context_parallel_size > 1:
             num_tokens = num_tokens // test_case.context_parallel_size
-            
+
         if self.tf_config.normalization == "RMSNorm":
             forward_flops = 2 * num_tokens * hidden_size
             # recompute
