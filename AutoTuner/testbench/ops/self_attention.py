@@ -173,7 +173,7 @@ class SelfAttentionForTest(SelfAttention, CommonOpsForTest):
         # ===================================================
         # Adjust key, value, and rotary_pos_emb
         # ===================================================
-
+        nvtx_range_push(suffix="adjust_key_value")
         if packed_seq_params is not None:
             query = query.squeeze(1)
             key = key.squeeze(1)
