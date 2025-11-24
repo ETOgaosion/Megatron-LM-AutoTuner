@@ -5,6 +5,7 @@ from typing import Any, Iterator, List, Optional, Tuple
 
 import megatron.core.parallel_state as mpu
 import torch
+from torch.cuda import cudart, check_error
 from megatron.core import tensor_parallel
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
@@ -118,32 +119,42 @@ class TestCommon(TheoreticalCalculation):
             """
 
             # Warmup iterations
+            check_error(cudart().cudaProfilerStop())
             torch.cuda.profiler.stop()
             if self.warmup_iters > 0:
                 for _ in range(self.warmup_iters):
-                    self.op(*inputs)
+                    output = self.op(*inputs)
+                    if isinstance(output, tuple):
+                        output = output[0]
+                    output.requires_grad_(True)
+                    output.sum().backward(retain_graph=True)
+                    self.op.zero_grad()
 
+            # Start Profile
+            check_error(cudart().cudaProfilerStart())
             # Call forward function - force output to require grad
-            torch.cuda.profiler.start()
+            nvtx_range_push("forward")
             output = self.op(*inputs)
-            torch.cuda.profiler.stop()
+            nvtx_range_pop("forward")
 
             # Call backward function - force output to require grad
             if isinstance(output, tuple):
                 output = output[0]
             output.requires_grad_(True)
-            torch.cuda.profiler.start()
             nvtx_range_push("backward")
             output.sum().backward()
             nvtx_range_pop("backward")
-            torch.cuda.profiler.stop()
+            check_error(cudart().cudaProfilerStop())
+            self.op.zero_grad()
         elif self.profile_mode == ProfileMode.torch_profiler:
             """
             When using torch profiler, we do warmup outside
             """
 
             # Forward pass
+            nvtx_range_push("forward")
             output = self.op(*inputs)
+            nvtx_range_pop("forward")
 
             # Backward pass
             if isinstance(output, tuple):

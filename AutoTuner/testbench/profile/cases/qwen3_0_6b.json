@@ -7,7 +7,7 @@
       "micro_batch_size": 2,
       "seqlen": 1024,
       "max_token_len": 5120,
-      "shape": "thd",
+      "shape": "bshd",
       "system": "megatron"
     },
     {

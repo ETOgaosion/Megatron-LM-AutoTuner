@@ -23,8 +23,13 @@ try:
     from megatron.core.extensions.transformer_engine import te_parallel_cross_entropy
 except:
     te_parallel_cross_entropy = None
+    
+from megatron.core.utils import (
+    WrappedTensor,
+    make_viewless_tensor,
+)
 
-
+from megatron.core import tensor_parallel
 
 class PostprocessForTest(CommonOpsForTest):
     def __init__(
@@ -34,7 +39,7 @@ class PostprocessForTest(CommonOpsForTest):
         mtp: MultiTokenPredictionBlock = None,
         post_process: bool = True,
         mtp_process: bool = False,
-        output_layer=None,
+        output_layer: Optional[tensor_parallel.ColumnParallelLinear] = None,
         cp_group: Optional[torch.distributed.ProcessGroup] = None,
         pg_collection: Optional[ProcessGroupCollection] = None,
         embedding: LanguageModelEmbedding = None,
@@ -55,7 +60,6 @@ class PostprocessForTest(CommonOpsForTest):
         self.cp_group = cp_group
         self.pg_collection = pg_collection
         self.embedding = embedding
-
     # copy from LanguageModule
     # @nvtx_decorator(message="Postprocess loss")
     def compute_language_model_loss(self, labels: Tensor, logits: Tensor) -> Tensor:
@@ -122,19 +126,21 @@ class PostprocessForTest(CommonOpsForTest):
     @nvtx_decorator(message="Postprocess forward")
     def _forward(
         self,
-        hidden_states,
+        hidden_states: Tensor,
         input_ids,
         position_ids,
         labels,
         rotary_pos_emb,
         mtp_in_postprocess=None,
-        loss_mask=None,
         attention_mask=None,
         packed_seq_params=None,
         extra_block_kwargs=None,
     ):
-        if not self.post_process:
-            return hidden_states
+        if isinstance(hidden_states, WrappedTensor):
+            hidden_states = hidden_states.unwrap()
+        hidden_states = make_viewless_tensor(
+            inp=hidden_states, requires_grad=True, keep_graph=True
+        )
         
         # logits and loss
         output_weight = None
@@ -158,65 +164,14 @@ class PostprocessForTest(CommonOpsForTest):
             )
         nvtx_range_pop(suffix="mtp")
         
-        nvtx_range_push(suffix="loss computation")
-        if self.mtp_process:
-            mtp_labels = labels.clone()
-            hidden_states_list = torch.chunk(hidden_states, 1 + self.tf_config.mtp_num_layers, dim=0)
-            hidden_states = hidden_states_list[0]
-            
-            if loss_mask is None:
-                loss_mask = torch.ones_like(mtp_labels)
-        
-        # # 将 hidden_states 从 [seq_len, batch_size, hidden_size] (SBH) 转换为 [batch_size, seq_len, hidden_size] (BSH)
-        # # 以匹配 labels 的 [batch_size, seq_len] 格式
-        # if hidden_states.dim() == 3:
-        #     hidden_states = hidden_states.transpose(0, 1).contiguous()
-            
-            mtp_loss_scale = self.tf_config.mtp_loss_scaling_factor / self.tf_config.mtp_num_layers
-            
-            for mtp_layer_number in range(self.tf_config.mtp_num_layers):
-                # output
-                mtp_logits, _ = self.output_layer(
-                    hidden_states_list[mtp_layer_number + 1],
-                    weight=output_weight,
-                    runtime_gather_output = False
-                )
-                # Calc loss for the current Multi-Token Prediction (MTP) layers.
-                mtp_labels, _ = roll_tensor(mtp_labels, shifts=-1, dims=-1, cp_group=self.cp_group)
-                loss_mask, num_tokens = roll_tensor(
-                    loss_mask, shifts=-1, dims=-1, cp_group=self.cp_group
-                )
-                
-                mtp_loss = self.compute_language_model_loss(mtp_labels, mtp_logits)
-                mtp_loss = loss_mask * mtp_loss
-                MTPLossLoggingHelper.save_loss_to_tracker(
-                        torch.sum(mtp_loss) / num_tokens,
-                        mtp_layer_number,
-                        self.tf_config.mtp_num_layers,
-                        avg_group=parallel_state.get_data_parallel_group(
-                            with_context_parallel=True
-                        ),
-                    )
-                if self.tf_config.calculate_per_token_loss:
-                    hidden_states = MTPLossAutoScaler.apply(
-                        hidden_states, mtp_loss_scale * mtp_loss
-                    )
-                else:
-                    hidden_states = MTPLossAutoScaler.apply(
-                        hidden_states, mtp_loss_scale * mtp_loss / num_tokens
-                    )
-        nvtx_range_pop(suffix="loss computation")
-        
         nvtx_range_push(suffix="output layer")
         logits, _ = self.output_layer(
             hidden_states, weight=output_weight,runtime_gather_output = False
         )
         nvtx_range_pop(suffix="output layer")
-        
-        # print(f"[rank{rank}] Before compute_language_model_loss - logits.shape: {logits.shape}, labels.shape: {labels.shape}")
-        loss = self.compute_language_model_loss(labels, logits)
 
-        return loss
+        return logits
+        # return loss
 
     def __call__(self, *args, **kwargs):
         return self.forward(*args, **kwargs)
@@ -229,7 +184,6 @@ class PostprocessForTest(CommonOpsForTest):
         labels,
         rotary_pos_emb,
         mtp_in_postprocess=None,
-        loss_mask=None,
         attention_mask=None,
         packed_seq_params=None,
         extra_block_kwargs=None,
@@ -245,7 +199,6 @@ class PostprocessForTest(CommonOpsForTest):
                 labels=labels,
                 rotary_pos_emb=rotary_pos_emb,
                 mtp_in_postprocess=mtp_in_postprocess,
-                loss_mask=loss_mask,
                 attention_mask=attention_mask,
                 packed_seq_params=packed_seq_params,
                 extra_block_kwargs=extra_block_kwargs,

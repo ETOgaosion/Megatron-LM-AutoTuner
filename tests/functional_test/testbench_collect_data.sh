@@ -59,7 +59,7 @@ PROFILE_ARGS=(
     --profile-mode 0
     --fix-compute-amount
     # --theoretical-flops true
-    # --theoretical-activations false
+    --theoretical-activations True
 )
 
 OPTIONAL_PROFILE_ARGS=()
