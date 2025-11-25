@@ -87,7 +87,7 @@ class TestTransformerLayer(TestWithHiddenInputs):
             self.memory_db["weights"][self.module_name] = detailed_mem_report
         else:
             if hasattr(tf_config, "layer_submodules") and tf_config.layer_submodules is not None:
-                    layer_submodules = tf_config.layer_submodules
+                layer_submodules = tf_config.layer_submodules
             else:
                 use_te = getattr(tf_config, "transformer_impl", "local") == "transformer_engine"
                 try:
