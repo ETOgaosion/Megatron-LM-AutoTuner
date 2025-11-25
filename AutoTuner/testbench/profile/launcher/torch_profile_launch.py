@@ -92,7 +92,7 @@ class LaunchTorchProfileForOps(Launcher):
         op_test_class = OP_TEST_MAPPING.get(op_name)
         if op_test_class is None:
             raise ValueError(f"Operator '{op_name}' is not supported.")
-        
+
         kwargs = {
             "tf_config": self.tf_config,
             "hf_config": self.hf_config,
@@ -101,8 +101,13 @@ class LaunchTorchProfileForOps(Launcher):
             "warmup_iters": self.profile_config.warmup_iters,
         }
         if op_name == "GPTModel":
-            from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
-            kwargs["transformer_layer_spec"] = get_gpt_layer_with_transformer_engine_spec()
+            from megatron.core.models.gpt.gpt_layer_specs import (
+                get_gpt_layer_with_transformer_engine_spec,
+            )
+
+            kwargs["transformer_layer_spec"] = (
+                get_gpt_layer_with_transformer_engine_spec()
+            )
         op_class_instance = op_test_class(**kwargs)
         print(f"Running operator: {op_name}")
         if test_case_idxs is None:

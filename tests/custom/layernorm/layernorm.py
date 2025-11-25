@@ -1,26 +1,33 @@
 import argparse
+import time
+from typing import Tuple
+
 import torch
 import triton
 import triton.language as tl
-import time
-from typing import Tuple
-from torch.cuda import cudart, check_error
 from megatron.core.utils import (
     configure_nvtx_profiling,
     nvtx_decorator,
     nvtx_range_pop,
     nvtx_range_push,
 )
+from torch.cuda import check_error, cudart
 
 # ================================================================
 # Customizable LayerNorm Kernel (Forward + Backward)
 # ================================================================
 
+
 @triton.jit
 def layernorm_fwd_kernel(
-    x_ptr, weight_ptr, bias_ptr, y_ptr,
-    mean_ptr, rstd_ptr,
-    M, N,
+    x_ptr,
+    weight_ptr,
+    bias_ptr,
+    y_ptr,
+    mean_ptr,
+    rstd_ptr,
+    M,
+    N,
     eps: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
 ):
@@ -49,15 +56,23 @@ def layernorm_fwd_kernel(
     x_norm = (row - mean[:, None]) * rstd[:, None]
     y = x_norm * weight[None, :] + bias[None, :]
 
-    tl.store(y_ptr + offsets[:, None] * N + tl.arange(0, N)[None, :], y, mask=mask[:, None])
+    tl.store(
+        y_ptr + offsets[:, None] * N + tl.arange(0, N)[None, :], y, mask=mask[:, None]
+    )
 
 
 @triton.jit
 def layernorm_bwd_kernel(
-    dy_ptr, x_ptr, weight_ptr,
-    mean_ptr, rstd_ptr,
-    dx_ptr, dweight_ptr, dbias_ptr,
-    M, N,
+    dy_ptr,
+    x_ptr,
+    weight_ptr,
+    mean_ptr,
+    rstd_ptr,
+    dx_ptr,
+    dweight_ptr,
+    dbias_ptr,
+    M,
+    N,
     BLOCK_SIZE: tl.constexpr,
 ):
     pid = tl.program_id(0)
@@ -66,8 +81,12 @@ def layernorm_bwd_kernel(
     mask = offsets < M
 
     # Load dy and x rows
-    dy_row = tl.load(dy_ptr + offsets[:, None] * N + tl.arange(0, N)[None, :], mask=mask[:, None])
-    x_row = tl.load(x_ptr + offsets[:, None] * N + tl.arange(0, N)[None, :], mask=mask[:, None])
+    dy_row = tl.load(
+        dy_ptr + offsets[:, None] * N + tl.arange(0, N)[None, :], mask=mask[:, None]
+    )
+    x_row = tl.load(
+        x_ptr + offsets[:, None] * N + tl.arange(0, N)[None, :], mask=mask[:, None]
+    )
     mean = tl.load(mean_ptr + offsets, mask=mask)
     rstd = tl.load(rstd_ptr + offsets, mask=mask)
     weight = tl.load(weight_ptr + tl.arange(0, N))
@@ -93,7 +112,9 @@ def layernorm_bwd_kernel(
     tl.atomic_add(dweight_ptr + tl.arange(0, N), dweight_local)
     tl.atomic_add(dbias_ptr + tl.arange(0, N), dbias_local)
 
-    tl.store(dx_ptr + offsets[:, None] * N + tl.arange(0, N)[None, :], dx, mask=mask[:, None])
+    tl.store(
+        dx_ptr + offsets[:, None] * N + tl.arange(0, N)[None, :], dx, mask=mask[:, None]
+    )
 
 
 class TritonLayerNorm(torch.autograd.Function):
@@ -108,9 +129,7 @@ class TritonLayerNorm(torch.autograd.Function):
         GRID = (M + BLOCK_SIZE - 1) // BLOCK_SIZE
 
         layernorm_fwd_kernel[GRID](
-            x, weight, bias, y, mean, rstd,
-            M, N, eps,
-            BLOCK_SIZE=BLOCK_SIZE
+            x, weight, bias, y, mean, rstd, M, N, eps, BLOCK_SIZE=BLOCK_SIZE
         )
 
         ctx.save_for_backward(x, weight, mean, rstd)
@@ -130,10 +149,17 @@ class TritonLayerNorm(torch.autograd.Function):
         GRID = (M + ctx.BLOCK_SIZE - 1) // ctx.BLOCK_SIZE
 
         layernorm_bwd_kernel[GRID](
-            dy, x, weight, mean, rstd,
-            dx, dweight, dbias,
-            M, N,
-            BLOCK_SIZE=ctx.BLOCK_SIZE
+            dy,
+            x,
+            weight,
+            mean,
+            rstd,
+            dx,
+            dweight,
+            dbias,
+            M,
+            N,
+            BLOCK_SIZE=ctx.BLOCK_SIZE,
         )
 
         return dx, dweight, dbias, None
@@ -142,6 +168,7 @@ class TritonLayerNorm(torch.autograd.Function):
 # ================================================================
 # Benchmarking Script: Test Different BLOCK_SIZE and GRID configs
 # ================================================================
+
 
 def benchmark_triton_layernorm(
     M: int = 4096,
@@ -163,7 +190,9 @@ def benchmark_triton_layernorm(
     torch_ln.bias.data.copy_(bias)
 
     print(f"Benchmarking LayerNorm: M={M}, N={N}")
-    print(f"{'Mode':<10} {'BLOCK':<8} {'GRID':<8} {'Time (ms)':<12} {'TFLOPS':<8} {'Speedup vs Torch'}")
+    print(
+        f"{'Mode':<10} {'BLOCK':<8} {'GRID':<8} {'Time (ms)':<12} {'TFLOPS':<8} {'Speedup vs Torch'}"
+    )
 
     # Baseline: PyTorch
     torch.cuda.synchronize()
@@ -177,7 +206,9 @@ def benchmark_triton_layernorm(
     torch_time = (time.time() - start) / num_iters * 1000
     tflops_torch = 2 * M * N * N / 1e12 / (torch_time / 1000)
 
-    print(f"{'Torch':<10} {'-':<8} {'-':<8} {torch_time:<12.3f} {tflops_torch:<8.2f} {'1.00x'}")
+    print(
+        f"{'Torch':<10} {'-':<8} {'-':<8} {torch_time:<12.3f} {tflops_torch:<8.2f} {'1.00x'}"
+    )
 
     results = []
 
@@ -227,18 +258,26 @@ def benchmark_triton_layernorm(
 
         speedup = torch_time / total_time
 
-        print(f"{'FWD':<10} {BLOCK_SIZE:<8} {GRID:<8} {fwd_time:<12.3f} {tflops:<8.2f} {speedup:>6.2f}x")
-        print(f"{'BWD':<10} {BLOCK_SIZE:<8} {GRID:<8} {bwd_time:<12.3f} {'':<8} {'':<6}")
-        print(f"{'FWD+BWD':<10} {BLOCK_SIZE:<8} {GRID:<8} {total_time:<12.3f} {'':<8} {speedup:>6.2f}x")
+        print(
+            f"{'FWD':<10} {BLOCK_SIZE:<8} {GRID:<8} {fwd_time:<12.3f} {tflops:<8.2f} {speedup:>6.2f}x"
+        )
+        print(
+            f"{'BWD':<10} {BLOCK_SIZE:<8} {GRID:<8} {bwd_time:<12.3f} {'':<8} {'':<6}"
+        )
+        print(
+            f"{'FWD+BWD':<10} {BLOCK_SIZE:<8} {GRID:<8} {total_time:<12.3f} {'':<8} {speedup:>6.2f}x"
+        )
 
-        results.append({
-            'block': BLOCK_SIZE,
-            'grid': GRID,
-            'fwd_ms': fwd_time,
-            'bwd_ms': bwd_time,
-            'total_ms': total_time,
-            'speedup': speedup
-        })
+        results.append(
+            {
+                "block": BLOCK_SIZE,
+                "grid": GRID,
+                "fwd_ms": fwd_time,
+                "bwd_ms": bwd_time,
+                "total_ms": total_time,
+                "speedup": speedup,
+            }
+        )
 
     return results
 
@@ -247,13 +286,24 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--M", type=int, default=65536, help="Number of rows")
     parser.add_argument("--N", type=int, default=1024, help="Number of columns")
-    parser.add_argument("block_sizes", nargs='+', type=int, default=[128, 256, 512, 1024, 2048], help="List of block sizes to benchmark")
+    parser.add_argument(
+        "block_sizes",
+        nargs="+",
+        type=int,
+        default=[128, 256, 512, 1024, 2048],
+        help="List of block sizes to benchmark",
+    )
 
     parser.add_argument("--num_warmups", type=int, default=5)
     parser.add_argument("--num_runs", type=int, default=1)
-    
-    parser.add_argument("--output-dir", type=str, default="outputs/test/custom/gemm", help="Output directory")
-    
+
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="outputs/test/custom/gemm",
+        help="Output directory",
+    )
+
     parser.add_argument("--draw", action="store_true", help="Draw performance figure")
     return parser.parse_args()
 
@@ -265,22 +315,25 @@ if __name__ == "__main__":
         N=args.N,
         num_warmup=args.num_warmups,
         num_iters=args.num_runs,
-        block_sizes=tuple(args.block_sizes)
+        block_sizes=tuple(args.block_sizes),
     )
     if args.draw:
         import matplotlib.pyplot as plt
-        blocks = [r['block'] for r in results]
-        fwd_times = [r['fwd_ms'] for r in results]
-        bwd_times = [r['bwd_ms'] for r in results]
+
+        blocks = [r["block"] for r in results]
+        fwd_times = [r["fwd_ms"] for r in results]
+        bwd_times = [r["bwd_ms"] for r in results]
 
         plt.figure(figsize=(10, 6))
-        plt.plot(blocks, fwd_times, marker='o', label='Forward Time (ms)')
-        plt.plot(blocks, bwd_times, marker='s', label='Backward Time (ms)')
-        plt.xlabel('BLOCK_SIZE')
-        plt.ylabel('Time (ms)')
-        plt.title('Triton LayerNorm Performance')
+        plt.plot(blocks, fwd_times, marker="o", label="Forward Time (ms)")
+        plt.plot(blocks, bwd_times, marker="s", label="Backward Time (ms)")
+        plt.xlabel("BLOCK_SIZE")
+        plt.ylabel("Time (ms)")
+        plt.title("Triton LayerNorm Performance")
         plt.legend()
         plt.grid(True)
-        plt.savefig(f"{args.output_dir}/layernorm_performance.png", dpi=150, bbox_inches='tight')
+        plt.savefig(
+            f"{args.output_dir}/layernorm_performance.png", dpi=150, bbox_inches="tight"
+        )
         print(f"Plot saved to: {args.output_dir}/layernorm_performance.png")
         plt.show()

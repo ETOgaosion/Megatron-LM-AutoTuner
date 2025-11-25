@@ -6,10 +6,10 @@
 #   python triton_gemm_benchmark.py --M 2048 --N 2048 --K 2048
 
 import argparse
-import time
-import statistics
 import math
-from typing import Tuple, List
+import statistics
+import time
+from typing import List, Tuple
 
 import torch
 import triton
@@ -27,14 +27,25 @@ def make_gemm_kernel(BM: int, BN: int, BK: int):
 
     @triton.jit
     def kernel(
-        A_ptr, B_ptr, C_ptr,
-        M, N, K,
-        lda, ldb, ldc,
+        A_ptr,
+        B_ptr,
+        C_ptr,
+        M,
+        N,
+        K,
+        lda,
+        ldb,
+        ldc,
         # strides for batched support (set to 0 if unused)
-        stride_am: tl.constexpr, stride_ak: tl.constexpr,
-        stride_bk: tl.constexpr, stride_bn: tl.constexpr,
-        stride_cm: tl.constexpr, stride_cn: tl.constexpr,
-        BLOCK_M: tl.constexpr = BM, BLOCK_N: tl.constexpr = BN, BLOCK_K: tl.constexpr = BK
+        stride_am: tl.constexpr,
+        stride_ak: tl.constexpr,
+        stride_bk: tl.constexpr,
+        stride_bn: tl.constexpr,
+        stride_cm: tl.constexpr,
+        stride_cn: tl.constexpr,
+        BLOCK_M: tl.constexpr = BM,
+        BLOCK_N: tl.constexpr = BN,
+        BLOCK_K: tl.constexpr = BK,
     ):
         # program ids -> block row/col
         pid_m = tl.program_id(0)
@@ -78,13 +89,18 @@ def make_gemm_kernel(BM: int, BN: int, BK: int):
 
 
 def benchmark_gemm(
-    M: int, N: int, K: int,
-    BM_list: List[int], BN_list: List[int], BK_list: List[int],
-    iterations: int = 20, warmup: int = 5,
-    dtype=torch.float32, device='cuda'
-) -> List[Tuple[Tuple[int,int,int], float]]:
-    """Benchmark the GEMM kernel across block sizes. Returns list of ((BM,BN,BK), median_ms)
-    """
+    M: int,
+    N: int,
+    K: int,
+    BM_list: List[int],
+    BN_list: List[int],
+    BK_list: List[int],
+    iterations: int = 20,
+    warmup: int = 5,
+    dtype=torch.float32,
+    device="cuda",
+) -> List[Tuple[Tuple[int, int, int], float]]:
+    """Benchmark the GEMM kernel across block sizes. Returns list of ((BM,BN,BK), median_ms)"""
     # allocate random inputs
     A = torch.randn((M, K), device=device, dtype=dtype)
     B = torch.randn((K, N), device=device, dtype=dtype)
@@ -108,10 +124,7 @@ def benchmark_gemm(
                 # wrapper to call kernel
                 def launch():
                     kernel[grid_m, grid_n](
-                        A, B, C,
-                        M, N, K,
-                        lda, ldb, ldc,
-                        0, 0, 0, 0, 0, 0
+                        A, B, C, M, N, K, lda, ldb, ldc, 0, 0, 0, 0, 0, 0
                     )
 
                 # warmup
@@ -129,44 +142,51 @@ def benchmark_gemm(
 
                 median_ms = statistics.median(times)
                 results.append(((BM, BN, BK, grid_m, grid_n), median_ms))
-                print(f"BM={BM} BN={BN} BK={BK} grid=({grid_m},{grid_n})  median_ms={median_ms:.3f}")
+                print(
+                    f"BM={BM} BN={BN} BK={BK} grid=({grid_m},{grid_n})  median_ms={median_ms:.3f}"
+                )
 
     return results
 
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument('--M', type=int, default=2048)
-    p.add_argument('--N', type=int, default=2048)
-    p.add_argument('--K', type=int, default=2048)
-    p.add_argument('--BM', nargs='+', type=int, default=[64, 128, 256])
-    p.add_argument('--BN', nargs='+', type=int, default=[64, 128, 256])
-    p.add_argument('--BK', nargs='+', type=int, default=[32, 64])
-    p.add_argument('--iterations', type=int, default=20)
-    p.add_argument('--warmup', type=int, default=5)
+    p.add_argument("--M", type=int, default=2048)
+    p.add_argument("--N", type=int, default=2048)
+    p.add_argument("--K", type=int, default=2048)
+    p.add_argument("--BM", nargs="+", type=int, default=[64, 128, 256])
+    p.add_argument("--BN", nargs="+", type=int, default=[64, 128, 256])
+    p.add_argument("--BK", nargs="+", type=int, default=[32, 64])
+    p.add_argument("--iterations", type=int, default=20)
+    p.add_argument("--warmup", type=int, default=5)
     return p.parse_args()
 
 
 def main():
     args = parse_args()
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    if device == 'cpu':
-        raise RuntimeError('This benchmark requires a CUDA GPU and Triton.')
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cpu":
+        raise RuntimeError("This benchmark requires a CUDA GPU and Triton.")
 
     print(f"Benchmarking GEMM M={args.M} N={args.N} K={args.K} on device={device}")
     results = benchmark_gemm(
-        args.M, args.N, args.K,
-        args.BM, args.BN, args.BK,
-        iterations=args.iterations, warmup=args.warmup
+        args.M,
+        args.N,
+        args.K,
+        args.BM,
+        args.BN,
+        args.BK,
+        iterations=args.iterations,
+        warmup=args.warmup,
     )
 
     # sort results by median time
     results.sort(key=lambda x: x[1])
-    print('\nTop 10 configs:')
+    print("\nTop 10 configs:")
     for cfg, t in results[:10]:
         BM, BN, BK, gm, gn = cfg
         print(f"BM={BM} BN={BN} BK={BK} grid=({gm},{gn})  median_ms={t:.3f}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

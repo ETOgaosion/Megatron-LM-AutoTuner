@@ -73,8 +73,13 @@ class Launcher:
             "theoretical_activations": self.profile_config.theoretical_activations,
         }
         if op_name == "GPTModel":
-            from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
-            kwargs["transformer_layer_spec"] = get_gpt_layer_with_transformer_engine_spec()
+            from megatron.core.models.gpt.gpt_layer_specs import (
+                get_gpt_layer_with_transformer_engine_spec,
+            )
+
+            kwargs["transformer_layer_spec"] = (
+                get_gpt_layer_with_transformer_engine_spec()
+            )
         op_class_instance = op_test_class(**kwargs)
         if test_case_idxs is None:
             test_case_idxs = list(range(len(self.test_cases)))

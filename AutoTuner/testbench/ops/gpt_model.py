@@ -3,10 +3,10 @@ from typing import Optional
 
 import torch
 from megatron.core.inference.contexts.base_context import BaseInferenceContext
-from megatron.core.transformer.spec_utils import ModuleSpec
-from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.models.gpt.gpt_model import GPTModel
 from megatron.core.packed_seq_params import PackedSeqParams
+from megatron.core.transformer.spec_utils import ModuleSpec
+from megatron.core.transformer.transformer_config import TransformerConfig
 from torch import Tensor
 from transformers import PretrainedConfig
 
@@ -65,9 +65,9 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         loss_mask: Optional[Tensor] = None,
     ) -> Tensor:
         return super().forward(
-            input_ids=input_ids, 
-            position_ids=position_ids, 
-            attention_mask=attention_mask, 
+            input_ids=input_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
             decoder_input=decoder_input,
             labels=labels,
             packed_seq_params=packed_seq_params,
@@ -77,7 +77,8 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             loss_mask=loss_mask,
         )
 
-    def forward(self,
+    def forward(
+        self,
         input_ids: Tensor,
         position_ids: Tensor,
         attention_mask: Tensor,

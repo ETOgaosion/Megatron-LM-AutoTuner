@@ -1,12 +1,12 @@
 class A:
-    """ This is the object which the other two objects will inherit from. """
+    """This is the object which the other two objects will inherit from."""
 
     def __init__(self, a):
         print(f"A.__init__ was passed a={a}")
 
 
 class B(A):
-    """ This is one of the parent objects. """
+    """This is one of the parent objects."""
 
     def __init__(self, b, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -14,7 +14,7 @@ class B(A):
 
 
 class C(A):
-    """ And the other one... """
+    """And the other one..."""
 
     def __init__(self, c, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -22,7 +22,7 @@ class C(A):
 
 
 class D(B, C):
-    """ And here's the problem: """
+    """And here's the problem:"""
 
     def __init__(self, d, *args, **kwargs):
         super().__init__(*args, **kwargs)
