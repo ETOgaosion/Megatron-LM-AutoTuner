@@ -144,6 +144,7 @@ class TestCommon(TheoreticalCalculation):
                 check_error(cudart().cudaProfilerStart())
             # Call forward function - force output to require grad
             nvtx_range_push("forward")
+            torch.distributed.barrier()
             output = self.op(*inputs)
             nvtx_range_pop("forward")
 
@@ -152,6 +153,7 @@ class TestCommon(TheoreticalCalculation):
                 output = output[0]
             output.requires_grad_(True)
             nvtx_range_push("backward")
+            torch.distributed.barrier()
             output.sum().backward()
             nvtx_range_pop("backward")
             if self.cur_iters < self.profile_iters:
@@ -165,6 +167,7 @@ class TestCommon(TheoreticalCalculation):
 
             # Forward pass
             nvtx_range_push("forward")
+            torch.distributed.barrier()
             output = self.op(*inputs)
             nvtx_range_pop("forward")
 
@@ -173,6 +176,7 @@ class TestCommon(TheoreticalCalculation):
                 output = output[0]
             output.requires_grad_(True)
             nvtx_range_push("backward")
+            torch.distributed.barrier()
             output.sum().backward()
             nvtx_range_pop("backward")
         else:

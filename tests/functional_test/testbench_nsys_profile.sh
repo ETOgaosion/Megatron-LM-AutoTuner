@@ -7,7 +7,7 @@ TRANSFORMER_ENGINE_HASH=$(git -C "TransformerEngine" rev-parse --short=6 HEAD)
 VERL_HASH=$(git -C "verl" rev-parse --short=6 HEAD)
 
 MODEL_NAME="Qwen/Qwen3-0.6B"
-TEST_CASES_FILE="qwen3_0_6b.json"
+TEST_CASES_FILE="local/qwen3_0_6b.json"
 
 # Use the test environment settings if available
 if [ -f tests/functional_test/test_env.sh ]; then
@@ -22,6 +22,8 @@ else
     CP_SIZE=1
     EP_SIZE=1
     ETP_SIZE=1
+    
+    NSYS_BIN=nsys
 fi
 
 GPUS_PER_NODE=$(($TP_SIZE*$CP_SIZE*$EP_SIZE*$ETP_SIZE))
@@ -102,7 +104,6 @@ NSYS_ARGS=(
 if [ $GPU_METRICS_USABLE -eq 1 ]; then
     NSYS_ARGS=("${NSYS_ARGS[@]}"
                 --gpu-metrics-devices=all
-                --gpu-metrics-frequency=100
                 --cuda-event-trace=false
               )
 else
@@ -121,7 +122,7 @@ if [ "$SINGLE_NODES" = "True" ]; then
         ${PROFILE_ARGS[@]}
     exit $?
 else
-    nsys profile "${NSYS_ARGS[@]}" \
+    $NSYS_BIN profile "${NSYS_ARGS[@]}" \
         torchrun ${DISTRIBUTED_ARGS[@]} -m AutoTuner.testbench.profile.main \
             ${PROFILE_ARGS[@]} \
             ${OPTIONAL_PROFILE_ARGS[@]} \

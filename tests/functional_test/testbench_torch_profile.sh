@@ -7,7 +7,7 @@ TRANSFORMER_ENGINE_HASH=$(git -C "TransformerEngine" rev-parse --short=6 HEAD)
 VERL_HASH=$(git -C "verl" rev-parse --short=6 HEAD)
 
 MODEL_NAME="Qwen/Qwen3-0.6B"
-TEST_CASES_FILE="qwen3_0_6b.json"
+TEST_CASES_FILE="local/qwen3_0_6b.json"
 
 # Use the test environment settings if available
 if [ -f tests/functional_test/test_env.sh ]; then

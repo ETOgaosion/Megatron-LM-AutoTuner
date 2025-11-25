@@ -51,14 +51,20 @@ Open your browser and go to `http://[ip]:6006/#pytorch_profiler`, you will see t
 1. Launch docker:
 
 ```bash
-docker create --rm -it --gpus all --shm-size=25GB --name megatron_autotuner -v $(pwd):/workspace/Megatron-LM-AutoTuner --network=host verlai/verl:app-verl0.6-transformers4.56.1-sglang0.5.2-mcore0.13.0-te2.2
+docker create --rm -it --gpus all --shm-size=25GB --name megatron_autotuner -v $(pwd):/workspace/Megatron-LM-AutoTuner --network=host --cap-add SYS_ADMIN verlai/verl:app-verl0.6-transformers4.56.1-sglang0.5.2-mcore0.13.0-te2.2
 
 docker start megatron_autotuner
 
 docker exec -it megatron_autotuner bash
 ```
 
-2. In docker container:
+2. In docker container, Update Nsight System:
+
+```
+aria2c https://developer.nvidia.com/downloads/assets/tools/secure/nsight-systems/2025_6/NsightSystems-linux-cli-public-2025.6.1.190-3689520.deb
+```
+
+Then execute:
 
 ```bash
 cd Megatron-LM-AutoTuner
