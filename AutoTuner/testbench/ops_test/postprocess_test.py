@@ -158,8 +158,7 @@ class TestPostprocess(TestCommon):
 			estimated_weight_mem_bytes = 0
 			
    			# 1.Output layer weights
-			output_layer_weight = (vocab_size // tp_size) * hidden_size * bytes_per_param
-			estimated_weight_mem_bytes += output_layer_weight
+			estimated_weight_mem_bytes += (vocab_size // tp_size) * hidden_size * bytes_per_param
 
    			# 2. MTP weights
 			if self.mtp_process and mtp_num_layers is not None and mtp_num_layers > 0:
@@ -169,7 +168,7 @@ class TestPostprocess(TestCommon):
 				hidden_shard = hidden_size // world_tp
 				ffn_shard = ffn_hidden_size // world_tp
 				per_layer_params = 0
-				# 1) RMSNorm：enorm, hnorm, final_layernorm
+				# 1) RMSNorm: enorm, hnorm, final_layernorm
 				per_layer_params += 3 * hidden_size
 				
 				# 2) eh_proj
@@ -215,9 +214,9 @@ class TestPostprocess(TestCommon):
 					share_embeddings_and_output_weights=self.share_embeddings_and_output_weights,
 					mtp=MultiTokenPredictionBlock(
 						config=self.tf_config, spec=self.mtp_block_spec, vp_stage=self.vp_stage
-					),
+					) if self.mtp_process else None,
 					post_process=self.post_process,
-					mtp_process=self.pre_process,
+					mtp_process=self.mtp_process,
 					output_layer= tensor_parallel.ColumnParallelLinear(
 						self.tf_config.hidden_size,
 						getattr(self.hf_config, "vocab_size", 151936),
@@ -265,7 +264,7 @@ class TestPostprocess(TestCommon):
 		input_ids = micro_batch["input_ids"]
 		attention_mask = micro_batch["attention_mask"]
 		position_ids = micro_batch["position_ids"]
-		packed_seq_params = None  # 禁用 sequence packing
+		packed_seq_params = None  # Disable sequence packing
 		self.embedding = LanguageModelEmbedding(
 				config=self.tf_config,
                 vocab_size=self.hf_config.vocab_size,
@@ -361,7 +360,7 @@ class TestPostprocess(TestCommon):
 			output_layer_flops = 2 * total_tokens * hidden_size * (vocab_size // tp_size)
 			forward_flops += output_layer_flops
 		
-		# 2. MTP FLOPS — 按照代码运行顺序精确计算每层的前向乘加
+		# 2. MTP FLOPS - Calculate forward multiply-add operations for each layer in execution order
 		if self.mtp_process and self.tf_config.mtp_num_layers is not None and self.tf_config.mtp_num_layers > 0:
 			mtp_num_layers = self.tf_config.mtp_num_layers
 			ffn_hidden_size = self.tf_config.ffn_hidden_size
@@ -440,7 +439,7 @@ class TestPostprocess(TestCommon):
 			linear_proj_out = total_tokens * hidden_shard * bytes_per_elem
 			attn_phase = attn_scores + attn_output + linear_proj_out
 			# MLP
-			mlp_fc1_phase = total_tokens + 2 * ffn_shard * bytes_per_elem
+			mlp_fc1_phase = total_tokens * 2 * ffn_shard * bytes_per_elem
 			mlp_fc2_phase = total_tokens * hidden_shard * bytes_per_elem
 			# final norm
 			final_norm_phase = total_tokens * hidden_shard * bytes_per_elem
