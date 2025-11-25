@@ -15,13 +15,14 @@ from AutoTuner.utils.nvtx import nvtx_decorator, nvtx_range_pop, nvtx_range_push
 from .common import CommonOpsForTest
 
 
-class LayerNormForTest(CommonOpsForTest):
+class LayerNormForTest(torch.nn.Module, CommonOpsForTest):
     def __init__(
         self,
         tf_config: TransformerConfig,
         hf_config: PretrainedConfig,
         hook_activation=False,
     ):
+        torch.nn.Module.__init__(self)
         CommonOpsForTest.__init__(
             self,
             hook_activation=hook_activation,

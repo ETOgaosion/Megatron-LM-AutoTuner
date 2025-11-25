@@ -63,15 +63,19 @@ class Launcher:
         op_test_class = OP_TEST_MAPPING.get(op_name)
         if op_test_class is None:
             raise ValueError(f"Operator '{op_name}' is not supported.")
-        op_class_instance = op_test_class(
-            tf_config=self.tf_config,
-            hf_config=self.hf_config,
-            tp_group=self.tp_group,
-            profile_mode=self.profile_config.profile_mode,
-            warmup_iters=self.profile_config.warmup_iters,
-            theoretical_flops=self.profile_config.theoretical_flops,
-            theoretical_activations=self.profile_config.theoretical_activations,
-        )
+        kwargs = {
+            "tf_config": self.tf_config,
+            "hf_config": self.hf_config,
+            "tp_group": self.tp_group,
+            "profile_mode": self.profile_config.profile_mode,
+            "warmup_iters": self.profile_config.warmup_iters,
+            "theoretical_flops": self.profile_config.theoretical_flops,
+            "theoretical_activations": self.profile_config.theoretical_activations,
+        }
+        if op_name == "GPTModel":
+            from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
+            kwargs["transformer_layer_spec"] = get_gpt_layer_with_transformer_engine_spec()
+        op_class_instance = op_test_class(**kwargs)
         if test_case_idxs is None:
             test_case_idxs = list(range(len(self.test_cases)))
         test_cases = [self.test_cases[i] for i in test_case_idxs]
