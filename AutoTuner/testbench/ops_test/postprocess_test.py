@@ -22,18 +22,18 @@ from megatron.core import tensor_parallel
 from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.models.common.embeddings.language_model_embedding import LanguageModelEmbedding
 from megatron.core.models.gpt.gpt_layer_specs import (
-    get_gpt_layer_with_transformer_engine_spec,
-    get_gpt_layer_local_spec,
-    get_gpt_mtp_block_spec,
+	get_gpt_layer_with_transformer_engine_spec,
+	get_gpt_layer_local_spec,
+	get_gpt_mtp_block_spec,
 )
 
 from megatron.core.transformer.multi_token_prediction import (
-    MTPLossAutoScaler,
-    MTPLossLoggingHelper,
-    MultiTokenPredictionBlock,
-    roll_tensor,
-    tie_output_layer_state_dict,
-    tie_word_embeddings_state_dict,
+	MTPLossAutoScaler,
+	MTPLossLoggingHelper,
+	MultiTokenPredictionBlock,
+	roll_tensor,
+	tie_output_layer_state_dict,
+	tie_word_embeddings_state_dict,
 )
 
 from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
@@ -45,15 +45,15 @@ class TestPostprocess(TestCommon):
 	def __init__(
 		self,
 		tf_config: TransformerConfig,
-        hf_config: PretrainedConfig,
-        tp_group: Optional[torch.distributed.ProcessGroup] = None,
-        profile_mode: int = 0,
-        warmup_iters: int = 2,
-        theoretical_flops: bool = False,
-        theoretical_activations: bool = False,
-        scatter_to_sequence_parallel: bool = True,
-        tp_comm_overlap_cfg: str = None,
-        share_embeddings_and_output_weights: Optional[bool] = None,
+		hf_config: PretrainedConfig,
+		tp_group: Optional[torch.distributed.ProcessGroup] = None,
+		profile_mode: int = 0,
+		warmup_iters: int = 2,
+		theoretical_flops: bool = False,
+		theoretical_activations: bool = False,
+		scatter_to_sequence_parallel: bool = True,
+		tp_comm_overlap_cfg: str = None,
+		share_embeddings_and_output_weights: Optional[bool] = None,
 		parallel_output: bool = True,
 	):
 		super().__init__(
@@ -89,7 +89,7 @@ class TestPostprocess(TestCommon):
 				transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec()
 			else:
 				transformer_layer_spec = get_gpt_layer_local_spec()
-    
+
 			transformer_layer_spec_for_mtp = transformer_layer_spec
 
 			mtp_block_spec = get_gpt_mtp_block_spec(
@@ -100,9 +100,9 @@ class TestPostprocess(TestCommon):
 			)
 		self.mtp_block_spec = mtp_block_spec
 		self.mtp_process = mtp_block_spec is not None
-  
+
 		self.scatter_to_sequence_parallel = scatter_to_sequence_parallel
-  
+
 		if profile_mode == ProfileMode.collect_data:
 			# Allocate all weights inside MemoryTrackerContext to measure from zero baseline
 			with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
@@ -157,10 +157,10 @@ class TestPostprocess(TestCommon):
 			
 			estimated_weight_mem_bytes = 0
 			
-   			# 1.Output layer weights
+			# 1.Output layer weights
 			estimated_weight_mem_bytes += (vocab_size // tp_size) * hidden_size * bytes_per_param
 
-   			# 2. MTP weights
+			# 2. MTP weights
 			if self.mtp_process and mtp_num_layers is not None and mtp_num_layers > 0:
 				built_mtp_layers = len(self.mtp_block_spec.layer_specs)
 
@@ -230,9 +230,9 @@ class TestPostprocess(TestCommon):
 					cp_group=self.cp_group,
 					pg_collection=self.pg_collection,
 					embedding=LanguageModelEmbedding(
-						config=tf_config,
-						vocab_size=hf_config.vocab_size,
-						max_sequence_length=hf_config.max_position_embeddings,
+						config=self.tf_config,
+						vocab_size=self.hf_config.vocab_size,
+						max_sequence_length=self.hf_config.max_position_embeddings,
 						position_embedding_type="rope",
 						num_tokentypes=0,
 						scatter_to_sequence_parallel=self.scatter_to_sequence_parallel,
@@ -244,35 +244,35 @@ class TestPostprocess(TestCommon):
 
 	@override
 	def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
-     
+
 		micro_batch = micro_batch.to(torch.cuda.current_device())
 		micro_batch = micro_batch.contiguous()
-  
+
 		self.hiddenstatus_generator = HiddenStatusGenerator(
-            tf_config=self.tf_config,
-            hf_config=self.hf_config,
-            tp_group=self.tp_group,
-            scatter_to_sequence_parallel=self.scatter_to_sequence_parallel,
-            rotary_percent=1.0,
-        	rotary_base=10000,
-       		rope_scaling= False,
-        	rope_scaling_factor= 8.0,
-        	seq_len_interpolation_factor= None,
-            pg_collection=self.pg_collection,
-        )
- 
+			tf_config=self.tf_config,
+			hf_config=self.hf_config,
+			tp_group=self.tp_group,
+			scatter_to_sequence_parallel=self.scatter_to_sequence_parallel,
+			rotary_percent=1.0,
+			rotary_base=10000,
+			rope_scaling= False,
+			rope_scaling_factor= 8.0,
+			seq_len_interpolation_factor= None,
+			pg_collection=self.pg_collection,
+		)
+
 		input_ids = micro_batch["input_ids"]
 		attention_mask = micro_batch["attention_mask"]
 		position_ids = micro_batch["position_ids"]
 		packed_seq_params = None  # Disable sequence packing
 		self.embedding = LanguageModelEmbedding(
-				config=self.tf_config,
-                vocab_size=self.hf_config.vocab_size,
-                max_sequence_length=self.hf_config.max_position_embeddings,
-                position_embedding_type="rope",
-                num_tokentypes=0,
-                scatter_to_sequence_parallel=self.scatter_to_sequence_parallel,
-                tp_group=self.tp_group,
+			config=self.tf_config,
+			vocab_size=self.hf_config.vocab_size,
+			max_sequence_length=self.hf_config.max_position_embeddings,
+			position_embedding_type="rope",
+			num_tokentypes=0,
+			scatter_to_sequence_parallel=self.scatter_to_sequence_parallel,
+			tp_group=self.tp_group,
 			)
 		if self.pre_process or self.mtp_process:
 			with torch.no_grad():
@@ -325,15 +325,15 @@ class TestPostprocess(TestCommon):
 		extra_block_kwargs = None
 		
 		return (
-			hidden_states,           
-			input_ids,         
-			position_ids,            
-			labels,                
-			rotary_pos_emb,     
-			mtp_in_postprocess,           
-			attention_mask,        
-			packed_seq_params, 
-			extra_block_kwargs,      
+			hidden_states,
+			input_ids,
+			position_ids,
+			labels,
+			rotary_pos_emb,
+			mtp_in_postprocess,
+			attention_mask,
+			packed_seq_params,
+			extra_block_kwargs,
 		)
 
 	@override

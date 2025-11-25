@@ -96,7 +96,6 @@ class TransformerLayerForTest(CommonOpsForTest, TransformerLayer):
         inference_params: Optional[BaseInferenceContext] = None,
         dynamic_inference_decode_only: Optional[bool] = None,
         ):
-        # print("#################",hidden_states[0].shape)
         self.activation_hook.clear()
         with torch.autograd.graph.saved_tensors_hooks(
             self.activation_hook.save_hook, self.activation_hook.load_hook

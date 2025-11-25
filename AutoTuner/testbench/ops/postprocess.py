@@ -57,7 +57,7 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
         self.mtp = mtp
         self.post_process = post_process
         self.mtp_process = mtp_process
-        self.pre_process = mtp_process  # pre_process 与 mtp_process 在这个上下文中含义相同
+        self.pre_process = mtp_process  # pre_process and mtp_process are equivalent in this context
         self.output_layer = output_layer
         self.cp_group = cp_group
         self.pg_collection = pg_collection
@@ -159,7 +159,7 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
                 rotary_pos_emb=rotary_pos_emb,
                 rotary_pos_cos=None,  # Training: always None
                 rotary_pos_sin=None,  # Training: always None
-                packed_seq_params=packed_seq_params,  # 传入 packed_seq_params 以支持 THD 格式
+                packed_seq_params=packed_seq_params,  # Pass packed_seq_params to support THD format
                 sequence_len_offset=None,  # Training: always None
                 embedding=self.embedding,
                 **(extra_block_kwargs or {}),
