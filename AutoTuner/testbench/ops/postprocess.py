@@ -31,7 +31,7 @@ from megatron.core.utils import (
 
 from megatron.core import tensor_parallel
 
-class PostprocessForTest(CommonOpsForTest):
+class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
     def __init__(
         self,
         tf_config: TransformerConfig,
@@ -45,7 +45,9 @@ class PostprocessForTest(CommonOpsForTest):
         embedding: LanguageModelEmbedding = None,
         hook_activation=False,
     ):
-        super().__init__(
+        torch.nn.Module.__init__(self)
+        CommonOpsForTest.__init__(
+            self,
             hook_activation=hook_activation,
             module_name="Postprocess",
             logging_level=logging.INFO,
@@ -173,8 +175,6 @@ class PostprocessForTest(CommonOpsForTest):
         return logits
         # return loss
 
-    def __call__(self, *args, **kwargs):
-        return self.forward(*args, **kwargs)
 
     def forward(
         self,
