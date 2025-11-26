@@ -1,32 +1,28 @@
-from typing import Any, Dict
-
 import os
-import torch
-from megatron.core.transformer.transformer_config import TransformerConfig
-from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
-from transformers import PretrainedConfig
-from typing_extensions import override
-from typing import Optional
 from contextlib import nullcontext
+from typing import Any, Dict, Optional
 
-from AutoTuner.testbench.ops.transformer_layer import TransformerLayerForTest
-from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
-from AutoTuner.utils.structs import InputTestCase
-from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
-from AutoTuner.utils.hidden_status_gen import HiddenStatusGenerator
-
-from megatron.core.transformer import TransformerLayerSubmodules
-from megatron.core import parallel_state
-from megatron.core import tensor_parallel
-from megatron.core.process_groups_config import ProcessGroupCollection
-from AutoTuner.testbench.ops_test.test_with_hiddens import TestWithHiddenInputs
+import torch
+from megatron.core import parallel_state, tensor_parallel
+from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
 from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_local_spec,
     get_gpt_layer_with_transformer_engine_spec,
 )
+from megatron.core.process_groups_config import ProcessGroupCollection
+from megatron.core.transformer import TransformerLayerSubmodules
+from megatron.core.transformer.transformer_config import TransformerConfig
+from transformers import PretrainedConfig
+from typing_extensions import override
+
+from AutoTuner.testbench.ops.transformer_layer import TransformerLayerForTest
+from AutoTuner.testbench.ops_test.test_with_hiddens import TestWithHiddenInputs
+from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
+from AutoTuner.utils.hidden_status_gen import HiddenStatusGenerator
+from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
+from AutoTuner.utils.structs import InputTestCase
 
 from .common import TestCommon
-
 
 os.environ["NVTE_NVTX_ENABLED"] = "1"
 
@@ -54,15 +50,25 @@ class TestTransformerLayer(TestWithHiddenInputs):
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
         self.module_name = "TransformerLayer"
-        self.tp_group = tp_group if tp_group is not None else parallel_state.get_tensor_model_parallel_group()
+        self.tp_group = (
+            tp_group
+            if tp_group is not None
+            else parallel_state.get_tensor_model_parallel_group()
+        )
 
         if profile_mode == ProfileMode.collect_data:
             with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
                 # Resolve layer submodules: prefer explicit config, else use GPT layer spec
-                if hasattr(tf_config, "layer_submodules") and tf_config.layer_submodules is not None:
+                if (
+                    hasattr(tf_config, "layer_submodules")
+                    and tf_config.layer_submodules is not None
+                ):
                     layer_submodules = tf_config.layer_submodules
                 else:
-                    use_te = getattr(tf_config, "transformer_impl", "local") == "transformer_engine"
+                    use_te = (
+                        getattr(tf_config, "transformer_impl", "local")
+                        == "transformer_engine"
+                    )
                     try:
                         if use_te:
                             spec = get_gpt_layer_with_transformer_engine_spec()
@@ -76,7 +82,11 @@ class TestTransformerLayer(TestWithHiddenInputs):
                     tf_config,
                     submodules=layer_submodules,
                     layer_number=tf_config.num_layers,
-                    hidden_dropout=tf_config.hidden_dropout if tf_config.hidden_dropout is not None else 0.1,
+                    hidden_dropout=(
+                        tf_config.hidden_dropout
+                        if tf_config.hidden_dropout is not None
+                        else 0.1
+                    ),
                     pg_collection=ProcessGroupCollection.use_mpu_process_groups(),
                     vp_stage=parallel_state.get_virtual_pipeline_model_parallel_rank(),
                     hook_activation=(profile_mode == ProfileMode.collect_data),
@@ -86,10 +96,16 @@ class TestTransformerLayer(TestWithHiddenInputs):
 
             self.memory_db["weights"][self.module_name] = detailed_mem_report
         else:
-            if hasattr(tf_config, "layer_submodules") and tf_config.layer_submodules is not None:
+            if (
+                hasattr(tf_config, "layer_submodules")
+                and tf_config.layer_submodules is not None
+            ):
                 layer_submodules = tf_config.layer_submodules
             else:
-                use_te = getattr(tf_config, "transformer_impl", "local") == "transformer_engine"
+                use_te = (
+                    getattr(tf_config, "transformer_impl", "local")
+                    == "transformer_engine"
+                )
                 try:
                     if use_te:
                         spec = get_gpt_layer_with_transformer_engine_spec()
@@ -102,15 +118,21 @@ class TestTransformerLayer(TestWithHiddenInputs):
                 tf_config,
                 submodules=layer_submodules,
                 layer_number=tf_config.num_layers,
-                hidden_dropout=tf_config.hidden_dropout if tf_config.hidden_dropout is not None else 0.1,
+                hidden_dropout=(
+                    tf_config.hidden_dropout
+                    if tf_config.hidden_dropout is not None
+                    else 0.1
+                ),
                 pg_collection=ProcessGroupCollection.use_mpu_process_groups(),
                 vp_stage=parallel_state.get_virtual_pipeline_model_parallel_rank(),
                 hook_activation=(profile_mode == ProfileMode.collect_data),
             )
 
     @override
-    def calculate_tokens(self, test_case: InputTestCase, micro_batch: Any, inputs: Any) -> int:
-            return 0
+    def calculate_tokens(
+        self, test_case: InputTestCase, micro_batch: Any, inputs: Any
+    ) -> int:
+        return 0
 
     @override
     def calc_theoretical_memory(self, test_case: InputTestCase) -> Dict[str, int]:

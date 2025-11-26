@@ -2,17 +2,25 @@ import logging
 from contextlib import nullcontext
 from typing import Optional, Union
 
+import torch
+from megatron.core import tensor_parallel
 from megatron.core.inference.contexts.base_context import BaseInferenceContext
 from megatron.core.packed_seq_params import PackedSeqParams
-import torch
-from .common import CommonOpsForTest
+from megatron.core.process_groups_config import ProcessGroupCollection
+from megatron.core.transformer import TransformerLayerSubmodules
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.transformer_layer import TransformerLayer
-from megatron.core.transformer import TransformerLayerSubmodules
-from megatron.core.process_groups_config import ProcessGroupCollection
-from megatron.core import tensor_parallel
-from megatron.core.utils import WrappedTensor, make_viewless_tensor, nvtx_decorator, nvtx_range_pop, nvtx_range_push
+from megatron.core.utils import (
+    WrappedTensor,
+    make_viewless_tensor,
+    nvtx_decorator,
+    nvtx_range_pop,
+    nvtx_range_push,
+)
 from torch import Tensor
+
+from .common import CommonOpsForTest
+
 
 class TransformerLayerForTest(CommonOpsForTest, TransformerLayer):
     def __init__(
@@ -57,7 +65,7 @@ class TransformerLayerForTest(CommonOpsForTest, TransformerLayer):
         hidden_states = make_viewless_tensor(
             inp=hidden_states, requires_grad=True, keep_graph=True
         )
-        
+
         nvtx_range_push(suffix="Attention Layer")
         hidden_states, context = self._forward_attention(
             hidden_states=hidden_states,
@@ -76,10 +84,11 @@ class TransformerLayerForTest(CommonOpsForTest, TransformerLayer):
         nvtx_range_push(suffix="Mlp Layer")
         output = self._forward_mlp(hidden_states)
         nvtx_range_pop(suffix="Mlp Layer")
-        
+
         return output
 
-    def forward(self,
+    def forward(
+        self,
         hidden_states: Union[Tensor, WrappedTensor],
         attention_mask: Optional[Tensor],
         rotary_pos_emb: Optional[Tensor] = None,
@@ -95,17 +104,17 @@ class TransformerLayerForTest(CommonOpsForTest, TransformerLayer):
         *,
         inference_params: Optional[BaseInferenceContext] = None,
         dynamic_inference_decode_only: Optional[bool] = None,
-        ):
+    ):
         self.activation_hook.clear()
         with torch.autograd.graph.saved_tensors_hooks(
             self.activation_hook.save_hook, self.activation_hook.load_hook
-            ):
+        ):
             ret = self._forward(
                 hidden_states,
                 attention_mask,
                 rotary_pos_emb,
                 packed_seq_params,
                 context=context,
-                context_mask=context_mask
-                )
+                context_mask=context_mask,
+            )
         return ret

@@ -1,18 +1,18 @@
 # flash_attention_benchmark.py
 import argparse
-import time
-
-import torch
-import torch.nn as nn
 import os
-from torch.cuda import check_error, cudart
-from tqdm import tqdm
+import time
 
 # Check if flash-attn is available
 import numpy as np
+import torch
+import torch.nn as nn
 from flash_attn import flash_attn_func
+from torch.cuda import check_error, cudart
+from tqdm import tqdm
 
 FLASH_AVAILABLE = True
+
 
 def benchmark_flash_attention(
     batch_sizes,
@@ -65,7 +65,7 @@ def benchmark_flash_attention(
             check_error(cudart().cudaProfilerStart())
             for _ in range(iterations):
                 torch.cuda.synchronize()
-                torch.cuda.nvtx.range_push('FlashAttention Forward')
+                torch.cuda.nvtx.range_push("FlashAttention Forward")
                 start = time.time()
                 out = flash_attn_func(q, k, v, dropout_p=dropout, causal=causal)
                 torch.cuda.synchronize()
@@ -81,7 +81,7 @@ def benchmark_flash_attention(
                 out = flash_attn_func(q, k, v, dropout_p=dropout, causal=causal)
                 torch.cuda.synchronize()
                 check_error(cudart().cudaProfilerStart())
-                torch.cuda.nvtx.range_push('FlashAttention Backward')
+                torch.cuda.nvtx.range_push("FlashAttention Backward")
                 start = time.time()
                 out.sum().backward(retain_graph=True)
                 torch.cuda.synchronize()

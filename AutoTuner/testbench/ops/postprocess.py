@@ -2,34 +2,36 @@ import logging
 from typing import Optional
 
 import torch
-from megatron.core.utils import nvtx_decorator, nvtx_range_pop, nvtx_range_push
-from torch import Tensor
-
-from .common import CommonOpsForTest
-from megatron.core.fusions.fused_cross_entropy import fused_vocab_parallel_cross_entropy
 from megatron.core import parallel_state, tensor_parallel
-from megatron.core.transformer.transformer_config import TransformerConfig
-from megatron.core.models.common.embeddings.language_model_embedding import LanguageModelEmbedding
-from megatron.core.process_groups_config import ProcessGroupCollection
+from megatron.core.fusions.fused_cross_entropy import fused_vocab_parallel_cross_entropy
+from megatron.core.models.common.embeddings.language_model_embedding import (
+    LanguageModelEmbedding,
+)
 from megatron.core.packed_seq_params import PackedSeqParams
-
+from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.multi_token_prediction import (
     MTPLossAutoScaler,
     MTPLossLoggingHelper,
     MultiTokenPredictionBlock,
     roll_tensor,
 )
+from megatron.core.transformer.transformer_config import TransformerConfig
+from megatron.core.utils import nvtx_decorator, nvtx_range_pop, nvtx_range_push
+from torch import Tensor
+
+from .common import CommonOpsForTest
+
 try:
     from megatron.core.extensions.transformer_engine import te_parallel_cross_entropy
 except:
     te_parallel_cross_entropy = None
-    
+
+from megatron.core import tensor_parallel
 from megatron.core.utils import (
     WrappedTensor,
     make_viewless_tensor,
 )
 
-from megatron.core import tensor_parallel
 
 class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
     def __init__(
@@ -57,11 +59,14 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
         self.mtp = mtp
         self.post_process = post_process
         self.mtp_process = mtp_process
-        self.pre_process = mtp_process  # pre_process and mtp_process are equivalent in this context
+        self.pre_process = (
+            mtp_process  # pre_process and mtp_process are equivalent in this context
+        )
         self.output_layer = output_layer
         self.cp_group = cp_group
         self.pg_collection = pg_collection
         self.embedding = embedding
+
     # copy from LanguageModule
     # @nvtx_decorator(message="Postprocess loss")
     def compute_language_model_loss(self, labels: Tensor, logits: Tensor) -> Tensor:
@@ -76,24 +81,33 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
         """
         # Handle both BSHD format (2D) and THD format (1D)
         is_thd_format = labels.dim() == 1
-        
+
         if not is_thd_format:
             # [b s] => [s b] only for BSHD format
             labels = labels.transpose(0, 1).contiguous()
-        
+
         if self.tf_config.cross_entropy_loss_fusion:
-            if self.tf_config.cross_entropy_fusion_impl == 'te':
+            if self.tf_config.cross_entropy_fusion_impl == "te":
                 if te_parallel_cross_entropy is not None:
                     if not is_thd_format:
                         # as_strided only works for 2D tensors
-                        labels = torch.as_strided(labels, labels.size(), (labels.size()[1], 1))
+                        labels = torch.as_strided(
+                            labels, labels.size(), (labels.size()[1], 1)
+                        )
                     loss = te_parallel_cross_entropy(
-                        logits, labels, self.pg_collection.tp, False  # is_cg_capturable=False for training
+                        logits,
+                        labels,
+                        self.pg_collection.tp,
+                        False,  # is_cg_capturable=False for training
                     )
                 else:
-                    raise RuntimeError("Trying to use a TE block when it's not present.")
-            elif self.tf_config.cross_entropy_fusion_impl == 'native':
-                loss = fused_vocab_parallel_cross_entropy(logits, labels, self.pg_collection.tp)
+                    raise RuntimeError(
+                        "Trying to use a TE block when it's not present."
+                    )
+            elif self.tf_config.cross_entropy_fusion_impl == "native":
+                loss = fused_vocab_parallel_cross_entropy(
+                    logits, labels, self.pg_collection.tp
+                )
         else:
             loss = tensor_parallel.vocab_parallel_cross_entropy(logits, labels)
 
@@ -117,14 +131,13 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
             # In this case, if share_embeddings_and_output_weights is True, the shared weights
             # will be stored in embedding layer, and output layer will not have any weight.
             assert hasattr(
-                self, 'embedding'
+                self, "embedding"
             ), f"embedding is needed in this pipeline stage, but it is not initialized."
             return self.embedding.word_embeddings.weight
         elif self.post_process:
             return self.output_layer.weight
         return None
 
-    
     @nvtx_decorator(message="Postprocess forward")
     def _forward(
         self,
@@ -143,12 +156,12 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
         hidden_states = make_viewless_tensor(
             inp=hidden_states, requires_grad=True, keep_graph=True
         )
-        
+
         # logits and loss
         output_weight = None
         if self.share_embeddings_and_output_weights:
             output_weight = self.shared_embedding_or_output_weight()
-        
+
         nvtx_range_push(suffix="mtp")
         if mtp_in_postprocess:
             hidden_states = self.mtp(
@@ -165,16 +178,15 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
                 **(extra_block_kwargs or {}),
             )
         nvtx_range_pop(suffix="mtp")
-        
+
         nvtx_range_push(suffix="output layer")
         logits, _ = self.output_layer(
-            hidden_states, weight=output_weight,runtime_gather_output = False
+            hidden_states, weight=output_weight, runtime_gather_output=False
         )
         nvtx_range_pop(suffix="output layer")
 
         return logits
         # return loss
-
 
     def forward(
         self,

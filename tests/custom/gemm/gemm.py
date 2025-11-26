@@ -1,12 +1,13 @@
 import argparse
-import time
 import os
+import time
 
 import numpy as np
 import torch
 import triton
 import triton.language as tl
 from torch.cuda import check_error, cudart
+
 
 @triton.jit
 def matmul_kernel(
@@ -156,20 +157,26 @@ def draw_performance_figure(output_dir, results):
         results: List of tuples (config, forward_time, backward_time)
     """
     import matplotlib.pyplot as plt
-    
+
     # Group results by MKN and BMBKBN
-    mkn_groups = {}  # key: (M, K, N), value: list of (block_m, block_n, block_k, forward_time, backward_time)
-    block_groups = {}  # key: (block_m, block_n, block_k), value: list of (M, K, N, forward_time, backward_time)
-        
+    mkn_groups = (
+        {}
+    )  # key: (M, K, N), value: list of (block_m, block_n, block_k, forward_time, backward_time)
+    block_groups = (
+        {}
+    )  # key: (block_m, block_n, block_k), value: list of (M, K, N, forward_time, backward_time)
+
     for config, forward_time, backward_time in results:
         M, K, N, block_m, block_n, block_k = config
         mkn_key = (M, K, N)
         block_key = (block_m, block_n, block_k)
-        
+
         if mkn_key not in mkn_groups:
             mkn_groups[mkn_key] = []
-        mkn_groups[mkn_key].append((block_m, block_n, block_k, forward_time, backward_time))
-        
+        mkn_groups[mkn_key].append(
+            (block_m, block_n, block_k, forward_time, backward_time)
+        )
+
         if block_key not in block_groups:
             block_groups[block_key] = []
         block_groups[block_key].append((M, K, N, forward_time, backward_time))
@@ -182,14 +189,14 @@ def draw_performance_figure(output_dir, results):
         data_sorted = sorted(data, key=lambda x: (x[0], x[1], x[2]))
         block_labels = [f"{bm}_{bn}_{bk}" for bm, bn, bk, _, _ in data_sorted]
         forward_times = [ft for _, _, _, ft, _ in data_sorted]
-        ax1.plot(block_labels, forward_times, marker='o', label=f"MKN={M}", linewidth=2)
+        ax1.plot(block_labels, forward_times, marker="o", label=f"MKN={M}", linewidth=2)
 
     ax1.set_xlabel("Block Configuration (BM_BN_BK)")
     ax1.set_ylabel("Time (seconds)")
     ax1.set_title("Forward Time: MKN vs Block Configuration")
     ax1.legend()
     ax1.grid(True, alpha=0.3)
-    ax1.tick_params(axis='x', rotation=45)
+    ax1.tick_params(axis="x", rotation=45)
 
     # Plot 2: Backward time - MKN vs BMBKBN
     for mkn_key, data in sorted(mkn_groups.items()):
@@ -197,14 +204,16 @@ def draw_performance_figure(output_dir, results):
         data_sorted = sorted(data, key=lambda x: (x[0], x[1], x[2]))
         block_labels = [f"{bm}_{bn}_{bk}" for bm, bn, bk, _, _ in data_sorted]
         backward_times = [bt for _, _, _, _, bt in data_sorted]
-        ax2.plot(block_labels, backward_times, marker='s', label=f"MKN={M}", linewidth=2)
+        ax2.plot(
+            block_labels, backward_times, marker="s", label=f"MKN={M}", linewidth=2
+        )
 
     ax2.set_xlabel("Block Configuration (BM_BN_BK)")
     ax2.set_ylabel("Time (seconds)")
     ax2.set_title("Backward Time: MKN vs Block Configuration")
     ax2.legend()
     ax2.grid(True, alpha=0.3)
-    ax2.tick_params(axis='x', rotation=45)
+    ax2.tick_params(axis="x", rotation=45)
 
     # Plot 3: Forward time - BMBKBN vs MKN
     for block_key, data in sorted(block_groups.items()):
@@ -212,7 +221,13 @@ def draw_performance_figure(output_dir, results):
         data_sorted = sorted(data, key=lambda x: (x[0], x[1], x[2]))
         mkn_labels = [M for M, K, N, _, _ in data_sorted]  # Assuming M=K=N
         forward_times = [ft for _, _, _, ft, _ in data_sorted]
-        ax3.plot(mkn_labels, forward_times, marker='o', label=f"Block={bm}_{bn}_{bk}", linewidth=2)
+        ax3.plot(
+            mkn_labels,
+            forward_times,
+            marker="o",
+            label=f"Block={bm}_{bn}_{bk}",
+            linewidth=2,
+        )
 
     ax3.set_xlabel("Matrix Size (M=K=N)")
     ax3.set_ylabel("Time (seconds)")
@@ -226,7 +241,13 @@ def draw_performance_figure(output_dir, results):
         data_sorted = sorted(data, key=lambda x: (x[0], x[1], x[2]))
         mkn_labels = [M for M, K, N, _, _ in data_sorted]
         backward_times = [bt for _, _, _, _, bt in data_sorted]
-        ax4.plot(mkn_labels, backward_times, marker='s', label=f"Block={bm}_{bn}_{bk}", linewidth=2)
+        ax4.plot(
+            mkn_labels,
+            backward_times,
+            marker="s",
+            label=f"Block={bm}_{bn}_{bk}",
+            linewidth=2,
+        )
 
     ax4.set_xlabel("Matrix Size (M=K=N)")
     ax4.set_ylabel("Time (seconds)")
@@ -271,9 +292,7 @@ def draw_performance_figure(output_dir, results):
 
 
 # Testing function
-def test_matmul(
-    configs=None, num_warmups=5, num_runs=1, draw=False
-):
+def test_matmul(configs=None, num_warmups=5, num_runs=1, draw=False):
     if configs is None:
         configs = [
             (512, 512, 512, 32, 32, 32, 8),
@@ -283,7 +302,6 @@ def test_matmul(
             (4096, 4096, 4096, 32, 32, 32, 8),
             (6144, 6144, 6144, 32, 32, 32, 8),
             (8192, 8192, 8192, 32, 32, 32, 8),
-            
             (512, 512, 512, 64, 64, 32, 8),
             (1024, 1024, 1024, 64, 64, 32, 8),
             (2048, 2048, 2048, 64, 64, 32, 8),
@@ -291,7 +309,6 @@ def test_matmul(
             (4096, 4096, 4096, 64, 64, 32, 8),
             (6144, 6144, 6144, 64, 64, 32, 8),
             (8192, 8192, 8192, 64, 64, 32, 8),
-            
             (512, 512, 512, 128, 128, 64, 8),
             (1024, 1024, 1024, 128, 128, 64, 8),
             (2048, 2048, 2048, 128, 128, 64, 8),
@@ -368,7 +385,9 @@ def test_matmul(
         print(f"Average full (fwd+bwd) time: {full_time:.6f} seconds")
         print(f"Approximate backward time: {backward_time:.6f} seconds")
 
-        results.append(((M, K, N, block_m, block_n, block_k), forward_time, backward_time))
+        results.append(
+            ((M, K, N, block_m, block_n, block_k), forward_time, backward_time)
+        )
 
     if draw:
         draw_performance_figure(args.output_dir, results)
