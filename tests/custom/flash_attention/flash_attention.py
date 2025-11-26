@@ -4,27 +4,15 @@ import time
 
 import torch
 import torch.nn as nn
-from megatron.core.utils import (
-    configure_nvtx_profiling,
-    nvtx_decorator,
-    nvtx_range_pop,
-    nvtx_range_push,
-)
+import os
 from torch.cuda import check_error, cudart
 from tqdm import tqdm
 
 # Check if flash-attn is available
-try:
-    import numpy as np
-    from flash_attn import flash_attn_func
+import numpy as np
+from flash_attn import flash_attn_func
 
-    FLASH_AVAILABLE = True
-except ImportError:
-    print(
-        "flash-attn not installed. Install with: pip install flash-attn --no-build-isolation"
-    )
-    FLASH_AVAILABLE = False
-
+FLASH_AVAILABLE = True
 
 def benchmark_flash_attention(
     batch_sizes,
@@ -71,21 +59,19 @@ def benchmark_flash_attention(
 
             torch.cuda.synchronize()
             torch.cuda.reset_peak_memory_stats()
-            check_error(cudart().cudaProfilerStart())
 
             # Benchmark forward
             fwd_times = []
+            check_error(cudart().cudaProfilerStart())
             for _ in range(iterations):
                 torch.cuda.synchronize()
-                nvtx_range_push("FlashAttention Forward")
+                torch.cuda.nvtx.range_push('FlashAttention Forward')
                 start = time.time()
                 out = flash_attn_func(q, k, v, dropout_p=dropout, causal=causal)
                 torch.cuda.synchronize()
-                nvtx_range_pop("FlashAttention Forward")
+                torch.cuda.nvtx.range_pop()
                 fwd_times.append((time.time() - start) * 1000)
             fwd_time = sum(fwd_times) / len(fwd_times)
-
-            check_error(cudart().cudaProfilerStop())
 
             # Benchmark backward
             torch.cuda.synchronize()
@@ -94,11 +80,12 @@ def benchmark_flash_attention(
             for _ in range(iterations):
                 out = flash_attn_func(q, k, v, dropout_p=dropout, causal=causal)
                 torch.cuda.synchronize()
-                nvtx_range_push("FlashAttention Backward")
+                check_error(cudart().cudaProfilerStart())
+                torch.cuda.nvtx.range_push('FlashAttention Backward')
                 start = time.time()
                 out.sum().backward(retain_graph=True)
                 torch.cuda.synchronize()
-                nvtx_range_pop("FlashAttention Backward")
+                torch.cuda.nvtx.range_pop()
                 bwd_times.append((time.time() - start) * 1000)
             bwd_time = sum(bwd_times) / len(bwd_times)
             check_error(cudart().cudaProfilerStop())
@@ -148,7 +135,7 @@ def plot_results(args, results):
     ax1.set_xlabel("Batch Size")
     ax1.set_ylabel("Time (ms)")
     ax1.set_title("Forward/Backward Time vs Batch Size")
-    ax1.legend()
+    ax1.legend(loc="upper left", bbox_to_anchor=(1, 1))
     ax1.grid(True, alpha=0.3)
 
     # Plot 2: Time vs Sequence Length (for different batch sizes)
@@ -182,14 +169,14 @@ def main():
         "--batch-sizes",
         nargs="+",
         type=int,
-        default=[1, 4, 16, 32],
+        default=[1, 2, 4, 8, 16, 32],
         help="List of batch sizes to test",
     )
     parser.add_argument(
         "--seq-lens",
         nargs="+",
         type=int,
-        default=[512, 1024, 2048, 4096, 8192],
+        default=[512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192],
         help="List of sequence lengths to test",
     )
     parser.add_argument(
@@ -216,7 +203,7 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="outputs/test/custom/flash_attn",
+        default="outputs/test/custom/flash_attention",
         help="Output directory",
     )
     parser.add_argument(
@@ -231,6 +218,8 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if device == "cpu":
         raise RuntimeError("FlashAttention requires CUDA")
+    with open("tmp.txt", "w") as f:
+        f.write(f"device: {device}\n")
 
     dtype = torch.bfloat16 if args.bf16 else torch.float16
 

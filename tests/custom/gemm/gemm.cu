@@ -31,8 +31,8 @@ __global__ void matmul_kernel(
 int main(int argc, char** argv)
 {
     if (argc < 7) {
-        printf("Usage: ./matmul M N K block_x block_y grid_x grid_y\n");
-        printf("Example: ./matmul 1024 1024 1024 16 16 64 64\n");
+        printf("Usage: ./matmul M N K block_x block_y grid_x grid_y repeat\n");
+        printf("Example: ./matmul 1024 1024 1024 16 16 64 64 10\n");
         return 0;
     }
 
@@ -43,6 +43,7 @@ int main(int argc, char** argv)
     int block_y = atoi(argv[5]);
     int grid_x  = atoi(argv[6]);
     int grid_y  = atoi(argv[7]);
+    int repeat = atoi(argv[8]);
 
     printf("M=%d N=%d K=%d\n", M, N, K);
     printf("block = (%d, %d)\n", block_x, block_y);
@@ -72,8 +73,12 @@ int main(int argc, char** argv)
     CHECK_CUDA(cudaMemcpy(B, hB, bytesB, cudaMemcpyHostToDevice));
 
     // Launch kernel
-    matmul_kernel<<<grid, block>>>(A, B, C, M, N, K);
-    CHECK_CUDA(cudaDeviceSynchronize());
+    for (int i = 0; i < repeat; i++) {
+        nvtxRangePushA("matmul_kernel");
+        matmul_kernel<<<grid, block>>>(A, B, C, M, N, K);
+        CHECK_CUDA(cudaDeviceSynchronize());
+        nvtxRangePop();
+    }
 
     printf("Matmul finished.\n");
 

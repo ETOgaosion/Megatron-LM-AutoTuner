@@ -1,18 +1,12 @@
 import argparse
 import time
+import os
 
 import numpy as np
 import torch
 import triton
 import triton.language as tl
-from megatron.core.utils import (
-    configure_nvtx_profiling,
-    nvtx_decorator,
-    nvtx_range_pop,
-    nvtx_range_push,
-)
 from torch.cuda import check_error, cudart
-
 
 @triton.jit
 def matmul_kernel(
@@ -154,75 +148,169 @@ def get_args():
     return parser.parse_args()
 
 
-def draw_performance_figure(results, M, K, N):
+def draw_performance_figure(output_dir, results):
     """
     Draw performance comparison figure for different GEMM configurations.
 
     Args:
         results: List of tuples (config, forward_time, backward_time)
-        M, K, N: Matrix dimensions
     """
     import matplotlib.pyplot as plt
+    
+    # Group results by MKN and BMBKBN
+    mkn_groups = {}  # key: (M, K, N), value: list of (block_m, block_n, block_k, forward_time, backward_time)
+    block_groups = {}  # key: (block_m, block_n, block_k), value: list of (M, K, N, forward_time, backward_time)
+        
+    for config, forward_time, backward_time in results:
+        M, K, N, block_m, block_n, block_k = config
+        mkn_key = (M, K, N)
+        block_key = (block_m, block_n, block_k)
+        
+        if mkn_key not in mkn_groups:
+            mkn_groups[mkn_key] = []
+        mkn_groups[mkn_key].append((block_m, block_n, block_k, forward_time, backward_time))
+        
+        if block_key not in block_groups:
+            block_groups[block_key] = []
+        block_groups[block_key].append((M, K, N, forward_time, backward_time))
 
-    configs = [f"BM{c[0]}_BN{c[1]}_BK{c[2]}" for c, _, _ in results]
-    forward_times = [f for _, f, _ in results]
-    backward_times = [b for _, _, b in results]
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
 
-    x = np.arange(len(configs))
-    width = 0.35
+    # Plot 1: Forward time - MKN vs BMBKBN
+    for mkn_key, data in sorted(mkn_groups.items()):
+        M, K, N = mkn_key
+        data_sorted = sorted(data, key=lambda x: (x[0], x[1], x[2]))
+        block_labels = [f"{bm}_{bn}_{bk}" for bm, bn, bk, _, _ in data_sorted]
+        forward_times = [ft for _, _, _, ft, _ in data_sorted]
+        ax1.plot(block_labels, forward_times, marker='o', label=f"MKN={M}", linewidth=2)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-
-    # Bar chart
-    ax1.bar(x - width / 2, forward_times, width, label="Forward", alpha=0.8)
-    ax1.bar(x + width / 2, backward_times, width, label="Backward", alpha=0.8)
-    ax1.set_xlabel("Configuration")
+    ax1.set_xlabel("Block Configuration (BM_BN_BK)")
     ax1.set_ylabel("Time (seconds)")
-    ax1.set_title(f"GEMM Performance: A({M},{K}) @ B({K},{N})")
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(configs, rotation=45, ha="right")
+    ax1.set_title("Forward Time: MKN vs Block Configuration")
     ax1.legend()
     ax1.grid(True, alpha=0.3)
+    ax1.tick_params(axis='x', rotation=45)
 
-    # Line chart
-    ax2.plot(configs, forward_times, marker="o", label="Forward", linewidth=2)
-    ax2.plot(configs, backward_times, marker="s", label="Backward", linewidth=2)
-    ax2.set_xlabel("Configuration")
+    # Plot 2: Backward time - MKN vs BMBKBN
+    for mkn_key, data in sorted(mkn_groups.items()):
+        M, K, N = mkn_key
+        data_sorted = sorted(data, key=lambda x: (x[0], x[1], x[2]))
+        block_labels = [f"{bm}_{bn}_{bk}" for bm, bn, bk, _, _ in data_sorted]
+        backward_times = [bt for _, _, _, _, bt in data_sorted]
+        ax2.plot(block_labels, backward_times, marker='s', label=f"MKN={M}", linewidth=2)
+
+    ax2.set_xlabel("Block Configuration (BM_BN_BK)")
     ax2.set_ylabel("Time (seconds)")
-    ax2.set_title(f"GEMM Performance Trend")
-    ax2.set_xticklabels(configs, rotation=45, ha="right")
+    ax2.set_title("Backward Time: MKN vs Block Configuration")
     ax2.legend()
     ax2.grid(True, alpha=0.3)
+    ax2.tick_params(axis='x', rotation=45)
+
+    # Plot 3: Forward time - BMBKBN vs MKN
+    for block_key, data in sorted(block_groups.items()):
+        bm, bn, bk = block_key
+        data_sorted = sorted(data, key=lambda x: (x[0], x[1], x[2]))
+        mkn_labels = [M for M, K, N, _, _ in data_sorted]  # Assuming M=K=N
+        forward_times = [ft for _, _, _, ft, _ in data_sorted]
+        ax3.plot(mkn_labels, forward_times, marker='o', label=f"Block={bm}_{bn}_{bk}", linewidth=2)
+
+    ax3.set_xlabel("Matrix Size (M=K=N)")
+    ax3.set_ylabel("Time (seconds)")
+    ax3.set_title("Forward Time: Block Configuration vs Matrix Size")
+    ax3.legend()
+    ax3.grid(True, alpha=0.3)
+
+    # Plot 4: Backward time - BMBKBN vs MKN
+    for block_key, data in sorted(block_groups.items()):
+        bm, bn, bk = block_key
+        data_sorted = sorted(data, key=lambda x: (x[0], x[1], x[2]))
+        mkn_labels = [M for M, K, N, _, _ in data_sorted]
+        backward_times = [bt for _, _, _, _, bt in data_sorted]
+        ax4.plot(mkn_labels, backward_times, marker='s', label=f"Block={bm}_{bn}_{bk}", linewidth=2)
+
+    ax4.set_xlabel("Matrix Size (M=K=N)")
+    ax4.set_ylabel("Time (seconds)")
+    ax4.set_title("Backward Time: Block Configuration vs Matrix Size")
+    ax4.legend()
+    ax4.grid(True, alpha=0.3)
+
+    # configs = [f"M{c[0]}_K{c[1]}_N{c[2]}_BM{c[3]}_BN{c[4]}_BK{c[5]}" for c, _, _ in results]
+    # forward_times = [f for _, f, _ in results]
+    # backward_times = [b for _, _, b in results]
+
+    # x = np.arange(len(configs))
+    # width = 0.35
+
+    # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+    # # Bar chart
+    # ax1.bar(x - width / 2, forward_times, width, label="Forward", alpha=0.8)
+    # ax1.bar(x + width / 2, backward_times, width, label="Backward", alpha=0.8)
+    # ax1.set_xlabel("Configuration")
+    # ax1.set_ylabel("Time (seconds)")
+    # ax1.set_title(f"GEMM Performance: A({results[0][0][0]},{results[0][0][1]}) @ B({results[0][0][1]},{results[0][0][2]})")
+    # ax1.set_xticks(x)
+    # ax1.set_xticklabels(configs, rotation=45, ha="right")
+    # ax1.legend()
+    # ax1.grid(True, alpha=0.3)
+
+    # # Line chart
+    # ax2.plot(configs, forward_times, marker="o", label="Forward", linewidth=2)
+    # ax2.plot(configs, backward_times, marker="s", label="Backward", linewidth=2)
+    # ax2.set_xlabel("Configuration")
+    # ax2.set_ylabel("Time (seconds)")
+    # ax2.set_title(f"GEMM Performance Trend")
+    # ax2.set_xticklabels(configs, rotation=45, ha="right")
+    # ax2.legend()
+    # ax2.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig("gemm_performance.png", dpi=300, bbox_inches="tight")
-    print(f"\nPerformance figure saved to 'gemm_performance.png'")
+    plt.savefig(f"{output_dir}/gemm_performance.png", dpi=300, bbox_inches="tight")
+    print(f"\nPerformance figure saved to '{output_dir}/gemm_performance.png'")
     plt.close()
 
 
 # Testing function
 def test_matmul(
-    M=4096, K=4096, N=4096, configs=None, num_warmups=5, num_runs=1, draw=False
+    configs=None, num_warmups=5, num_runs=1, draw=False
 ):
     if configs is None:
         configs = [
-            (32, 32, 32, 8),
-            (64, 64, 32, 8),
-            (128, 128, 64, 8),
-            (256, 256, 64, 8),
+            (512, 512, 512, 32, 32, 32, 8),
+            (1024, 1024, 1024, 32, 32, 32, 8),
+            (2048, 2048, 2048, 32, 32, 32, 8),
+            (3072, 3072, 3072, 32, 32, 32, 8),
+            (4096, 4096, 4096, 32, 32, 32, 8),
+            (6144, 6144, 6144, 32, 32, 32, 8),
+            (8192, 8192, 8192, 32, 32, 32, 8),
+            
+            (512, 512, 512, 64, 64, 32, 8),
+            (1024, 1024, 1024, 64, 64, 32, 8),
+            (2048, 2048, 2048, 64, 64, 32, 8),
+            (3072, 3072, 3072, 64, 64, 32, 8),
+            (4096, 4096, 4096, 64, 64, 32, 8),
+            (6144, 6144, 6144, 64, 64, 32, 8),
+            (8192, 8192, 8192, 64, 64, 32, 8),
+            
+            (512, 512, 512, 128, 128, 64, 8),
+            (1024, 1024, 1024, 128, 128, 64, 8),
+            (2048, 2048, 2048, 128, 128, 64, 8),
+            (3072, 3072, 3072, 128, 128, 64, 8),
+            (4096, 4096, 4096, 128, 128, 64, 8),
+            (6144, 6144, 6144, 128, 128, 64, 8),
+            (8192, 8192, 8192, 128, 128, 64, 8),
         ]
 
     device = torch.device("cuda")
-    a = torch.randn(M, K, device=device, dtype=torch.float16)
-    b = torch.randn(K, N, device=device, dtype=torch.float16)
-    a.requires_grad = True
-    b.requires_grad = True
-
-    print(f"Testing GEMM for shapes A({M},{K}), B({K},{N})")
 
     results = []
 
-    for block_m, block_n, block_k, group_m in configs:
+    for M, K, N, block_m, block_n, block_k, group_m in configs:
+        print(f"Testing GEMM for shapes A({M},{K}), B({K},{N})")
+        a = torch.randn(M, K, device=device, dtype=torch.float16)
+        b = torch.randn(K, N, device=device, dtype=torch.float16)
+        a.requires_grad = True
+        b.requires_grad = True
         grid_size = (triton.cdiv(M, block_m) * triton.cdiv(N, block_n), 1, 1)
         print(
             f"\nConfig: BLOCK_M={block_m}, BLOCK_N={block_n}, BLOCK_K={block_k}, GROUP_M={group_m}, Grid={grid_size}"
@@ -232,7 +320,6 @@ def test_matmul(
         c = Matmul.apply(a, b, block_m, block_n, block_k, group_m)
 
         # Time forward
-        check_error(cudart().cudaProfilerStop())
         torch.cuda.synchronize()
         # warmup
         for _ in range(num_warmups):
@@ -243,40 +330,35 @@ def test_matmul(
         check_error(cudart().cudaProfilerStart())
         start = time.time()
         for _ in range(num_runs):
-            nvtx_range_push(
+            torch.cuda.nvtx.range_push(
                 f"GEMM Forward BLOCK_M={block_m} BLOCK_N={block_n} BLOCK_K={block_k}"
             )
             c = Matmul.apply(a, b, block_m, block_n, block_k, group_m)
-            nvtx_range_pop(
-                f"GEMM Forward BLOCK_M={block_m} BLOCK_N={block_n} BLOCK_K={block_k}"
-            )
+            torch.cuda.nvtx.range_pop()
         torch.cuda.synchronize()
-        check_error(cudart().cudaProfilerStop())
         forward_time = (time.time() - start) / num_runs
         print(f"Average forward time: {forward_time:.6f} seconds")
 
         # Time backward
         torch.cuda.synchronize()
         # warmup
-        for _ in range(num_warmups):
-            c = Matmul.apply(a, b, block_m, block_n, block_k, group_m)
-            c.sum().backward(retain_graph=True)
-            a.grad = None
-            b.grad = None
+        # for _ in range(num_warmups):
+        #     c = Matmul.apply(a, b, block_m, block_n, block_k, group_m)
+        #     c.sum().backward(retain_graph=True)
+        #     a.grad = None
+        #     b.grad = None
 
         # run
         torch.cuda.synchronize()
-        check_error(cudart().cudaProfilerStart())
+        # check_error(cudart().cudaProfilerStart())
         start = time.time()
         for _ in range(num_runs):
-            nvtx_range_push(
-                f"GEMM Backward BLOCK_M={block_m} BLOCK_N={block_n} BLOCK_K={block_k}"
-            )
             c = Matmul.apply(a, b, block_m, block_n, block_k, group_m)
-            c.sum().backward(retain_graph=True)
-            nvtx_range_pop(
+            torch.cuda.nvtx.range_push(
                 f"GEMM Backward BLOCK_M={block_m} BLOCK_N={block_n} BLOCK_K={block_k}"
             )
+            c.sum().backward(retain_graph=True)
+            torch.cuda.nvtx.range_pop()
             a.grad = None
             b.grad = None
         torch.cuda.synchronize()
@@ -286,10 +368,10 @@ def test_matmul(
         print(f"Average full (fwd+bwd) time: {full_time:.6f} seconds")
         print(f"Approximate backward time: {backward_time:.6f} seconds")
 
-        results.append(((block_m, block_n, block_k), forward_time, backward_time))
+        results.append(((M, K, N, block_m, block_n, block_k), forward_time, backward_time))
 
     if draw:
-        draw_performance_figure(results, M, K, N)
+        draw_performance_figure(args.output_dir, results)
 
 
 # Run the test (requires CUDA-enabled environment)

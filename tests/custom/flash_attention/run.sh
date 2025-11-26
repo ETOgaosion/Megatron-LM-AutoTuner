@@ -1,6 +1,6 @@
 #!/bin/bash
 
-KERNEL_NAME=${1:-flash_attn}
+KERNEL_NAME=${1:-flash_attention}
 
 mkdir -p outputs/test/custom/${KERNEL_NAME}
 
@@ -24,11 +24,10 @@ NSYS_ARGS=(
     -o "outputs/test/custom/${KERNEL_NAME}/nsight_report"
     -f true
     -x true
-    -t cuda,nvtx,cudnn,cublas,python-gil
-    --capture-range=cudaProfilerApi
-    --capture-range-end=repeat
-    --cudabacktrace=all
-    --cuda-memory-usage=true
+    -t nvtx,cudnn,cublas,python-gil
+    # --capture-range=cudaProfilerApi
+    # --cudabacktrace=all
+    # --cuda-memory-usage=true
     --python-backtrace=cuda
     --enable network_interface
     --python-sampling=true
@@ -44,16 +43,17 @@ else
     echo "Warning: GPU metrics are not usable due to insufficient privileges. Proceeding without GPU metrics."
 fi
 
-nsys profile "${NSYS_ARGS[@]}" python -m tests.custom.${KERNEL_NAME}.${KERNEL_NAME} --iterations 1
+nsys profile "${NSYS_ARGS[@]}" python tests/custom/${KERNEL_NAME}/${KERNEL_NAME}.py --iterations 2
 
 
 # 3. Run with ncu again to capture more accurate metrics
-NCU_ARGS=(
-    --set full
-    --nvtx enable
-    --call-stack true
-    --target-processes all
-    --export "outputs/test/custom/${KERNEL_NAME}/ncu_report.ncu-rep"
-)
+# NCU_ARGS=(
+#     --set full
+#     --nvtx
+#     # --call-stack true
+#     --call-stack-type python
+#     # --target-processes all
+#     --export "outputs/test/custom/${KERNEL_NAME}/ncu_report.ncu-rep"
+# )
 
-ncu ${NCU_ARGS[@]} python -m tests.custom.${KERNEL_NAME}.${KERNEL_NAME} --iterations 1
+# ncu ${NCU_ARGS[@]} python tests/custom/${KERNEL_NAME}/${KERNEL_NAME}.py --iterations 2
