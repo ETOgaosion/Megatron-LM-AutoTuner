@@ -1,3 +1,4 @@
+import os
 from typing import Tuple
 
 import matplotlib.pyplot as plt
@@ -11,60 +12,86 @@ from transformer_engine.pytorch.module.linear import Linear
 # ================================================================
 
 
-def plot_results(results, output_dir):
-    """
-    Plot forward and backward pass times in 3D.
+def draw_performance_plots(results, output_dir="outputs/test/custom/linear"):
+    import matplotlib.pyplot as plt
 
-    Args:
-        results: List of tuples (batch_size, seqlen, hidden_size, fwd_time, bwd_time)
-    """
-    # Group results by batch size
-    batch_size_groups = {}
-    for batch_size, seqlen, hidden_size, fwd_time, bwd_time in results:
-        if batch_size not in batch_size_groups:
-            batch_size_groups[batch_size] = []
-        batch_size_groups[batch_size].append((seqlen, hidden_size, fwd_time, bwd_time))
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Create two subplots for forward and backward times
-    fig = plt.figure(figsize=(16, 6))
+    # Extract data
+    B_vals = sorted(set(r["B"] for r in results))
+    S_vals = sorted(set(r["S"] for r in results))
+    D_vals = sorted(set(r["D"] for r in results))
 
-    # Forward pass plot
-    ax1 = fig.add_subplot(121, projection="3d")
-    for batch_size, data in sorted(batch_size_groups.items()):
-        seqlens = [d[0] for d in data]
-        hidden_sizes = [d[1] for d in data]
-        fwd_times = [d[2] for d in data]
-        ax1.plot(
-            seqlens, hidden_sizes, fwd_times, marker="o", label=f"Batch={batch_size}"
-        )
+    # Create a dictionary for quick lookup
+    data_dict = {}
+    for r in results:
+        key = (r["B"], r["S"], r["D"])
+        data_dict[key] = r
 
-    ax1.set_xlabel("Sequence Length")
-    ax1.set_ylabel("Hidden Size")
-    ax1.set_zlabel("Forward Time (ms)")
-    ax1.set_title("Forward Pass Time")
-    ax1.legend()
+    fig = plt.figure(figsize=(20, 8))
 
-    # Backward pass plot
-    ax2 = fig.add_subplot(122, projection="3d")
-    for batch_size, data in sorted(batch_size_groups.items()):
-        seqlens = [d[0] for d in data]
-        hidden_sizes = [d[1] for d in data]
-        bwd_times = [d[3] for d in data]
-        ax2.plot(
-            seqlens, hidden_sizes, bwd_times, marker="o", label=f"Batch={batch_size}"
-        )
+    metrics = [
+        ("fwd_ms", "Linear Forward"),
+        ("bwd_ms", "Linear Backward"),
+    ]
 
-    ax2.set_xlabel("Sequence Length")
-    ax2.set_ylabel("Hidden Size")
-    ax2.set_zlabel("Backward Time (ms)")
-    ax2.set_title("Backward Pass Time")
-    ax2.legend()
+    for idx, (metric, title) in enumerate(metrics, 1):
+        ax = fig.add_subplot(1, 2, idx, projection="3d")
+
+        # Plot varying B (fix S, D)
+        for S in S_vals:
+            for D in D_vals:
+                b_data, times = [], []
+                for B in B_vals:
+                    if (B, S, D) in data_dict:
+                        b_data.append(B)
+                        times.append(data_dict[(B, S, D)][metric])
+                if b_data:
+                    ax.plot(
+                        b_data,
+                        [S] * len(b_data),
+                        times,
+                        marker="o",
+                        label=f"S={S},D={D}",
+                    )
+
+        # Plot varying S (fix B, D)
+        for B in B_vals:
+            for D in D_vals:
+                s_data, times = [], []
+                for S in S_vals:
+                    if (B, S, D) in data_dict:
+                        s_data.append(S)
+                        times.append(data_dict[(B, S, D)][metric])
+                if s_data:
+                    ax.plot([B] * len(s_data), s_data, times, marker="s", alpha=0.7)
+
+        # Plot varying D (fix B, S)
+        for B in B_vals:
+            for S in S_vals:
+                d_data, times = [], []
+                for D in D_vals:
+                    if (B, S, D) in data_dict:
+                        d_data.append(D)
+                        times.append(data_dict[(B, S, D)][metric])
+                if d_data:
+                    ax.plot(
+                        [B] * len(d_data),
+                        [S] * len(d_data),
+                        times,
+                        marker="^",
+                        alpha=0.7,
+                    )
+
+        ax.set_xlabel("Batch Size (B)")
+        ax.set_ylabel("Sequence Length (S)")
+        ax.set_zlabel("Time (ms)")
+        ax.set_title(title)
+        ax.legend(fontsize=6, loc="upper left")
 
     plt.tight_layout()
-    plt.savefig(
-        f"{output_dir}/linear_benchmark_results.png", dpi=300, bbox_inches="tight"
-    )
-    plt.show()
+    plt.savefig(f"{output_dir}/linear_performance.png", dpi=150)
+    print(f"Performance plot saved to {output_dir}/linear_performance.png")
 
 
 def test_linear(
@@ -73,7 +100,6 @@ def test_linear(
     hidden_sizes: Tuple[int] = (128, 256, 512, 1024, 2048, 4096),
     num_warmup: int = 50,
     num_iters: int = 100,
-    output_dir: str = "outputs/test/custom/linear",
 ):
     device = torch.device("cuda")
 
@@ -118,23 +144,22 @@ def test_linear(
                     loss = y.sum()
                     loss.backward(retain_graph=True)
                     optimizer.step()
-                    linear.zero_grad_parameters()
                 end_event.record()
                 torch.cuda.synchronize()
                 elapsed_time = start_event.elapsed_time(end_event)  # milliseconds
                 avg_bwd_time_per_iter = elapsed_time / num_iters - avg_fwd_time_per_iter
 
                 results.append(
-                    (
-                        batch_size,
-                        seqlen,
-                        hidden_size,
-                        avg_fwd_time_per_iter,
-                        avg_bwd_time_per_iter,
-                    )
+                    {
+                        "B": batch_size,
+                        "S": seqlen,
+                        "D": hidden_size,
+                        "fwd_ms": avg_fwd_time_per_iter,
+                        "bwd_ms": avg_bwd_time_per_iter,
+                    }
                 )
 
-    plot_results(results, output_dir)
+    return results
 
 
 def get_args():
@@ -148,6 +173,9 @@ def get_args():
         "--num_iters", type=int, default=100, help="Number of benchmark iterations."
     )
     parser.add_argument(
+        "--draw", action="store_true", help="Whether to draw the plots."
+    )
+    parser.add_argument(
         "--output_dir",
         type=str,
         default="outputs/test/custom/linear",
@@ -158,6 +186,6 @@ def get_args():
 
 if __name__ == "__main__":
     args = get_args()
-    test_linear(
-        num_warmup=args.num_warmup, num_iters=args.num_iters, output_dir=args.output_dir
-    )
+    results = test_linear(num_warmup=args.num_warmup, num_iters=args.num_iters)
+    if args.draw:
+        draw_performance_plots(results, args.output_dir)

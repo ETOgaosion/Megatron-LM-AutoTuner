@@ -2,6 +2,7 @@
 
 KERNEL_NAME=${1:-linear}
 PROFILE_MODE=${2:-all}
+export CUDA_VISIBLE_DEVICES=1
 
 echo "Profiling mode: ${PROFILE_MODE}"
 
