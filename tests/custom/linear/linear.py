@@ -92,16 +92,16 @@ def draw_performance_plots(results, output_dir="outputs/test/custom/linear"):
     plt.tight_layout()
     plt.savefig(f"{output_dir}/linear_performance_bs.png", dpi=150)
     print(f"Performance plot saved to {output_dir}/linear_performance_bs.png")
-    
+
     # 2D plots: D vs Time for different (B, S) combinations
     fig2, axes = plt.subplots(1, 2, figsize=(16, 6))
-    
+
     for idx, (metric, title) in enumerate(metrics):
         ax = axes[idx]
-        
+
         # For each unique (B, S) combination, plot D vs time
         bs_combinations = sorted(set((r["B"], r["S"]) for r in results))
-        
+
         for B, S in bs_combinations:
             d_vals, times = [], []
             for D in D_vals:
@@ -109,14 +109,14 @@ def draw_performance_plots(results, output_dir="outputs/test/custom/linear"):
                     d_vals.append(D)
                     times.append(data_dict[(B, S, D)][metric])
             if d_vals:
-                ax.plot(d_vals, times, marker='o', label=f"B={B}, S={S}")
-        
+                ax.plot(d_vals, times, marker="o", label=f"B={B}, S={S}")
+
         ax.set_xlabel("Hidden Size (D)")
         ax.set_ylabel("Time (ms)")
         ax.set_title(title)
-        ax.legend(fontsize=8, bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.legend(fontsize=8, bbox_to_anchor=(1.05, 1), loc="upper left")
         ax.grid(True, alpha=0.3)
-    
+
     plt.tight_layout()
     plt.savefig(f"{output_dir}/linear_performance_d.png", dpi=150)
     print(f"Performance plot saved to {output_dir}/linear_performance_d.png")

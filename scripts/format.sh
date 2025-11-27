@@ -3,6 +3,7 @@
 DIR_LIST=(
     AutoTuner
     tests
+    tools
 )
 
 for dir in "${DIR_LIST[@]}"; do
