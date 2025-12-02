@@ -6,6 +6,7 @@ from AutoTuner.testbench.ops_test.postprocess_test import TestPostprocess
 from AutoTuner.testbench.ops_test.preprocess_test import TestPreprocess
 from AutoTuner.testbench.ops_test.self_attention_test import TestSelfAttention
 from AutoTuner.testbench.ops_test.transformers_layer_test import TestTransformerLayer
+from AutoTuner.testbench.ops_test.dot_product_attention_test import TestTEDotProductAttention
 
 OP_TEST_MAPPING = {
     "Embedding": TestLanguageModelEmbedding,
@@ -16,4 +17,5 @@ OP_TEST_MAPPING = {
     "TransformerLayer": TestTransformerLayer,
     "GPTModel": TestGPTModel,
     "SelfAttention": TestSelfAttention,
+    "TEDotProductAttention": TestTEDotProductAttention
 }
