@@ -1,12 +1,12 @@
-from megatron.core.parallel_state import get_context_parallel_group, get_tensor_model_parallel_group
-from .common import CommonOpsForTest
-from megatron.core.extensions.transformer_engine import TEDotProductAttention
-from megatron.core.transformer.transformer_config import TransformerConfig
-from megatron.core.transformer.enums import AttnMaskType
-from torch import Tensor
-from megatron.core.packed_seq_params import PackedSeqParams
 import torch
-
+from megatron.core.extensions.transformer_engine import TEDotProductAttention
+from megatron.core.packed_seq_params import PackedSeqParams
+from megatron.core.parallel_state import (
+    get_context_parallel_group,
+    get_tensor_model_parallel_group,
+)
+from megatron.core.transformer.enums import AttnMaskType
+from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import (
     get_pg_rank,
     get_pg_size,
@@ -15,31 +15,34 @@ from megatron.core.utils import (
     is_te_min_version,
     is_torch_min_version,
 )
+from torch import Tensor
+
+from .common import CommonOpsForTest
+
 
 class TEDotProductAttentionForTest(CommonOpsForTest, TEDotProductAttention):
     # 这个继承顺序只是为了补全方便，实际上没有影响
-    
+
     def __init__(
         self,
         config: TransformerConfig,
-        layer_number, #layer_number: layer number of the current `DotProductAttention` when multiple such modules are concatenated, for instance in consecutive transformer blocks.
+        layer_number,  # layer_number: layer number of the current `DotProductAttention` when multiple such modules are concatenated, for instance in consecutive transformer blocks.
         attn_mask_type: AttnMaskType = AttnMaskType.causal,
-        attention_type: str = "self", # default self for above 95% llm's attn type is self
-        hook_activation: bool = False
-        ):
+        attention_type: str = "self",  # default self for above 95% llm's attn type is self
+        hook_activation: bool = False,
+    ):
         TEDotProductAttention.__init__(
-            self, 
-            config, 
-            layer_number, 
-            attn_mask_type, 
-            attention_type)
+            self, config, layer_number, attn_mask_type, attention_type
+        )
         CommonOpsForTest.__init__(
-            self, 
-            hook_activation=hook_activation, 
-            module_name="te_dot_product_attention")
+            self,
+            hook_activation=hook_activation,
+            module_name="te_dot_product_attention",
+        )
         self.config = config
-    
-    def _forward(self,
+
+    def _forward(
+        self,
         query: Tensor,
         key: Tensor,
         value: Tensor,
@@ -50,11 +53,14 @@ class TEDotProductAttentionForTest(CommonOpsForTest, TEDotProductAttention):
     ):
         """Forward."""
         packed_seq_kwargs = (
-            {key: getattr(packed_seq_params, key) for key in self.kept_packed_seq_params}
+            {
+                key: getattr(packed_seq_params, key)
+                for key in self.kept_packed_seq_params
+            }
             if packed_seq_params is not None
             else {}
         )
-        qkv_format = packed_seq_kwargs.get('qkv_format', self.qkv_format)
+        qkv_format = packed_seq_kwargs.get("qkv_format", self.qkv_format)
         attention_bias_kwargs = {}
         if attention_bias is not None:
             assert is_te_min_version("1.2.0"), (
@@ -62,7 +68,8 @@ class TEDotProductAttentionForTest(CommonOpsForTest, TEDotProductAttention):
                 "`attention_bias`."
             )
             attention_bias_kwargs = dict(
-                core_attention_bias_type="post_scale_bias", core_attention_bias=attention_bias
+                core_attention_bias_type="post_scale_bias",
+                core_attention_bias=attention_bias,
             )
 
         # this is for decoding, so commented
@@ -92,11 +99,16 @@ class TEDotProductAttentionForTest(CommonOpsForTest, TEDotProductAttention):
             )
         else:
             core_attn_out = super(TEDotProductAttention, self).forward(
-                query, key, value, attention_mask, **attention_bias_kwargs, **packed_seq_kwargs
+                query,
+                key,
+                value,
+                attention_mask,
+                **attention_bias_kwargs,
+                **packed_seq_kwargs,
             )
 
         return core_attn_out
-    
+
     def forward(
         self,
         query: Tensor,
@@ -104,12 +116,20 @@ class TEDotProductAttentionForTest(CommonOpsForTest, TEDotProductAttention):
         value: Tensor,
         attention_mask: Tensor,
         packed_seq_params: PackedSeqParams = None,
-        attn_mask_type: AttnMaskType = AttnMaskType.causal, #先设置默认值，未来可能修改
+        attn_mask_type: AttnMaskType = AttnMaskType.causal,  # 先设置默认值，未来可能修改
         attention_bias: Tensor = None,
     ) -> Tensor:
         self.activation_hook.clear()
         with torch.autograd.graph.saved_tensors_hooks(
             self.activation_hook.save_hook, self.activation_hook.load_hook
         ):
-            ret = self._forward(query, key, value, attention_mask, attn_mask_type, attention_bias, packed_seq_params)
+            ret = self._forward(
+                query,
+                key,
+                value,
+                attention_mask,
+                attn_mask_type,
+                attention_bias,
+                packed_seq_params,
+            )
             return ret
