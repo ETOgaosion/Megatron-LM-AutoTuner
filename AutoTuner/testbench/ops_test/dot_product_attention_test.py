@@ -13,12 +13,11 @@ from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
 
-from AutoTuner.utils.memory import MemoryTracker, MemoryTrackerContext, get_memory_str
+from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
 from AutoTuner.utils.structs import InputTestCase
 
 from ..ops.dot_product_attention import TEDotProductAttentionForTest
 from ..profile.configs.config_struct import ProfileMode
-from .common import TestCommon
 from .test_with_hiddens import TestWithHiddenInputs
 
 
@@ -43,6 +42,7 @@ class TestTEDotProductAttention(TestWithHiddenInputs):
             theoretical_flops=theoretical_flops,
             theoretical_activations=theoretical_activations,
         )
+        self.module_name = "TEDotProductAttention"
 
         self.self_attention = SelfAttention(
             tf_config,
@@ -54,8 +54,8 @@ class TestTEDotProductAttention(TestWithHiddenInputs):
         if profile_mode == ProfileMode.collect_data:
             with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
                 self.op = TEDotProductAttentionForTest(
-                    tf_config, layer_number=1, hook_activation=False
-                )  # TODO: 写完理论计算之后将这里改为false
+                    tf_config, layer_number=layer_number, hook_activation=False
+                )  # TODO: 写完理论计算之后将这里的false改为True
 
             detailed_mem_report = memory_tracker_ctx.get_result()
 
@@ -70,7 +70,7 @@ class TestTEDotProductAttention(TestWithHiddenInputs):
 
         else:
             self.op = TEDotProductAttentionForTest(
-                tf_config, layer_number=1, hook_activation=False
+                tf_config, layer_number=layer_number, hook_activation=False
             )
 
     @override
@@ -94,7 +94,6 @@ class TestTEDotProductAttention(TestWithHiddenInputs):
             k = k.reshape(k.shape[0] * k.shape[1], k.shape[2], k.shape[3])
             v = v.reshape(v.shape[0] * v.shape[1], v.shape[2], v.shape[3])
         return (q, k, v, attention_mask, packed_seq_params)
-        # return super().prepare_input(test_case, micro_batch)
 
     @override
     def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:

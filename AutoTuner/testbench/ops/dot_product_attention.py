@@ -1,19 +1,11 @@
 import torch
 from megatron.core.extensions.transformer_engine import TEDotProductAttention
 from megatron.core.packed_seq_params import PackedSeqParams
-from megatron.core.parallel_state import (
-    get_context_parallel_group,
-    get_tensor_model_parallel_group,
-)
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import (
-    get_pg_rank,
-    get_pg_size,
     get_te_version,
-    get_tensor_model_parallel_group_if_none,
     is_te_min_version,
-    is_torch_min_version,
 )
 from torch import Tensor
 
@@ -37,7 +29,7 @@ class TEDotProductAttentionForTest(CommonOpsForTest, TEDotProductAttention):
         CommonOpsForTest.__init__(
             self,
             hook_activation=hook_activation,
-            module_name="te_dot_product_attention",
+            module_name="TEDotProductAttention",
         )
         self.config = config
 
@@ -88,6 +80,8 @@ class TEDotProductAttentionForTest(CommonOpsForTest, TEDotProductAttention):
                     attn_mask_type = AttnMaskType.padding_causal
                 elif attn_mask_type == AttnMaskType.no_mask:
                     attn_mask_type = AttnMaskType.padding
+                    
+            # 这里的调用方法是对的，下面也一样，就是调用TEDotProductionAttention的父类的forward方法
             core_attn_out = super(TEDotProductAttention, self).forward(
                 query,
                 key,
