@@ -1,9 +1,11 @@
-from contextlib import nullcontext
 import logging
+from collections import OrderedDict
+from contextlib import nullcontext
 from typing import Optional, Union
 
 import torch
-from megatron.core import tensor_parallel
+from megatron.core import parallel_state, tensor_parallel
+from megatron.core.config_logger import has_config_logger_enabled, log_config_to_disk
 from megatron.core.enums import Fp8Recipe
 from megatron.core.extensions.transformer_engine import te_checkpoint
 from megatron.core.fp4_utils import get_fp4_context
@@ -12,23 +14,33 @@ from megatron.core.inference.contexts.base_context import BaseInferenceContext
 from megatron.core.models.gpt.gpt_model import GPTModel
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.process_groups_config import ProcessGroupCollection
+from megatron.core.tensor_parallel import gather_from_sequence_parallel_region
+from megatron.core.transformer.multi_token_prediction import (
+    MTPLossAutoScaler,
+    MTPLossLoggingHelper,
+    roll_tensor,
+)
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
+from megatron.core.transformer.transformer_block import (
+    TransformerBlock,
+    TransformerBlockSubmodules,
+    _get_block_submodules,
+)
 from megatron.core.transformer.transformer_config import TransformerConfig
+from megatron.core.transformer.transformer_layer import get_transformer_layer_offset
+from megatron.core.utils import (
+    WrappedTensor,
+    deprecate_inference_params,
+    get_pg_rank,
+    make_viewless_tensor,
+)
 from torch import Tensor
+from transformer_engine.pytorch.cpu_offload import get_cpu_offload_context
 from transformers import PretrainedConfig
 
 from AutoTuner.utils.memory import ActivationHook, MemoryTracker
 from AutoTuner.utils.nvtx import nvtx_decorator, nvtx_range_pop, nvtx_range_push
-from megatron.core.transformer.multi_token_prediction import roll_tensor
-from megatron.core.tensor_parallel import gather_from_sequence_parallel_region
-from megatron.core.transformer.multi_token_prediction import MTPLossLoggingHelper, MTPLossAutoScaler
-from megatron.core.transformer.transformer_layer import get_transformer_layer_offset
-from megatron.core.utils import WrappedTensor, deprecate_inference_params, get_pg_rank, make_viewless_tensor
-from megatron.core import parallel_state
-from megatron.core.config_logger import has_config_logger_enabled, log_config_to_disk
-from collections import OrderedDict
-from megatron.core.transformer.transformer_block import TransformerBlock, TransformerBlockSubmodules, _get_block_submodules
-from transformer_engine.pytorch.cpu_offload import get_cpu_offload_context
+
 from .common import CommonOpsForTest
 
 
@@ -98,9 +110,13 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             packed_seq_params=packed_seq_params,
         )
 
-        (decoder_input, rotary_pos_emb, rotary_pos_cos, rotary_pos_sin, sequence_len_offset) = (
-            preproc_output[:5]
-        )
+        (
+            decoder_input,
+            rotary_pos_emb,
+            rotary_pos_cos,
+            rotary_pos_sin,
+            sequence_len_offset,
+        ) = preproc_output[:5]
 
         rotary_pos_cos_sin = preproc_output[5] if len(preproc_output) == 6 else None
 
@@ -136,7 +152,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             extra_block_kwargs=extra_block_kwargs,
             inference_context=None,
         )
-    
+
     @nvtx_decorator(message="preprocess")
     def _preprocess(
         self,
@@ -162,7 +178,9 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         if decoder_input is not None:
             pass
         elif self.pre_process:
-            decoder_input = self.embedding(input_ids=input_ids, position_ids=position_ids)
+            decoder_input = self.embedding(
+                input_ids=input_ids, position_ids=position_ids
+            )
         else:
             # intermediate stage of pipeline
             # decoder will get hidden_states from encoder.input_tensor
@@ -177,12 +195,17 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         # this is used to store combined cos/sin embeddings, exclusively for flash infer rope
         rotary_pos_cos_sin = None
 
-        if self.position_embedding_type == 'rope' and not self.config.multi_latent_attention:
+        if (
+            self.position_embedding_type == "rope"
+            and not self.config.multi_latent_attention
+        ):
             use_flash_infer_fused_rope = (
-                hasattr(inference_context, 'use_flashinfer_fused_rope')
+                hasattr(inference_context, "use_flashinfer_fused_rope")
                 and inference_context.use_flashinfer_fused_rope
             )
-            if in_inference_mode and (self.config.flash_decode or use_flash_infer_fused_rope):
+            if in_inference_mode and (
+                self.config.flash_decode or use_flash_infer_fused_rope
+            ):
                 assert (
                     not self.config.flash_decode
                 ) or inference_context.is_static_batching(), (
@@ -190,32 +213,48 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
                 )
                 # Flash decoding uses precomputed cos and sin for RoPE
                 if self.config.flash_decode:
-                    rotary_pos_cos, rotary_pos_sin = self.rotary_pos_emb_cache.setdefault(
-                        inference_context.max_sequence_length,
-                        self.rotary_pos_emb.get_cos_sin(inference_context.max_sequence_length),
+                    rotary_pos_cos, rotary_pos_sin = (
+                        self.rotary_pos_emb_cache.setdefault(
+                            inference_context.max_sequence_length,
+                            self.rotary_pos_emb.get_cos_sin(
+                                inference_context.max_sequence_length
+                            ),
+                        )
                     )
                 elif use_flash_infer_fused_rope:
-                    assert not self.mtp_process, "MTP not tested with flashinfer_fused_rope"
+                    assert (
+                        not self.mtp_process
+                    ), "MTP not tested with flashinfer_fused_rope"
                     rotary_pos_cos_sin = self.rotary_pos_emb_cache.setdefault(
                         inference_context.max_sequence_length,
                         torch.cat(
-                            self.rotary_pos_emb.get_cos_sin(inference_context.max_sequence_length),
+                            self.rotary_pos_emb.get_cos_sin(
+                                inference_context.max_sequence_length
+                            ),
                             -1,
                         ),
                     )
             else:
                 rotary_seq_len = self.rotary_pos_emb.get_rotary_seq_len(
-                    inference_context, self.decoder, decoder_input, self.config, packed_seq_params
+                    inference_context,
+                    self.decoder,
+                    decoder_input,
+                    self.config,
+                    packed_seq_params,
                 )
                 rotary_pos_emb = self.rotary_pos_emb(
                     rotary_seq_len,
                     packed_seq=packed_seq_params is not None
-                    and packed_seq_params.qkv_format == 'thd',
+                    and packed_seq_params.qkv_format == "thd",
                 )
-        elif self.position_embedding_type == 'yarn':
+        elif self.position_embedding_type == "yarn":
             if self.training or not self.config.flash_decode:
                 rotary_seq_len = self.rotary_pos_emb.get_rotary_seq_len(
-                    inference_context, self.decoder, decoder_input, self.config, packed_seq_params
+                    inference_context,
+                    self.decoder,
+                    decoder_input,
+                    self.config,
+                    packed_seq_params,
                 )
                 rotary_pos_emb, _ = self.rotary_pos_emb(rotary_seq_len)
             else:
@@ -223,7 +262,10 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
                     "Flash decoding uses precomputed cos and sin for RoPE, not implemented in "
                     "YarnRotaryEmbedding yet."
                 )
-        elif self.position_embedding_type == 'mrope' and not self.config.multi_latent_attention:
+        elif (
+            self.position_embedding_type == "mrope"
+            and not self.config.multi_latent_attention
+        ):
             if self.training or not self.config.flash_decode:
                 rotary_pos_emb = self.rotary_pos_emb(position_ids, self.mrope_section)
             else:
@@ -236,7 +278,10 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         if (
             in_inference_mode
             and (
-                (self.config.enable_cuda_graph and self.config.cuda_graph_scope != "full_iteration")
+                (
+                    self.config.enable_cuda_graph
+                    and self.config.cuda_graph_scope != "full_iteration"
+                )
                 or self.config.flash_decode
             )
             and rotary_pos_cos is not None
@@ -271,8 +316,9 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             # legacy unit tests, which break if you
             # return a 6 tuple instead of 5.
             preproc_output += (rotary_pos_cos_sin,)
-        
+
         return preproc_output
+
     @nvtx_decorator(message="postprocess")
     def _postprocess(
         self,
@@ -311,7 +357,6 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         if not self.post_process:
             return hidden_states
 
-        
         if mtp_in_postprocess:
             nvtx_range_push(suffix="mtp_forward")
             hidden_states = self.mtp(
@@ -333,7 +378,9 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         if self.mtp_process:
             nvtx_range_push(suffix="mtp_loss")
             mtp_labels = labels.clone()
-            hidden_states_list = torch.chunk(hidden_states, 1 + self.config.mtp_num_layers, dim=0)
+            hidden_states_list = torch.chunk(
+                hidden_states, 1 + self.config.mtp_num_layers, dim=0
+            )
             hidden_states = hidden_states_list[0]
             if loss_mask is None:
                 # if loss_mask is not provided, use all ones as loss_mask
@@ -346,7 +393,9 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
                     runtime_gather_output=runtime_gather_output,
                 )
                 # Calc loss for the current Multi-Token Prediction (MTP) layers.
-                mtp_labels, _ = roll_tensor(mtp_labels, shifts=-1, dims=-1, cp_group=self.cp_group)
+                mtp_labels, _ = roll_tensor(
+                    mtp_labels, shifts=-1, dims=-1, cp_group=self.cp_group
+                )
                 loss_mask, num_tokens = roll_tensor(
                     loss_mask, shifts=-1, dims=-1, cp_group=self.cp_group
                 )
@@ -363,7 +412,9 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
                             with_context_parallel=True
                         ),
                     )
-                mtp_loss_scale = self.config.mtp_loss_scaling_factor / self.config.mtp_num_layers
+                mtp_loss_scale = (
+                    self.config.mtp_loss_scaling_factor / self.config.mtp_num_layers
+                )
                 if self.config.calculate_per_token_loss:
                     hidden_states = MTPLossAutoScaler.apply(
                         hidden_states, mtp_loss_scale * mtp_loss
@@ -399,7 +450,9 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
                 ).unsqueeze(1)
 
         logits, _ = self.output_layer(
-            hidden_states, weight=output_weight, runtime_gather_output=runtime_gather_output
+            hidden_states,
+            weight=output_weight,
+            runtime_gather_output=runtime_gather_output,
         )
         nvtx_range_pop(suffix="output_layer")
 
@@ -415,14 +468,14 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         if has_config_logger_enabled(self.config):
             payload = OrderedDict(
                 {
-                    'input_ids': input_ids,
-                    'position_ids': position_ids,
-                    'attention_mask': attention_mask,
-                    'decoder_input': decoder_input,
-                    'logits': logits,
+                    "input_ids": input_ids,
+                    "position_ids": position_ids,
+                    "attention_mask": attention_mask,
+                    "decoder_input": decoder_input,
+                    "logits": logits,
                 }
             )
-            log_config_to_disk(self.config, payload, prefix='input_and_logits')
+            log_config_to_disk(self.config, payload, prefix="input_and_logits")
 
         if labels is None:
             # [s b h] => [b s h]
@@ -431,7 +484,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         loss = self.compute_language_model_loss(labels, logits)
 
         return loss
-    
+
     def forward(
         self,
         input_ids: Tensor,
@@ -541,7 +594,9 @@ class NVTXDecoder(TransformerBlock):
             [s, b, h], and optionally the updated context tensor if cross-attention is used.
         """
 
-        inference_context = deprecate_inference_params(inference_context, inference_params)
+        inference_context = deprecate_inference_params(
+            inference_context, inference_params
+        )
         # Remove 'dynamic_inference_decode_only' from kwargs if present
         # this is only used to uniquely identify decode and non-decode cuda graph
         # runners in the cuda graph manager
@@ -569,7 +624,9 @@ class NVTXDecoder(TransformerBlock):
         #   likely redundant, since p2p_communication.py (likely originator)
         #   already creates viewless tensors. That said, make_viewless_tensor()
         #   is called here to be future-proof and corner-case-proof.
-        hidden_states = make_viewless_tensor(inp=hidden_states, requires_grad=True, keep_graph=True)
+        hidden_states = make_viewless_tensor(
+            inp=hidden_states, requires_grad=True, keep_graph=True
+        )
 
         if self.config.sequence_parallel:
             rng_context = tensor_parallel.get_cuda_rng_tracker().fork()
@@ -586,7 +643,9 @@ class NVTXDecoder(TransformerBlock):
             use_outer_quantization_context = self.config.fp8_recipe == Fp8Recipe.delayed
             use_inner_quantization_context = self.config.fp8_recipe != Fp8Recipe.delayed
             outer_quantization_context = (
-                get_fp8_context(self.config) if use_outer_quantization_context else nullcontext()
+                get_fp8_context(self.config)
+                if use_outer_quantization_context
+                else nullcontext()
             )
         elif self.config.fp4:
             use_outer_quantization_context = False
@@ -601,7 +660,7 @@ class NVTXDecoder(TransformerBlock):
         with rng_context, outer_quantization_context:
             # Forward pass.
             nvtx_range_push(suffix="Transformer Layers")
-            if self.config.recompute_granularity == 'full' and self.training:
+            if self.config.recompute_granularity == "full" and self.training:
                 hidden_states = self._checkpointed_forward(
                     hidden_states=hidden_states,
                     attention_mask=attention_mask,
@@ -615,7 +674,7 @@ class NVTXDecoder(TransformerBlock):
             else:
                 for l_no, layer in enumerate(self.layers):
                     # Get appropriate inner quantization context
-                    layer_number = getattr(layer, 'layer_number', l_no + 1)
+                    layer_number = getattr(layer, "layer_number", l_no + 1)
                     nvtx_range_push(suffix=f"Layer_{layer_number}")
                     if use_inner_quantization_context:
                         if self.config.fp8:
@@ -652,7 +711,9 @@ class NVTXDecoder(TransformerBlock):
                         and self.config.cpu_offloading
                         and self.group_prefetch_offload_commit_async is not None
                     ):
-                        hidden_states = self.group_prefetch_offload_commit_async(hidden_states)
+                        hidden_states = self.group_prefetch_offload_commit_async(
+                            hidden_states
+                        )
                     nvtx_range_pop(suffix=f"Layer_{layer_number}")
             nvtx_range_pop(suffix="Transformer Layers")
         # Final layer norm.
@@ -673,5 +734,3 @@ class NVTXDecoder(TransformerBlock):
             hidden_states = hidden_states.clone()
 
         return hidden_states
-
-    

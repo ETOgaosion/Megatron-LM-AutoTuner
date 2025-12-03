@@ -8,13 +8,13 @@ from AutoTuner.utils.config import (
     get_hf_model_config,
     get_mcore_model_config_from_hf_config,
 )
+from AutoTuner.utils.memory_snapshots import (
+    aggressive_empty_cache,
+)
 from AutoTuner.utils.model_inputs import DataSets
 from AutoTuner.utils.nested_dict import NestedDict
 from AutoTuner.utils.structs import InputTestCase
 from AutoTuner.utils.tp_overlap import destroy_ub, initialize_tp_communicators
-from AutoTuner.utils.memory_snapshots import (
-    aggressive_empty_cache,
-)
 
 from ..configs.config_struct import ProfileConfig
 from ..op_mapping import OP_TEST_MAPPING

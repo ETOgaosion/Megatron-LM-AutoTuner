@@ -10,7 +10,7 @@ from AutoTuner.utils.memory_snapshots import (
 )
 from AutoTuner.utils.structs import InputTestCase
 
-from ..configs.config_struct import ProfileConfig, ProfileMode, MemorySnapshotConfig
+from ..configs.config_struct import MemorySnapshotConfig, ProfileConfig, ProfileMode
 from ..op_mapping import OP_TEST_MAPPING
 from .launcher import Launcher
 

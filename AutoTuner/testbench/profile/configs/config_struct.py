@@ -44,9 +44,12 @@ class TorchProfilerConfig:
         "log_dir"  # will be in `outputs/timestamp/hf_model_name/torch_profiler/log_dir`
     )
 
+
 @dataclass
 class MemorySnapshotConfig:
-    snapshot_interval: int = 1  # interval between two snapshots in number of operator runs
+    snapshot_interval: int = (
+        1  # interval between two snapshots in number of operator runs
+    )
     output_dir: str = (
         "memory_snapshots"  # will be in `outputs/timestamp/hf_model_name/memory_snapshots/`
     )

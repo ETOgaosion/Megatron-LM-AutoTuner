@@ -1,8 +1,8 @@
 import abc
+import gc
 import os
 from abc import ABC
 from typing import Any, Iterator, List, Optional, Tuple
-import gc
 
 import megatron.core.parallel_state as mpu
 import torch
@@ -161,7 +161,10 @@ class TestCommon(TheoreticalCalculation):
                 check_error(cudart().cudaProfilerStop())
                 self.cur_iters += 1
             self.op.zero_grad(set_to_none=True)
-        elif self.profile_mode == ProfileMode.torch_profiler or self.profile_mode == ProfileMode.torch_memory_snapshot:
+        elif (
+            self.profile_mode == ProfileMode.torch_profiler
+            or self.profile_mode == ProfileMode.torch_memory_snapshot
+        ):
             """
             When using torch profiler, we do warmup outside
             """
