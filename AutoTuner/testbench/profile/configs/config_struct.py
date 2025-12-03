@@ -5,12 +5,14 @@ class ProfileMode:
     collect_data: int = 0
     nsys_profile: int = 1
     torch_profiler: int = 2
+    torch_memory_snapshot: int = 3
 
 
 PROFILE_MODEL_MAP = {
     ProfileMode.collect_data: "collect_data",
     ProfileMode.nsys_profile: "nsys_profile",
     ProfileMode.torch_profiler: "torch_profiler",
+    ProfileMode.torch_memory_snapshot: "torch_memory_snapshot",
 }
 
 
@@ -40,4 +42,11 @@ class TorchProfilerConfig:
     # on_trace_ready: object = None  # if None, will be set to torch.profiler.tensorboard_trace_handler('./log_dir')
     output_dir: str = (
         "log_dir"  # will be in `outputs/timestamp/hf_model_name/torch_profiler/log_dir`
+    )
+
+@dataclass
+class MemorySnapshotConfig:
+    snapshot_interval: int = 1  # interval between two snapshots in number of operator runs
+    output_dir: str = (
+        "memory_snapshots"  # will be in `outputs/timestamp/hf_model_name/memory_snapshots/`
     )

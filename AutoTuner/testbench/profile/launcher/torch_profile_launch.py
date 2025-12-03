@@ -61,12 +61,6 @@ class LaunchTorchProfileForOps(Launcher):
             with_flops=self.torch_profiler_config.with_flops,
             with_modules=self.torch_profiler_config.with_modules,
         )
-        self.snapshot_sampler = MemorySnapshotSampler(
-            out_dir=self.torch_profiler_config.output_dir
-        )
-        enable_memory_visualize(
-            trace_alloc_max_entries=100000, context="all", stacks="all"
-        )
 
     def _run_op(self, op_name: str, test_case_idxs: list[int]):
         op_test_class = OP_TEST_MAPPING.get(op_name)
@@ -145,12 +139,6 @@ class LaunchTorchProfileForOps(Launcher):
                 self.run_op(op_name, test_case_idxs, inner_prof=inner_prof)
         if not inner_prof:
             self.prof.stop()
-        combined_tag = "_".join(op_name_list)
-        self.snapshot_sampler.dump_memory_snapshot(
-            tag=combined_tag,
-            out_dir=self.torch_profiler_config.output_dir,
-            sub_dir="memory_snapshot",
-        )
         print(
             f"Torch profiling completed, trace saved to {self.torch_profiler_config.output_dir}."
         )

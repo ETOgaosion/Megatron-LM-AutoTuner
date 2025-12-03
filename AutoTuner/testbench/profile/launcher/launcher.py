@@ -12,6 +12,9 @@ from AutoTuner.utils.model_inputs import DataSets
 from AutoTuner.utils.nested_dict import NestedDict
 from AutoTuner.utils.structs import InputTestCase
 from AutoTuner.utils.tp_overlap import destroy_ub, initialize_tp_communicators
+from AutoTuner.utils.memory_snapshots import (
+    aggressive_empty_cache,
+)
 
 from ..configs.config_struct import ProfileConfig
 from ..op_mapping import OP_TEST_MAPPING
@@ -105,6 +108,7 @@ class Launcher:
                 and test_case.shape == "bshd"
             ):
                 destroy_ub()
+        aggressive_empty_cache(force_sync=True)
         return op_class_instance
 
     def run_op_list(self, op_name_list: list[str], test_case_idxs: list[int]):
@@ -113,6 +117,7 @@ class Launcher:
         for op_name in op_name_list:
             print(f"Running operator: {op_name}")
             self.run_op(op_name, test_case_idxs)
+            aggressive_empty_cache(force_sync=True)
 
     def run_all_supported_ops(self, test_case_idxs: list[int]):
         self.run_op_list(self.all_supported_ops, test_case_idxs)
