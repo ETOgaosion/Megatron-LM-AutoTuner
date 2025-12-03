@@ -15,6 +15,7 @@ TO_DOWNLOAD=(
     "Qwen/Qwen3-14B-Base"
     "Qwen/Qwen3-30B-A3B-Base"
     "Qwen/Qwen3-235B-A22B"
+    "deepseek-ai/DeepSeek-V3-Base"
 )
 
 # Check if HFD_LOCATION is set and the file exists

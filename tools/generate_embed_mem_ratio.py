@@ -16,6 +16,7 @@ MODELS = [
     "Qwen/Qwen3-14B-Base",
     "Qwen/Qwen3-30B-A3B-Base",
     "Qwen/Qwen3-235B-A22B",
+    "deepseek-ai/DeepSeek-V3-Base",
 ]
 
 
@@ -58,15 +59,18 @@ def get_model_embed_info(model_name: str, config_base_dir: str):
     with open(config_path, "r") as f:
         config = json.load(f)
 
+    num_layers = config.get("num_hidden_layers", 1)
+
     vocab_size = config.get("vocab_size", None)
     hidden_size = config.get("hidden_size", None)
     num_attention_heads = config.get("num_attention_heads", 1)
     num_query_groups = config.get("num_key_value_heads", num_attention_heads)
     kv_channels = config.get("head_dim", hidden_size // num_attention_heads)
-    query_proj_size = hidden_size
+    query_proj_size = kv_channels * num_attention_heads
     kv_proj_size = kv_channels * num_query_groups
     ffn_hidden_size = config.get("intermediate_size", 4 * hidden_size)
-    num_experts = config.get("num_experts", 1)
+    moe_ffn_hidden_size = config.get("moe_intermediate_size", ffn_hidden_size)
+    num_experts = config.get("num_experts", config.get("n_routed_experts", 1))
 
     seqlen = 2048  # Assuming a default sequence length
 
@@ -75,25 +79,40 @@ def get_model_embed_info(model_name: str, config_base_dir: str):
         (
             hidden_size * (query_proj_size + 2 * kv_proj_size)
             + hidden_size * query_proj_size
-            + 2 * hidden_size * ffn_hidden_size * num_experts
+            + 3 * hidden_size * moe_ffn_hidden_size * num_experts
         )
         * 2
         / (2**30)
     )
-    return (embedding_weights, transformer_layer_weights)
+    return {
+        "model_name": model_name,
+        "num_layers": num_layers,
+        "vocab_size": vocab_size,
+        "hidden_size": hidden_size,
+        "num_attention_heads": num_attention_heads,
+        "num_query_groups": num_query_groups,
+        "kv_channels": kv_channels,
+        "query_proj_size": query_proj_size,
+        "kv_proj_size": kv_proj_size,
+        "ffn_hidden_size": ffn_hidden_size,
+        "num_experts": num_experts,
+        "embedding_weights": embedding_weights,
+        "transformer_layer_weights": transformer_layer_weights,
+    }
 
 
 def plot_and_export_embed_info(config_base_dir, output_dir):
+    FONT_SIZE = 16
+
     total_embedding_weights = []
     total_transformer_layer_weights = []
+    total_configs = []
     for model in MODELS:
         print(f"Handling {model}")
-        embedding_weights, transformer_layer_weights = get_model_embed_info(
-            model, config_base_dir
-        )
-
-        total_embedding_weights.append(embedding_weights)
-        total_transformer_layer_weights.append(transformer_layer_weights)
+        results = get_model_embed_info(model, config_base_dir)
+        total_configs.append(results)
+        total_embedding_weights.append(results["embedding_weights"])
+        total_transformer_layer_weights.append(results["transformer_layer_weights"])
 
     # Create figure and axis
     fig, axes = plt.subplots(2, 1, figsize=(12, 12))
@@ -116,12 +135,14 @@ def plot_and_export_embed_info(config_base_dir, output_dir):
     )
 
     # Customize the plot
-    axes[0].set_xlabel("Model")
-    axes[0].set_ylabel("Weights (GB)")
-    axes[0].set_title("Embedding Weights vs Transformer Layer Weights by Model")
+    axes[0].set_xlabel("Model", fontsize=FONT_SIZE)
+    axes[0].set_ylabel("Weights (GB)", fontsize=FONT_SIZE)
+    axes[0].set_title(
+        "Embedding Weights vs Transformer Layer Weights by Model", fontsize=FONT_SIZE
+    )
     axes[0].set_xticks(x)
-    axes[0].set_xticklabels(model_names, rotation=45, ha="right")
-    axes[0].legend()
+    axes[0].set_xticklabels(model_names, rotation=45, ha="right", fontsize=FONT_SIZE)
+    axes[0].legend(fontsize=FONT_SIZE)
     axes[0].grid(axis="y", alpha=0.3)
 
     # Create stacked bar chart
@@ -133,12 +154,14 @@ def plot_and_export_embed_info(config_base_dir, output_dir):
     axes[1].hlines(1, -1, len(x) + 1, colors="black", linestyles="dashed")
 
     # Customize the plot
-    axes[1].set_xlabel("Model")
-    axes[1].set_ylabel("Ratio")
-    axes[1].set_title("Embedding Weights vs Transformer Layer Weights Ratio")
+    axes[1].set_xlabel("Model", fontsize=FONT_SIZE)
+    axes[1].set_ylabel("Ratio", fontsize=FONT_SIZE)
+    axes[1].set_title(
+        "Embedding Weights vs Transformer Layer Weights Ratio", fontsize=FONT_SIZE
+    )
     axes[1].set_xticks(x)
-    axes[1].set_xticklabels(model_names, rotation=45, ha="right")
-    axes[1].legend()
+    axes[1].set_xticklabels(model_names, rotation=45, ha="right", fontsize=FONT_SIZE)
+    axes[1].legend(fontsize=FONT_SIZE)
     axes[1].grid(axis="y", alpha=0.3)
     axes[1].set_xlim(-1, len(x))
 
@@ -159,6 +182,9 @@ def plot_and_export_embed_info(config_base_dir, output_dir):
     json_path = os.path.join(output_dir, "embed_mem_ratio.json")
     with open(json_path, "w") as f:
         json.dump(data, f, indent=2)
+    config_path = os.path.join(output_dir, "configs.json")
+    with open(config_path, "w") as f:
+        json.dump(total_configs, f, indent=2)
     print(f"Data saved to {json_path}")
 
 
