@@ -118,7 +118,7 @@ class TestLanguageModelEmbedding(TestCommon):
 
         # Calculate activation memory
         if test_case.shape == "bshd":
-            # activations: input_mask(dtype=bool)、masked_input(dtype=int64)
+            # activations: input_mask(dtype=bool), masked_input(dtype=int64)
             activation_mem = (
                 test_case.micro_batch_size * test_case.seqlen * 8
                 + test_case.micro_batch_size * test_case.seqlen * 1
