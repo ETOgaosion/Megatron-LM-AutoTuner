@@ -88,7 +88,7 @@ class TestLanguageModelEmbedding(TestCommon):
 
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
-        if test_case.shape=='bshd':
+        if test_case.shape == "bshd":
             micro_batch = micro_batch.to(torch.cuda.current_device())
             micro_batch = micro_batch.contiguous()
             input_ids_bshd = micro_batch.get("input_ids")
@@ -115,19 +115,21 @@ class TestLanguageModelEmbedding(TestCommon):
         Calculate theoretical memory usage from the perspective of a single rank.
         """
         cp_size = test_case.context_parallel_size
-        
+
         # Calculate activation memory
-        if test_case.shape == 'bshd':
+        if test_case.shape == "bshd":
             # activations: input_mask(dtype=bool)、masked_input(dtype=int64)
-            activation_mem = test_case.micro_batch_size * test_case.seqlen * 8   \
-                            + test_case.micro_batch_size * test_case.seqlen * 1
-        else :  # thd
-            activation_mem = test_case.max_token_len * 8  + test_case.max_token_len * 1
-            
+            activation_mem = (
+                test_case.micro_batch_size * test_case.seqlen * 8
+                + test_case.micro_batch_size * test_case.seqlen * 1
+            )
+        else:  # thd
+            activation_mem = test_case.max_token_len * 8 + test_case.max_token_len * 1
+
         activation_mem = activation_mem // cp_size
 
         return {"activations": {"activations": activation_mem}}
-    
+
     @override
     def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:
         """
