@@ -88,12 +88,19 @@ class TestLanguageModelEmbedding(TestCommon):
 
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
-        micro_batch = micro_batch.to(torch.cuda.current_device())
-        micro_batch = micro_batch.contiguous()
-        input_ids_rmpad, attention_mask, position_ids_rmpad, packed_seq_params = (
-            get_thd_model_input_from_bshd(micro_batch)
-        )
-        return input_ids_rmpad, position_ids_rmpad
+        if test_case.shape == "bshd":
+            micro_batch = micro_batch.to(torch.cuda.current_device())
+            micro_batch = micro_batch.contiguous()
+            input_ids_bshd = micro_batch.get("input_ids")
+            position_ids_bshd = micro_batch.get("position_ids")
+            return input_ids_bshd, position_ids_bshd
+        else:
+            micro_batch = micro_batch.to(torch.cuda.current_device())
+            micro_batch = micro_batch.contiguous()
+            input_ids_rmpad, attention_mask, position_ids_rmpad, packed_seq_params = (
+                get_thd_model_input_from_bshd(micro_batch)
+            )
+            return input_ids_rmpad, position_ids_rmpad
 
     @override
     def calculate_tokens(
@@ -107,25 +114,20 @@ class TestLanguageModelEmbedding(TestCommon):
         """
         Calculate theoretical memory usage from the perspective of a single rank.
         """
-        # Get dimensions and configuration
-        hidden_size = self.hf_config.hidden_size
-        micro_batch_size = test_case.micro_batch_size
-        seq_len = test_case.seqlen
-        dtype = getattr(self.hf_config, "dtype", torch.float16)
-        bytes_per_param = torch.tensor([], dtype=dtype).element_size()
-
-        # Get all parallel parameters
-        tp_size = test_case.tensor_model_parallel_size
-        sp_is_enabled = self.op.config.sequence_parallel
         cp_size = test_case.context_parallel_size
 
         # Calculate activation memory
-        activation_mem = micro_batch_size * seq_len * hidden_size * bytes_per_param
-        if sp_is_enabled:
-            activation_mem = activation_mem // tp_size
+        if test_case.shape == "bshd":
+            # activations: input_mask(dtype=bool), masked_input(dtype=int64)
+            activation_mem = (
+                test_case.micro_batch_size * test_case.seqlen * 8
+                + test_case.micro_batch_size * test_case.seqlen * 1
+            )
+        else:  # thd
+            activation_mem = test_case.max_token_len * 8 + test_case.max_token_len * 1
 
-        if cp_size > 1:
-            activation_mem = activation_mem // cp_size
+        activation_mem = activation_mem // cp_size
+
         return {"activations": {"activations": activation_mem}}
 
     @override
