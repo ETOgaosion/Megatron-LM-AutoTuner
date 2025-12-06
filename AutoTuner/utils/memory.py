@@ -167,10 +167,10 @@ class ActivationHook:
         self.online_mem_res = 0
 
     def get_activation_memory(self) -> int:
-        mem = 0
-        if not self.online:
-            for tensor in self.activation_tensors:
-                mem += tensor.numel() * tensor.element_size()
-        else:
+        if self.online:
             return self.online_mem_res
+        mem = 0
+        
+        for tensor in self.activation_tensors:
+            mem += tensor.numel() * tensor.element_size()
         return mem

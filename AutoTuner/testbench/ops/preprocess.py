@@ -22,10 +22,10 @@ class PreprocessForTest(nn.Module, CommonOpsForTest):
         embedding: LanguageModelEmbedding,
         rotary_pos_emb: RotaryEmbedding,
         config: TransformerConfig,
-    ):  
+    ):
         nn.Module.__init__(self)
         CommonOpsForTest.__init__(
-            self, 
+            self,
             hook_activation=False,
             module_name="Preprocess",
             logging_level=logging.INFO,

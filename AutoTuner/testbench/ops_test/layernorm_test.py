@@ -142,12 +142,26 @@ class TestLayerNorm(TestCommon):
             N_tokens = test_case.micro_batch_size * test_case.seqlen
         elif test_case.shape == "thd":
             N_tokens = test_case.batch_size * test_case.seqlen
-            
+
+        # Theoretical memory calculation for activations:
         if self.tf_config.normalization == "RMSNorm":
-            activation = N_tokens * self.tf_config.hidden_size * 2 + N_tokens * 1 * 4 # 1 for rstdevs
+            # For RMSNorm:
+            #   - N_tokens * hidden_size * 2:
+            #       - hidden_states input (N_tokens * hidden_size)
+            #       - 2 for byte count of bf16/fp16 type
+            #   - N_tokens * 1 * 4:
+            #       - intermediate buffer for per-token root mean square (rstdevs), stored as float32 (4 bytes)
+            #       - 1 value per token
+            activation = N_tokens * self.tf_config.hidden_size * 2 + N_tokens * 1 * 4
         else:
-            # LayerNorm
-            activation = N_tokens * self.tf_config.hidden_size * 2 + N_tokens * 4 * 2 # 2 for rstdevs and means
+            # For LayerNorm:
+            #   - N_tokens * hidden_size * 2:
+            #       - hidden_states input (N_tokens * hidden_size)
+            #       - 2 for byte count of bf16/fp16 type
+            #   - N_tokens * 4 * 2:
+            #       - intermediate buffers for per-token mean and variance, each stored as float32 (4 bytes)
+            #       - 2 values (mean, restdevs) per token
+            activation = N_tokens * self.tf_config.hidden_size * 2 + N_tokens * 4 * 2
         return {"activations": {"activations": activation}}
 
     @override
