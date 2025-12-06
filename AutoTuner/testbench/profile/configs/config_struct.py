@@ -12,7 +12,7 @@ PROFILE_MODEL_MAP = {
     ProfileMode.collect_data: "collect_data",
     ProfileMode.nsys_profile: "nsys_profile",
     ProfileMode.torch_profiler: "torch_profiler",
-    ProfileMode.torch_memory_snapshot: "torch_memory_snapshot",
+    ProfileMode.torch_memory_snapshot: "memory_snapshots",
 }
 
 

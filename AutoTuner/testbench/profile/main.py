@@ -342,7 +342,7 @@ def call_launcher(
                 output_dir=os.path.join(
                     args.output_dir,
                     args.model_name,
-                    "memory_snapshots",
+                    PROFILE_MODEL_MAP[ProfileMode.torch_memory_snapshot],
                     # f"rank_{torch.distributed.get_rank()}",
                 ),
             )

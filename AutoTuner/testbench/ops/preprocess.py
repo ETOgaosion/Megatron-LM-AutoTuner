@@ -11,18 +11,21 @@ from megatron.core.utils import nvtx_decorator, nvtx_range_pop, nvtx_range_push
 from torch import Tensor
 
 from .common import CommonOpsForTest
+import torch.nn as nn
 
 
 # Preprocess = embedding + rope
 # Preprocess has no operator in megatron, so we do not inherit from it
-class PreprocessForTest(CommonOpsForTest):
+class PreprocessForTest(nn.Module, CommonOpsForTest):
     def __init__(
         self,
         embedding: LanguageModelEmbedding,
         rotary_pos_emb: RotaryEmbedding,
         config: TransformerConfig,
     ):
-        super().__init__(
+        nn.Module.__init__(self)
+        CommonOpsForTest.__init__(
+            self,
             hook_activation=False,
             module_name="Preprocess",
             logging_level=logging.INFO,
