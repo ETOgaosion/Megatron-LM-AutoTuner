@@ -248,7 +248,8 @@ class TestCommon(TheoreticalCalculation):
 
     def run_test(self, test_case: InputTestCase, batch_data_generator: Iterator):
         for batch_data in batch_data_generator:
-            inputs = self.prepare_input(test_case, batch_data)
+            with torch.no_grad():
+                inputs = self.prepare_input(test_case, batch_data)
             tokens = self.calculate_tokens(test_case, batch_data, inputs)
             self.run_micro_batch(test_case, inputs, tokens)
             del inputs

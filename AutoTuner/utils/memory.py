@@ -134,11 +134,14 @@ class ActivationHook:
         enable: bool = True,
         module_name: str = "",
         logging_level: int = logging.INFO,
+        online: bool = False
     ):
         self.activation_tensors = []
         self.enable = enable
         self.module_name = module_name
         self.logging_level = logging_level
+        self.online_mem_res = 0
+        self.online = online
 
     def save_hook(self, x) -> object:
         if self.enable:
@@ -147,6 +150,8 @@ class ActivationHook:
                 level=self.logging_level,
             )
             self.activation_tensors.append(x)
+            if self.online:
+                self.online_mem_res += x.numel() * x.element_size()
         return x  # 必须返回 x，否则计算图会出错
 
     def load_hook(self, x) -> object:
@@ -159,9 +164,13 @@ class ActivationHook:
 
     def clear(self) -> None:
         self.activation_tensors = []
+        self.online_mem_res = 0
 
     def get_activation_memory(self) -> int:
         mem = 0
-        for tensor in self.activation_tensors:
-            mem += tensor.numel() * tensor.element_size()
+        if not self.online:
+            for tensor in self.activation_tensors:
+                mem += tensor.numel() * tensor.element_size()
+        else:
+            return self.online_mem_res
         return mem

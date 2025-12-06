@@ -12,9 +12,10 @@ class CommonOpsForTest(ABC):
         hook_activation: bool = False,
         module_name: str = "common_ops",
         logging_level: int = logging.INFO,
+        online: bool = False # control the hook's activation memory calculation logic
     ):
         self.activation_hook = ActivationHook(
-            enable=hook_activation, module_name=module_name, logging_level=logging_level
+            enable=hook_activation, module_name=module_name, logging_level=logging_level, online=online
         )
 
     def get_activation_memory(self) -> Dict[str, int]:

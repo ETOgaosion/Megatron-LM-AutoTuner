@@ -136,7 +136,19 @@ class TestLayerNorm(TestCommon):
 
     @override
     def calc_theoretical_memory(self, test_case: InputTestCase) -> Dict[str, int]:
-        return {"activations": {"activations": 0}}
+        activation = 0
+        N_tokens = 0
+        if test_case.shape == "bshd":
+            N_tokens = test_case.micro_batch_size * test_case.seqlen
+        elif test_case.shape == "thd":
+            N_tokens = test_case.batch_size * test_case.seqlen
+            
+        if self.tf_config.normalization == "RMSNorm":
+            activation = N_tokens * self.tf_config.hidden_size * 2 + N_tokens * 1 * 4 # 1 for rstdevs
+        else:
+            # LayerNorm
+            activation = N_tokens * self.tf_config.hidden_size * 2 + N_tokens * 4 * 2 # 2 for rstdevs and means
+        return {"activations": {"activations": activation}}
 
     @override
     def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:
