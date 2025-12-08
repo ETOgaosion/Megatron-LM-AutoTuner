@@ -152,7 +152,7 @@ class ActivationHook:
             self.activation_tensors.append(x)
             if self.online:
                 self.online_mem_res += x.numel() * x.element_size()
-        return x  # 必须返回 x，否则计算图会出错
+        return x  # Must return x, otherwise the computation graph will error
 
     def load_hook(self, x) -> object:
         if self.enable:
