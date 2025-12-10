@@ -134,7 +134,7 @@ class ActivationHook:
         enable: bool = True,
         module_name: str = "",
         logging_level: int = logging.INFO,
-        online: bool = False
+        online: bool = False,
     ):
         self.activation_tensors = []
         self.enable = enable
@@ -170,7 +170,7 @@ class ActivationHook:
         if self.online:
             return self.online_mem_res
         mem = 0
-        
+
         for tensor in self.activation_tensors:
             mem += tensor.numel() * tensor.element_size()
         return mem

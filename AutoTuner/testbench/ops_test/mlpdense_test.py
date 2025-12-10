@@ -1,17 +1,22 @@
-from AutoTuner.testbench.ops.mlpdense import MLPDenseForTest
-from AutoTuner.utils.structs import InputTestCase
-from megatron.core.extensions.transformer_engine import TELayerNormColumnParallelLinear, TERowParallelLinear
+from typing import Any, Dict, Optional
+
+import torch
+from megatron.core import parallel_state
+from megatron.core.extensions.transformer_engine import (
+    TELayerNormColumnParallelLinear,
+    TERowParallelLinear,
+)
 from megatron.core.transformer.mlp import MLPSubmodules
 from megatron.core.transformer.transformer_config import TransformerConfig
-import torch
-from typing import Any, Dict, Optional
+from transformers import PretrainedConfig
 from typing_extensions import override
 
+from AutoTuner.testbench.ops.mlpdense import MLPDenseForTest
 from AutoTuner.testbench.ops_test.test_with_hiddens import TestWithHiddenInputs
 from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
 from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
-from megatron.core import parallel_state
-from transformers import PretrainedConfig
+from AutoTuner.utils.structs import InputTestCase
+
 
 class TestMLPDense(TestWithHiddenInputs):
     def __init__(
@@ -60,10 +65,10 @@ class TestMLPDense(TestWithHiddenInputs):
                     ffn_hidden_size=self.ffn_hidden_size,
                     tp_group=tp_group,
                     hook_activation=False,
-                ) # TODO: 写完理论计算之后将这里的false改为True
-            
+                )  # TODO: 写完理论计算之后将这里的false改为True
+
             detailed_mem_report = memory_tracker_ctx.get_result()
-            
+
             # TODO: theoretical weight memory
             estimated_weight_mem_bytes = 0
             estimated_weight_mem_str = get_memory_str(
@@ -82,7 +87,7 @@ class TestMLPDense(TestWithHiddenInputs):
                 tp_group=tp_group,
                 hook_activation=False,
             )
-                
+
     @override
     def calculate_tokens(
         self, test_case: InputTestCase, micro_batch: Any, inputs: Any

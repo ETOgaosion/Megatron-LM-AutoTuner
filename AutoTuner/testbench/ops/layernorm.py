@@ -28,7 +28,7 @@ class LayerNormForTest(torch.nn.Module, CommonOpsForTest):
             hook_activation=hook_activation,
             module_name="LayerNorm",
             logging_level=logging.INFO,
-            online=True
+            online=True,
         )
         normalization_type = tf_config.normalization
         if tf_config.transformer_impl == "transformer_engine":

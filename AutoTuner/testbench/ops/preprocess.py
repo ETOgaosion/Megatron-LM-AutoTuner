@@ -1,6 +1,7 @@
 import logging
 
 import torch
+import torch.nn as nn
 from megatron.core.models.common.embeddings.language_model_embedding import (
     LanguageModelEmbedding,
 )
@@ -11,7 +12,6 @@ from megatron.core.utils import nvtx_decorator, nvtx_range_pop, nvtx_range_push
 from torch import Tensor
 
 from .common import CommonOpsForTest
-import torch.nn as nn
 
 
 # Preprocess = embedding + rope

@@ -2,15 +2,13 @@ import logging
 from contextlib import nullcontext
 from typing import Optional, Tuple, Union
 
+import torch
+from megatron.core import tensor_parallel
 from megatron.core.extensions.transformer_engine import TEFusedMLP
 from megatron.core.inference.contexts.base_context import BaseInferenceContext
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.transformer.mlp import MLPSubmodules
 from megatron.core.transformer.transformer_config import TransformerConfig
-import torch
-from megatron.core import tensor_parallel
-from torch import Tensor
-
 from megatron.core.utils import (
     WrappedTensor,
     make_viewless_tensor,
@@ -18,8 +16,10 @@ from megatron.core.utils import (
     nvtx_range_pop,
     nvtx_range_push,
 )
+from torch import Tensor
 
 from .common import CommonOpsForTest
+
 
 class MLPDenseForTest(CommonOpsForTest, TEFusedMLP):
     def __init__(
@@ -50,7 +50,7 @@ class MLPDenseForTest(CommonOpsForTest, TEFusedMLP):
 
     @nvtx_decorator(message="MLP forward")
     def _forward(self, hidden_states: Tensor) -> Tuple[Tensor, Optional[Tensor]]:
-        
+
         if self._fused_impl is None:
             self._fused_impl = (self._make_fused_impl(),)
 
@@ -67,8 +67,9 @@ class MLPDenseForTest(CommonOpsForTest, TEFusedMLP):
                 bias = None
 
         return out, bias
-    
-    def forward(self,
+
+    def forward(
+        self,
         hidden_states: Union[Tensor, WrappedTensor],
         attention_mask: Optional[Tensor],
         rotary_pos_emb: Optional[Tensor] = None,
