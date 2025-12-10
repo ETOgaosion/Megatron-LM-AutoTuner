@@ -89,13 +89,6 @@ class TestMLPDense(TestWithHiddenInputs):
             )
 
     @override
-    def calculate_tokens(
-        self, test_case: InputTestCase, micro_batch: Any, inputs: Any
-    ) -> int:
-        # TODO: implement token calculation for MLPDense
-        return 0
-
-    @override
     def calc_theoretical_memory(self, test_case: InputTestCase) -> Dict[str, int]:
         # TODO: implement theoretical activation memory calculation
         return {"activations": {"activations": 0}}
