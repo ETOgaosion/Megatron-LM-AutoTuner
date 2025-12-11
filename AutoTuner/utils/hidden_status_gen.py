@@ -64,6 +64,10 @@ class HiddenStatusGenerator:
             ),
             tf_config,
         )
+        for p in self.genhidden.embedding.parameters():
+            p.requires_grad = False
+        for p in self.genhidden.rotary_pos_emb.parameters():
+            p.requires_grad = False
 
     # We get inputs for decoder after preprocess
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
