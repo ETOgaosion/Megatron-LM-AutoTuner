@@ -4,6 +4,7 @@ import torch
 from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
+from megatron.core.process_groups_config import ProcessGroupCollection
 
 # from megatron.core.extensions.transformer_engine import TELayerNormColumnParallelLinear
 from megatron.core.transformer.attention import SelfAttention
@@ -51,10 +52,16 @@ class TestTEDotProductAttention(TestWithHiddenInputs):
             attn_mask_type=AttnMaskType.causal,
         )
 
+        for p in self.self_attention.parameters():
+            p.requires_grad = False
+
         if profile_mode == ProfileMode.collect_data:
             with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
                 self.op = TEDotProductAttentionForTest(
-                    tf_config, layer_number=layer_number, hook_activation=False
+                    tf_config,
+                    layer_number=layer_number,
+                    hook_activation=False,
+                    pg_collection=ProcessGroupCollection.use_mpu_process_groups(),
                 )  # TODO: 写完理论计算之后将这里的false改为True
 
             detailed_mem_report = memory_tracker_ctx.get_result()
@@ -70,7 +77,10 @@ class TestTEDotProductAttention(TestWithHiddenInputs):
 
         else:
             self.op = TEDotProductAttentionForTest(
-                tf_config, layer_number=layer_number, hook_activation=False
+                tf_config,
+                layer_number=layer_number,
+                hook_activation=False,
+                pg_collection=ProcessGroupCollection.use_mpu_process_groups(),
             )
 
     @override
