@@ -95,7 +95,7 @@ class MoELayerForTest(MoELayer, CommonOpsForTest):
             output = self.combine(output, shared_expert_output)
             nvtx_range_pop(suffix="combine")
             return output, mlp_bias
-
+           
         if self.moe_layer_recompute:
             if self.config.fp8:
                 output, mlp_bias = te_checkpoint(
@@ -114,6 +114,52 @@ class MoELayerForTest(MoELayer, CommonOpsForTest):
 
         return output, mlp_bias
 
+    
+    def experts_compute(
+        self, hidden_states: torch.Tensor, probs: torch.Tensor, residual: torch.Tensor
+    ):
+        """Computes the output of the experts on the dispatched tokens.
+
+        This method first post-processes the dispatched input to get permuted tokens
+        for each expert. It then passes the tokens through the local experts.
+        If a shared expert is configured and not overlapped with communication,
+        it is also applied. The output from the experts is preprocessed for the
+        combine step.
+        """
+        shared_expert_output = None
+        if self.use_shared_expert and not self.shared_expert_overlap:
+            # Compute the shared expert separately when not overlapped with communication.
+            nvtx_range_push(suffix="shared_experts")
+            if self.shared_experts_recompute:
+                if self.config.fp8:
+                    shared_expert_output = te_checkpoint(
+                        self.shared_experts,
+                        False,
+                        tensor_parallel.random.get_cuda_rng_tracker,
+                        parallel_state.get_tensor_model_parallel_group(),
+                        residual,
+                    )
+                else:
+                    shared_expert_output = tensor_parallel.checkpoint(
+                        self.shared_experts, False, residual
+                    )
+            else:
+                shared_expert_output = self.shared_experts(residual)
+            nvtx_range_pop(suffix="shared_experts")
+        nvtx_range_push(suffix="dispatch_postprocess")
+        dispatched_input, tokens_per_expert, permuted_probs = (
+            self.token_dispatcher.dispatch_postprocess(hidden_states, probs)
+        )
+        nvtx_range_pop(suffix="dispatch_postprocess")
+        nvtx_range_push(suffix="experts")
+        expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert, permuted_probs)
+        nvtx_range_pop(suffix="experts")
+        assert mlp_bias is None, f"mlp_bias is not supported for {type(self.token_dispatcher)}"
+        nvtx_range_push(suffix="combine_preprocess")
+        output = self.token_dispatcher.combine_preprocess(expert_output)
+        nvtx_range_pop(suffix="combine_preprocess")
+        return output, shared_expert_output, mlp_bias
+    
     def forward(self, hidden_states: torch.Tensor):
         self.activation_hook.clear()
         with torch.autograd.graph.saved_tensors_hooks(
