@@ -95,7 +95,7 @@ class MoELayerForTest(MoELayer, CommonOpsForTest):
             output = self.combine(output, shared_expert_output)
             nvtx_range_pop(suffix="combine")
             return output, mlp_bias
-           
+
         if self.moe_layer_recompute:
             if self.config.fp8:
                 output, mlp_bias = te_checkpoint(
@@ -114,7 +114,6 @@ class MoELayerForTest(MoELayer, CommonOpsForTest):
 
         return output, mlp_bias
 
-    
     def experts_compute(
         self, hidden_states: torch.Tensor, probs: torch.Tensor, residual: torch.Tensor
     ):
@@ -152,14 +151,18 @@ class MoELayerForTest(MoELayer, CommonOpsForTest):
         )
         nvtx_range_pop(suffix="dispatch_postprocess")
         nvtx_range_push(suffix="experts")
-        expert_output, mlp_bias = self.experts(dispatched_input, tokens_per_expert, permuted_probs)
+        expert_output, mlp_bias = self.experts(
+            dispatched_input, tokens_per_expert, permuted_probs
+        )
         nvtx_range_pop(suffix="experts")
-        assert mlp_bias is None, f"mlp_bias is not supported for {type(self.token_dispatcher)}"
+        assert (
+            mlp_bias is None
+        ), f"mlp_bias is not supported for {type(self.token_dispatcher)}"
         nvtx_range_push(suffix="combine_preprocess")
         output = self.token_dispatcher.combine_preprocess(expert_output)
         nvtx_range_pop(suffix="combine_preprocess")
         return output, shared_expert_output, mlp_bias
-    
+
     def forward(self, hidden_states: torch.Tensor):
         self.activation_hook.clear()
         with torch.autograd.graph.saved_tensors_hooks(

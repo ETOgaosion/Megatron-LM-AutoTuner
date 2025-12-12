@@ -34,6 +34,7 @@ class TestMoELayer(TestWithHiddenInputs):
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
         tp_comm_overlap_cfg: str = None,
+        overral_init: bool = True,
     ):
         super().__init__(
             hf_config=hf_config,
@@ -46,6 +47,7 @@ class TestMoELayer(TestWithHiddenInputs):
             theoretical_activations=theoretical_activations,
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
+        self.module_name = "MoELayer"
 
         self.self_attention = SelfAttention(
             tf_config,
@@ -53,31 +55,35 @@ class TestMoELayer(TestWithHiddenInputs):
             layer_number=layer_number,
             attn_mask_type=AttnMaskType.causal,
         )
-        if profile_mode == ProfileMode.collect_data:
-            with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
+
+        if overral_init:
+            if profile_mode == ProfileMode.collect_data:
+                with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
+                    self.op = MoELayerForTest(
+                        tf_config,
+                        pg_collection=ProcessGroupCollection.use_mpu_process_groups(),
+                        hook_activation=False,
+                    )
+
+                detailed_mem_report = memory_tracker_ctx.get_result()
+
+                # 未来实现计算时完成
+                estimated_weight_mem_bytes = 0
+
+                estimated_weight_mem_str = get_memory_str(
+                    estimated_weight_mem_bytes, human_readable=True
+                )
+                detailed_mem_report["estimated_peak_mem_diff"] = (
+                    estimated_weight_mem_str
+                )
+                self.memory_db["weights"][self.module_name] = detailed_mem_report
+
+            else:
                 self.op = MoELayerForTest(
                     tf_config,
                     pg_collection=ProcessGroupCollection.use_mpu_process_groups(),
                     hook_activation=False,
                 )
-
-            detailed_mem_report = memory_tracker_ctx.get_result()
-
-            # 未来实现计算时完成
-            estimated_weight_mem_bytes = 0
-
-            estimated_weight_mem_str = get_memory_str(
-                estimated_weight_mem_bytes, human_readable=True
-            )
-            detailed_mem_report["estimated_peak_mem_diff"] = estimated_weight_mem_str
-            self.memory_db["weights"][self.module_name] = detailed_mem_report
-
-        else:
-            self.op = MoELayerForTest(
-                tf_config,
-                pg_collection=ProcessGroupCollection.use_mpu_process_groups(),
-                hook_activation=False,
-            )
 
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
