@@ -18,6 +18,10 @@ def get_hf_model_config(model_name: str, **kwargs) -> AutoConfig:
     config = AutoConfig.from_pretrained(
         os.path.join(HUGGINGFACE_MODEL_DIR, model_name), **kwargs
     )
+    if model_name == "deepseek-ai/DeepSeek-V3-Base":
+        config.num_nextn_predict_layers = 0
+        if hasattr(config, "quantization_config"):
+            delattr(config, "quantization_config")
     return config
 
 
