@@ -6,6 +6,7 @@ from AutoTuner.testbench.ops_test.embedding_test import TestLanguageModelEmbeddi
 from AutoTuner.testbench.ops_test.gpt_model_test import TestGPTModel
 from AutoTuner.testbench.ops_test.layernorm_test import TestLayerNorm
 from AutoTuner.testbench.ops_test.mlpdense_test import TestMLPDense
+from AutoTuner.testbench.ops_test.moe_layer_test import TestMoELayer
 from AutoTuner.testbench.ops_test.postprocess_test import TestPostprocess
 from AutoTuner.testbench.ops_test.preprocess_test import TestPreprocess
 from AutoTuner.testbench.ops_test.self_attention_test import TestSelfAttention
@@ -22,4 +23,5 @@ OP_TEST_MAPPING = {
     "SelfAttention": TestSelfAttention,
     "TEDotProductAttention": TestTEDotProductAttention,
     "MLPDense": TestMLPDense,
+    "MoELayer": TestMoELayer,
 }
