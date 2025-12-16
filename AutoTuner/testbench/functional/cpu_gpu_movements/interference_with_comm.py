@@ -81,12 +81,12 @@ def rank0_process(tensor_size: tuple = (16, 8192, 8, 2048)):
             dist.send(send_tensor, dst=1)
     
     # Operation 1: Async GPU->CPU offload with pinned memory
-    with torch.cuda.stream(offload_stream):
-        for _ in range(5):  # Offload multiple times to increase load
-            cpu_tensor.copy_(gpu_tensor, non_blocking=True)
+    # with torch.cuda.stream(offload_stream):
+    #     for _ in range(5):  # Offload multiple times to increase load
+    #         cpu_tensor.copy_(gpu_tensor, non_blocking=True)
     
     # Synchronize streams
-    offload_stream.synchronize()
+    # offload_stream.synchronize()
     send_stream.synchronize()
     
     elapsed = time.time() - start_time
@@ -127,12 +127,12 @@ def rank1_process(tensor_size: tuple = (16, 8192, 8, 2048)):
             dist.recv(recv_tensor, src=0)
     
     # Operation 1: CPU load - transfer pinned memory to GPU for computation
-    with torch.cuda.stream(load_stream):
-        for _ in range(5):  # Load multiple times to increase load
-            gpu_data = cpu_data.to(device, non_blocking=True)
+    # with torch.cuda.stream(load_stream):
+    #     for _ in range(5):  # Load multiple times to increase load
+    #         gpu_data = cpu_data.to(device, non_blocking=True)
     
     # Synchronize streams
-    load_stream.synchronize()
+    # load_stream.synchronize()
     recv_stream.synchronize()
         
     prof.stop()
