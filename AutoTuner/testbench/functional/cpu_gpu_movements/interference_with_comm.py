@@ -1,3 +1,4 @@
+import argparse
 import os
 import torch
 import numpy as np
@@ -22,13 +23,20 @@ prof = torch.profiler.profile(
     with_modules=True,
 )
 
+def get_args():
+    parser = argparse.ArgumentParser(description="CPU-GPU movements with communication interference")
+    parser.add_argument("--rank", type=int, required=True, help="Rank of the process")
+    args = parser.parse_args()
+    return args
+
+args = get_args()
+
 
 def init_distributed(backend: str = "nccl"):
     """Initialize distributed environment."""
-    assert os.environ.get("ARNOLD_WORKER_0_HOST", "") != "" and os.environ.get("ARNOLD_WORKER_0_PORT", "") != ""
-    os.environ['MASTER_ADDR'] = os.environ.get("ARNOLD_WORKER_0_HOST")
-    os.environ['MASTER_PORT'] = os.environ.get("ARNOLD_WORKER_0_PORT")
-    os.environ['RANK'] = os.environ.get("ARNOLD_ID")
+    os.environ['MASTER_ADDR'] = "10.124.44.156"
+    os.environ['MASTER_PORT'] = "29500"
+    os.environ['RANK'] = args.rank
     rank = int(os.environ['RANK'])
     os.environ['LOCAL_WORLD_SIZE'] = 1
     os.environ['WORLD_SIZE'] = 2
