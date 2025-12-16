@@ -38,8 +38,8 @@ def init_distributed(backend: str = "nccl"):
     os.environ['MASTER_PORT'] = "29500"
     os.environ['RANK'] = str(args.rank)
     rank = int(os.environ['RANK'])
-    os.environ['LOCAL_WORLD_SIZE'] = 1
-    os.environ['WORLD_SIZE'] = 2
+    os.environ['LOCAL_WORLD_SIZE'] = "1"
+    os.environ['WORLD_SIZE'] = "2"
     os.environ['CUDA_DEVICE_MAX_CONNECTIONS'] = '1'
     
     dist.init_process_group(
