@@ -36,7 +36,7 @@ def init_distributed(backend: str = "nccl"):
     """Initialize distributed environment."""
     os.environ['MASTER_ADDR'] = "10.124.44.156"
     os.environ['MASTER_PORT'] = "29500"
-    os.environ['RANK'] = args.rank
+    os.environ['RANK'] = str(args.rank)
     rank = int(os.environ['RANK'])
     os.environ['LOCAL_WORLD_SIZE'] = 1
     os.environ['WORLD_SIZE'] = 2
