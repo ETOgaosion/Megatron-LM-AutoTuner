@@ -154,12 +154,15 @@ def main():
     # Rank 0 process
     if dist.get_rank() == 0:
         rank0_process(tensor_size)
+        print("All processes completed")
+        exit(0)
     
     # Rank 1 process
     if dist.get_rank() == 1:
         rank1_process(tensor_size)
+        print("All processes completed")
+        exit(0)
     
-    print("All processes completed")
 
 
 if __name__ == "__main__":
