@@ -45,7 +45,7 @@ def init_distributed(backend: str = "nccl"):
     dist.init_process_group(
         backend=backend,
     )
-    torch.cuda.set_device(rank)
+    torch.cuda.set_device(0)
     print(f"Initialized process {rank} of {2} on backend {backend}")
 
 
@@ -55,7 +55,7 @@ def rank0_process(tensor_size: tuple = (16, 8192, 8, 2048)):
     another stream for send operations.
     """
     rank = dist.get_rank()
-    device = torch.device(f"cuda:{rank}")
+    device = torch.device(f"cuda:{0}")
     
     # Create streams for overlap
     offload_stream = torch.cuda.Stream(device=device)
@@ -104,7 +104,7 @@ def rank1_process(tensor_size: tuple = (16, 8192, 8, 2048)):
     another stream for recv operations.
     """
     rank = dist.get_rank()
-    device = torch.device(f"cuda:{rank}")
+    device = torch.device(f"cuda:{0}")
     
     # Create streams for overlap
     load_stream = torch.cuda.Stream(device=device)
