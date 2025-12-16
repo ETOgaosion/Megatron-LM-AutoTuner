@@ -23,27 +23,30 @@ prof = torch.profiler.profile(
 )
 
 
-def init_distributed(rank: int, world_size: int, backend: str = "nccl"):
+def init_distributed(backend: str = "nccl"):
     """Initialize distributed environment."""
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
+    assert os.environ.get("ARNOLD_WORKER_0_HOST", "") != "" and os.environ.get("ARNOLD_WORKER_0_PORT", "") != ""
+    os.environ['MASTER_ADDR'] = os.environ.get("ARNOLD_WORKER_0_HOST")
+    os.environ['MASTER_PORT'] = os.environ.get("ARNOLD_WORKER_0_PORT")
+    os.environ['RANK'] = os.environ.get("ARNOLD_ID")
+    rank = int(os.environ['RANK'])
+    os.environ['LOCAL_WORLD_SIZE'] = 1
+    os.environ['WORLD_SIZE'] = 2
     os.environ['CUDA_DEVICE_MAX_CONNECTIONS'] = '1'
     
     dist.init_process_group(
         backend=backend,
-        rank=rank,
-        world_size=world_size,
     )
     torch.cuda.set_device(rank)
-    print(f"Initialized process {rank} of {world_size} on backend {backend}")
+    print(f"Initialized process {rank} of {2} on backend {backend}")
 
 
-def rank0_process(rank: int, world_size: int, tensor_size: tuple = (16, 8192, 8, 2048)):
+def rank0_process(tensor_size: tuple = (16, 8192, 8, 2048)):
     """
     Rank 0: One stream for GPU->CPU offload with pinned memory,
     another stream for send operations.
     """
-    init_distributed(rank, world_size)
+    rank = dist.get_rank()
     device = torch.device(f"cuda:{rank}")
     
     # Create streams for overlap
@@ -87,12 +90,12 @@ def rank0_process(rank: int, world_size: int, tensor_size: tuple = (16, 8192, 8,
     dist.destroy_process_group()
 
 
-def rank1_process(rank: int, world_size: int, tensor_size: tuple = (16, 8192, 8, 2048)):
+def rank1_process(tensor_size: tuple = (16, 8192, 8, 2048)):
     """
     Rank 1: One stream for CPU load (computation on CPU data),
     another stream for recv operations.
     """
-    init_distributed(rank, world_size)
+    rank = dist.get_rank()
     device = torch.device(f"cuda:{rank}")
     
     # Create streams for overlap
@@ -141,22 +144,16 @@ def main():
     processes = []
     
     # Rank 0 process
-    p0 = mp.Process(target=rank0_process, args=(0, world_size, tensor_size))
-    p0.start()
-    processes.append(p0)
+    if dist.get_rank() == 0:
+        rank0_process(tensor_size)
     
     # Rank 1 process
-    p1 = mp.Process(target=rank1_process, args=(1, world_size, tensor_size))
-    p1.start()
-    processes.append(p1)
-    
-    # Wait for all processes
-    for p in processes:
-        p.join()
+    if dist.get_rank() == 1:
+        rank1_process(tensor_size)
     
     print("All processes completed")
 
 
 if __name__ == "__main__":
-    mp.set_start_method("spawn", force=True)
+    init_distributed()
     main()
