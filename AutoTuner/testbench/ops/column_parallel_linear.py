@@ -1,77 +1,80 @@
-from functools import reduce
 import logging
-from typing import Optional, Tuple, Union
+from functools import reduce
 from operator import mul as multiply_op
+from typing import Optional, Tuple, Union
 
 import torch
-from torch import Tensor
+import transformer_engine_torch as tex
+from megatron.core.extensions.transformer_engine import TELayerNormColumnParallelLinear
 from megatron.core.inference.contexts.base_context import BaseInferenceContext
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.transformer.transformer_config import TransformerConfig
-from megatron.core.extensions.transformer_engine import TELayerNormColumnParallelLinear
-
-
 from megatron.core.utils import (
     WrappedTensor,
     nvtx_decorator,
     nvtx_range_pop,
     nvtx_range_push,
 )
-
-import transformer_engine_torch as tex
-
+from torch import Tensor
+from transformer_engine.pytorch.constants import dist_group_type
 from transformer_engine.pytorch.cpp_extensions.gemm import general_gemm
-from transformer_engine.pytorch.cpu_offload import is_cpu_offload_enabled, mark_activation_offload
-
-from transformer_engine.pytorch.distributed import (
-    get_distributed_world_size,
-    allreduce,
-    symmetric_all_reduce,
-    reduce_scatter_along_first_dim,
-    gather_along_first_dim,
-    in_fp8_activation_recompute_phase,
-    _fsdp_scatter_tensors,
-    _fsdp_gather_tensors,
+from transformer_engine.pytorch.cpu_offload import (
+    is_cpu_offload_enabled,
+    mark_activation_offload,
 )
-
+from transformer_engine.pytorch.distributed import (
+    _fsdp_gather_tensors,
+    _fsdp_scatter_tensors,
+    allreduce,
+    gather_along_first_dim,
+    get_distributed_world_size,
+    in_fp8_activation_recompute_phase,
+    reduce_scatter_along_first_dim,
+    symmetric_all_reduce,
+)
 from transformer_engine.pytorch.export import is_in_onnx_export_mode
 from transformer_engine.pytorch.fp8 import FP8GlobalStateManager
 from transformer_engine.pytorch.graph import is_graph_capturing
-from transformer_engine.pytorch.module._common import WeightGradStore, apply_normalization, noop_cat
-from transformer_engine.pytorch.constants import dist_group_type
 from transformer_engine.pytorch.jit import no_torch_dynamo
-
+from transformer_engine.pytorch.module._common import (
+    WeightGradStore,
+    apply_normalization,
+    noop_cat,
+)
 from transformer_engine.pytorch.module.base import (
-    fill_userbuffers_buffer_for_all_gather,
-    get_workspace,
-    get_ub,
-    TransformerEngineBaseModule,
-    get_dummy_wgrad,
-    _2X_ACC_FPROP,
     _2X_ACC_DGRAD,
+    _2X_ACC_FPROP,
     _2X_ACC_WGRAD,
+    TransformerEngineBaseModule,
+    fill_userbuffers_buffer_for_all_gather,
+    get_dummy_wgrad,
+    get_ub,
+    get_workspace,
 )
-
-from transformer_engine.pytorch.tensor._internal.float8_blockwise_tensor_base import Float8BlockwiseQTensorBase
-from transformer_engine.pytorch.tensor._internal.mxfp8_tensor_base import MXFP8TensorBase
-from transformer_engine.pytorch.tensor.float8_blockwise_tensor import Float8BlockQuantizer
+from transformer_engine.pytorch.tensor._internal.float8_blockwise_tensor_base import (
+    Float8BlockwiseQTensorBase,
+)
+from transformer_engine.pytorch.tensor._internal.mxfp8_tensor_base import (
+    MXFP8TensorBase,
+)
+from transformer_engine.pytorch.tensor.float8_blockwise_tensor import (
+    Float8BlockQuantizer,
+)
 from transformer_engine.pytorch.tensor.mxfp8_tensor import MXFP8Quantizer
-
-from transformer_engine.pytorch.utils import (
-    assert_dim_for_fp8_exec,
-    cast_if_needed,
-    clear_tensor_data,
-    nvtx_range_pop,
-    nvtx_range_push,
-    requires_grad,
-    needs_quantized_gemm,
-)
-
 from transformer_engine.pytorch.tensor.quantized_tensor import (
     QuantizedTensorBase,
     Quantizer,
     prepare_for_saving,
     restore_from_saved,
+)
+from transformer_engine.pytorch.utils import (
+    assert_dim_for_fp8_exec,
+    cast_if_needed,
+    clear_tensor_data,
+    needs_quantized_gemm,
+    nvtx_range_pop,
+    nvtx_range_push,
+    requires_grad,
 )
 
 try:
@@ -85,6 +88,7 @@ except ImportError:
     HAVE_TE = False
 
 from .common import CommonOpsForTest
+
 
 class _LayerNormLinearHack(torch.autograd.Function):
     """LayerNormLinear semi-top level module
@@ -196,7 +200,10 @@ class _LayerNormLinearHack(torch.autograd.Function):
             if input_quantizer is None:
                 raise ValueError("Missing quantizer for input tensor")
             input_quantizer.set_usage(rowwise=True, columnwise=backward_needs_input)
-            if with_input_all_gather and input_quantizer.supports_only_rowwise_all_gather():
+            if (
+                with_input_all_gather
+                and input_quantizer.supports_only_rowwise_all_gather()
+            ):
                 # All-gather is not supported with FP8 column-wise data
                 input_quantizer.set_usage(columnwise=False)
 
@@ -339,7 +346,9 @@ class _LayerNormLinearHack(torch.autograd.Function):
             out_shape = list(inp_shape)
             out_shape[0] //= tp_world_size
             out_shape[-1] = out_features
-            reduce_scatter_out = torch.empty(out_shape, dtype=activation_dtype, device=inp.device)
+            reduce_scatter_out = torch.empty(
+                out_shape, dtype=activation_dtype, device=inp.device
+            )
 
         # ------------------------------------------------------
         # Forward GEMM
@@ -382,7 +391,9 @@ class _LayerNormLinearHack(torch.autograd.Function):
                 out, _ = reduce_scatter_along_first_dim(out, tp_group)
             elif tensor_parallel:
                 if symmetric_ar_type is not None:
-                    out, _ = symmetric_all_reduce(out, tp_group, all_reduce_type=symmetric_ar_type)
+                    out, _ = symmetric_all_reduce(
+                        out, tp_group, all_reduce_type=symmetric_ar_type
+                    )
                 else:
                     out, _ = allreduce(out, tp_group)
             nvtx_range_pop(f"{nvtx_label}.row_parallel_comm")
@@ -410,7 +421,9 @@ class _LayerNormLinearHack(torch.autograd.Function):
                     # to gather the input. For MXFP8, columnwise only data
                     # can be allgathered.
                     if (
-                        isinstance(ln_out, (MXFP8TensorBase, Float8BlockwiseQTensorBase))
+                        isinstance(
+                            ln_out, (MXFP8TensorBase, Float8BlockwiseQTensorBase)
+                        )
                         or not ctx.ln_out_needs_gather
                     ):
                         ln_out.update_usage(rowwise_usage=False)
@@ -504,7 +517,9 @@ class _LayerNormLinearHack(torch.autograd.Function):
             ctx.reduce_and_update_bwd_fp8_tensors = False
             if ctx.fp8 and requires_grad(inp, ln_weight, ln_bias, weight, bias):
                 _first_fp8_module = FP8GlobalStateManager.IS_FIRST_FP8_MODULE
-                ctx.reduce_and_update_bwd_fp8_tensors = FP8GlobalStateManager.is_first_fp8_module()
+                ctx.reduce_and_update_bwd_fp8_tensors = (
+                    FP8GlobalStateManager.is_first_fp8_module()
+                )
                 if in_fp8_activation_recompute_phase():
                     FP8GlobalStateManager.IS_FIRST_FP8_MODULE = _first_fp8_module
             ctx.wgrad_store = wgrad_store
@@ -551,7 +566,9 @@ class _LayerNormLinearHack(torch.autograd.Function):
             # Since main_grad can be modified inplace, it should not be a part of saved_tensors
             main_grad = (
                 ctx.main_grad_func()
-                if weight is not None and ctx.fuse_wgrad_accumulation and ctx.requires_wgrad
+                if weight is not None
+                and ctx.fuse_wgrad_accumulation
+                and ctx.requires_wgrad
                 else None
             )
 
@@ -692,7 +709,9 @@ class _LayerNormLinearHack(torch.autograd.Function):
             # Make sure required data is available
             if isinstance(grad_output, QuantizedTensorBase):
                 grad_output.update_usage(rowwise_usage=True)
-            if ctx.weight_quantizer is not None and isinstance(weight, QuantizedTensorBase):
+            if ctx.weight_quantizer is not None and isinstance(
+                weight, QuantizedTensorBase
+            ):
                 weight.update_usage(columnwise_usage=True)
 
             # Choose whether to use GEMM kernel with split accumulator
@@ -711,7 +730,9 @@ class _LayerNormLinearHack(torch.autograd.Function):
             reduce_scatter_out = None
             if ctx.ub_overlap_rs_dgrad:
                 reduce_scatter_out = torch.empty(
-                    dgrad_shape, dtype=ctx.activation_dtype, device=grad_outputs[0].device
+                    dgrad_shape,
+                    dtype=ctx.activation_dtype,
+                    device=grad_outputs[0].device,
                 )
             elif ctx.ub_bulk_wgrad:
                 gemm_out = ub_obj_wgrad.get_buffer(local_chunk=False)
@@ -773,7 +794,9 @@ class _LayerNormLinearHack(torch.autograd.Function):
                 # Note: Synchronize tensor-parallel communication and
                 # make sure required data is available
                 nvtx_range_push(f"{nvtx_label}.mxfp8_special_overlap")
-                if ctx.ub_overlap_ag and isinstance(ctx.grad_output_quantizer, MXFP8Quantizer):
+                if ctx.ub_overlap_ag and isinstance(
+                    ctx.grad_output_quantizer, MXFP8Quantizer
+                ):
                     # UB does not support pipelined overlapping grad output
                     # all-gather with wgrad GEMM. Also, we can't
                     # convert row-scaled MXFP8 to column-scaled, so we
@@ -782,7 +805,9 @@ class _LayerNormLinearHack(torch.autograd.Function):
                     # overlapping the AG operation with the dgrad GEMM.
 
                     # Get the communication stream from the dgrad GEMM to use for the AG
-                    dgrad_send_stream, dgrad_recv_stream = ub_obj_dgrad.get_communication_stream()
+                    dgrad_send_stream, dgrad_recv_stream = (
+                        ub_obj_dgrad.get_communication_stream()
+                    )
 
                     # This object is separate from the ub_obj_wgrad object which is passed to the GEMM
                     ub_obj_overlap_wgrad = get_ub(ctx.ub_name + "_wgrad", ctx.fp8)
@@ -805,7 +830,7 @@ class _LayerNormLinearHack(torch.autograd.Function):
                         ub_obj_overlap_wgrad, dgrad_send_stream, dgrad_recv_stream
                     )
                 nvtx_range_pop(f"{nvtx_label}.mxfp8_special_overlap")
-                
+
                 # Prepare input tensor
                 # Note: Synchronize tensor-parallel communication and
                 # make sure required data is available
@@ -824,17 +849,21 @@ class _LayerNormLinearHack(torch.autograd.Function):
                     if isinstance(grad_output, QuantizedTensorBase):
                         grad_output.update_usage(columnwise_usage=True)
                     else:
-                        ctx.grad_output_quantizer.set_usage(rowwise=False, columnwise=True)
+                        ctx.grad_output_quantizer.set_usage(
+                            rowwise=False, columnwise=True
+                        )
                         grad_output = ctx.grad_output_quantizer(grad_output)
                 nvtx_range_pop(f"{nvtx_label}.wgrad_prep_and_gemm")
-                
+
                 # Figure out whether to use split accumulator
                 use_split_accumulator = _2X_ACC_WGRAD
                 if ctx.fp8:
                     recipe = ctx.fp8_recipe
                     if hasattr(recipe, "fp8_gemm_wgrad"):
-                        use_split_accumulator = recipe.fp8_gemm_wgrad.use_split_accumulator
-                
+                        use_split_accumulator = (
+                            recipe.fp8_gemm_wgrad.use_split_accumulator
+                        )
+
                 # Figure out whether to output wgrad GEMM directly into main grad
                 if ctx.is_first_microbatch is not None:
                     accumulate_wgrad_into_param_main_grad = (
@@ -848,14 +877,18 @@ class _LayerNormLinearHack(torch.autograd.Function):
                 reduce_scatter_out = None
                 if ctx.ub_bulk_wgrad and ub_obj_wgrad.is_fp8_ubuf():
                     reduce_scatter_out = torch.empty(
-                        dgrad_shape, dtype=ctx.activation_dtype, device=grad_outputs[0].device
+                        dgrad_shape,
+                        dtype=ctx.activation_dtype,
+                        device=grad_outputs[0].device,
                     )
 
                 # Arguments to include in wgrad GEMM closure
                 wgrad_gemm_kwargs = {
                     "workspace": get_workspace(),
                     "out_dtype": (
-                        main_grad.dtype if ctx.fuse_wgrad_accumulation else ctx.activation_dtype
+                        main_grad.dtype
+                        if ctx.fuse_wgrad_accumulation
+                        else ctx.activation_dtype
                     ),
                     "quantization_params": ctx.grad_weight_quantizer,
                     "accumulate": accumulate_wgrad_into_param_main_grad,
@@ -869,7 +902,7 @@ class _LayerNormLinearHack(torch.autograd.Function):
                     "extra_output": reduce_scatter_out,
                     "bulk_overlap": ctx.ub_bulk_wgrad,
                 }
-                
+
                 def wgrad_gemm(
                     x: torch.Tensor,
                     dy: torch.Tensor,
@@ -888,7 +921,10 @@ class _LayerNormLinearHack(torch.autograd.Function):
                     return dw, db
 
                 # Choose whether to call wgrad GEMM now or delay
-                if ctx.wgrad_store is not None and ctx.wgrad_store.delay_wgrad_compute():
+                if (
+                    ctx.wgrad_store is not None
+                    and ctx.wgrad_store.delay_wgrad_compute()
+                ):
                     if (
                         wgrad_gemm_kwargs["ub"] is not None
                         or wgrad_gemm_kwargs["ub_type"] is not None
@@ -977,7 +1013,9 @@ class _LayerNormLinearHack(torch.autograd.Function):
 
         if ctx.requires_wgrad:
             # Handle custom DDP from mcore.
-            if ctx.fuse_wgrad_accumulation and hasattr(origin_weight, "grad_added_to_main_grad"):
+            if ctx.fuse_wgrad_accumulation and hasattr(
+                origin_weight, "grad_added_to_main_grad"
+            ):
                 origin_weight.grad_added_to_main_grad = True
                 if getattr(origin_weight, "zero_out_wgrad", False):
                     wgrad = get_dummy_wgrad(
@@ -1050,6 +1088,7 @@ class _LayerNormLinearHack(torch.autograd.Function):
             None,  # symmetric_ar_type
         )
 
+
 @no_torch_dynamo()
 def hack_forward(
     self,
@@ -1057,14 +1096,16 @@ def hack_forward(
     is_first_microbatch: Optional[bool] = None,
     fp8_output: Optional[bool] = False,
     fp8_grad: Optional[bool] = False,
-) -> Union[torch.Tensor, Tuple[torch.Tensor, ...]]: 
+) -> Union[torch.Tensor, Tuple[torch.Tensor, ...]]:
     if is_in_onnx_export_mode():
         return self.onnx_forward(inp, fp8_output)
 
     debug = self.is_debug_iter()
 
     if FP8GlobalStateManager.fp8_graph_capturing():
-        skip_fp8_weight_update = FP8GlobalStateManager.get_skip_fp8_weight_update_tensor()
+        skip_fp8_weight_update = (
+            FP8GlobalStateManager.get_skip_fp8_weight_update_tensor()
+        )
     else:
         skip_fp8_weight_update = None
     if skip_fp8_weight_update is not None:
@@ -1081,11 +1122,12 @@ def hack_forward(
         ).is_fp8_ubuf():
             fp8_grad = True
 
-    with torch.cuda.device(
-        getattr(self, list(self.named_parameters())[0][0]).device
-    ), self.prepare_forward(
-        inp, allow_non_contiguous=False  # removed .contiguous from inside the layer
-    ) as inp:
+    with (
+        torch.cuda.device(getattr(self, list(self.named_parameters())[0][0]).device),
+        self.prepare_forward(
+            inp, allow_non_contiguous=False  # removed .contiguous from inside the layer
+        ) as inp,
+    ):
 
         # Get concatenated weight and bias tensors
         weight_tensor, bias_tensor = self._get_weight_and_bias_tensors()
@@ -1176,7 +1218,9 @@ def hack_forward(
         return out, ln_out
     return out
 
+
 te.pytorch.LayerNormLinear.forward = hack_forward
+
 
 class ColumnParallelLinearForTest(CommonOpsForTest, TELayerNormColumnParallelLinear):
     def __init__(
@@ -1214,12 +1258,12 @@ class ColumnParallelLinearForTest(CommonOpsForTest, TELayerNormColumnParallelLin
             module_name="TELayerNormColumnParallelLinear",
             logging_level=logging.INFO,
         )
-        
+
     @nvtx_decorator(message="TELayerNormColumnParallelLinear forward")
     def _forward(self, x: Tensor) -> Tensor:
         out = super().forward(x)
         return out
-    
+
     def forward(
         self,
         hidden_states: Union[Tensor, WrappedTensor],
@@ -1241,6 +1285,6 @@ class ColumnParallelLinearForTest(CommonOpsForTest, TELayerNormColumnParallelLin
         self.activation_hook.clear()
         with torch.autograd.graph.saved_tensors_hooks(
             self.activation_hook.save_hook, self.activation_hook.load_hook
-        ):          
+        ):
             ret = self._forward(hidden_states)
         return ret

@@ -1,16 +1,16 @@
-from typing import Optional
-import torch
+from typing import Dict, Optional
 
+import torch
 from megatron.core.transformer.transformer_config import TransformerConfig
 from transformers import PretrainedConfig
 from typing_extensions import override
 
+from AutoTuner.testbench.ops.column_parallel_linear import ColumnParallelLinearForTest
 from AutoTuner.testbench.ops_test.test_with_hiddens import TestWithHiddenInputs
 from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
 from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
 from AutoTuner.utils.structs import InputTestCase
-from AutoTuner.testbench.ops.column_parallel_linear import ColumnParallelLinearForTest
-from typing import Dict
+
 
 class TestColumnParallelLinear(TestWithHiddenInputs):
     def __init__(
@@ -37,13 +37,13 @@ class TestColumnParallelLinear(TestWithHiddenInputs):
             theoretical_activations=theoretical_activations,
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
-        self.module_name="ColumnParallelLinearForTest"
-        self.input_size=tf_config.hidden_size
-        self.output_size=tf_config.ffn_hidden_size
+        self.module_name = "ColumnParallelLinearForTest"
+        self.input_size = tf_config.hidden_size
+        self.output_size = tf_config.ffn_hidden_size
         if tf_config.gated_linear_unit:
             self.output_size *= 2
-        self.init_method=tf_config.init_method
-        
+        self.init_method = tf_config.init_method
+
         if profile_mode == ProfileMode.collect_data:
             with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
                 self.op = ColumnParallelLinearForTest(
@@ -59,7 +59,7 @@ class TestColumnParallelLinear(TestWithHiddenInputs):
                     tp_group=tp_group,
                     hook_activation=False,
                 )  # TODO: 写完理论计算之后将这里的false改为True
-                
+
             detailed_mem_report = memory_tracker_ctx.get_result()
             # TODO: theoretical weight memory
             estimated_weight_mem_bytes = 0
@@ -82,13 +82,12 @@ class TestColumnParallelLinear(TestWithHiddenInputs):
                 tp_group=tp_group,
                 hook_activation=False,
             )
-        
-        
+
     @override
     def calc_theoretical_memory(self, test_case: InputTestCase) -> Dict[str, int]:
         # TODO: implement theoretical activation memory calculation
         return {"activations": {"activations": 0}}
-    
+
     @override
     def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:
         # TODO: implement theoretical FLOPS calculation
