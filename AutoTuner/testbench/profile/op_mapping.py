@@ -8,6 +8,7 @@ from AutoTuner.testbench.ops_test.layernorm_test import TestLayerNorm
 from AutoTuner.testbench.ops_test.moe_layer_test import TestMoELayer
 from AutoTuner.testbench.ops_test.postprocess_test import TestPostprocess
 from AutoTuner.testbench.ops_test.preprocess_test import TestPreprocess
+from AutoTuner.testbench.ops_test.row_linear_test import TestTERowParallelLinear
 from AutoTuner.testbench.ops_test.self_attention_test import TestSelfAttention
 from AutoTuner.testbench.ops_test.transformers_layer_test import TestTransformerLayer
 
@@ -22,4 +23,5 @@ OP_TEST_MAPPING = {
     "SelfAttention": TestSelfAttention,
     "TEDotProductAttention": TestTEDotProductAttention,
     "MoELayer": TestMoELayer,
+    "TERowParallelLinear": TestTERowParallelLinear,
 }
