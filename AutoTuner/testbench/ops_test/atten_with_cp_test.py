@@ -2,23 +2,25 @@ import dataclasses
 import os
 from typing import Any, Dict, Optional
 
-from tensordict import TensorDict
 import torch
-from AutoTuner.testbench.ops.atten_with_cp import AttnFuncWithCPAndKVP2PForTest
-from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
+from megatron.core.models.gpt.gpt_layer_specs import (
+    get_gpt_layer_with_transformer_engine_spec,
+)
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.attention import SelfAttention
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.transformer_config import TransformerConfig
+from tensordict import TensorDict
+from transformer_engine.pytorch.tensor.float8_tensor import Float8Tensor
 from transformers import PretrainedConfig
 from typing_extensions import override
 
+from AutoTuner.testbench.ops.atten_with_cp import AttnFuncWithCPAndKVP2PForTest
 from AutoTuner.testbench.ops_test.test_with_hiddens import TestWithHiddenInputs
 from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
 from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
 from AutoTuner.utils.structs import InputTestCase
-from transformer_engine.pytorch.tensor.float8_tensor import Float8Tensor
 
 os.environ["NVTE_NVTX_ENABLED"] = "1"
 
@@ -66,7 +68,9 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
         )
 
         if profile_mode == ProfileMode.collect_data:
-            with MemoryTrackerContext("AttnFuncWithCPAndKVP2P init") as memory_tracker_ctx:
+            with MemoryTrackerContext(
+                "AttnFuncWithCPAndKVP2P init"
+            ) as memory_tracker_ctx:
                 self.op = AttnFuncWithCPAndKVP2PForTest(tf_config)
 
             detailed_mem_report = memory_tracker_ctx.get_result()
@@ -95,10 +99,10 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
         TODO: theoretical activation memory
         """
         return {"activations": {"activations": 0}}
-    
+
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
-        '''
+        """
         args provided to forward:
             is_training,
             q,
@@ -115,7 +119,7 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
             cp_global_ranks,
             cp_stream,
             cp_comm_type,
-        '''
+        """
         micro_batch = micro_batch.to(torch.cuda.current_device())
         micro_batch = micro_batch.contiguous()
         (
@@ -131,20 +135,24 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
             k = k.reshape(k.shape[0] * k.shape[1], k.shape[2], k.shape[3])
             v = v.reshape(v.shape[0] * v.shape[1], v.shape[2], v.shape[3])
         query_layer, key_layer, value_layer = [
-            x.contiguous() if not x.is_contiguous() else x
-            for x in [q, k, v]
+            x.contiguous() if not x.is_contiguous() else x for x in [q, k, v]
         ]
 
         packed_seq_kwargs = (
-            {key: getattr(packed_seq_params, key) for key in self.kept_packed_seq_params}
+            {
+                key: getattr(packed_seq_params, key)
+                for key in self.kept_packed_seq_params
+            }
             if packed_seq_params is not None
             else {}
         )
-        qkv_format = packed_seq_kwargs.get('qkv_format', "sbhd")
+        qkv_format = packed_seq_kwargs.get("qkv_format", "sbhd")
         import transformer_engine.pytorch.attention.dot_product_attention.utils as dpa_utils
 
         # get qkv's memory layout
-        if all(isinstance(x, Float8Tensor) for x in [query_layer, key_layer, value_layer]):
+        if all(
+            isinstance(x, Float8Tensor) for x in [query_layer, key_layer, value_layer]
+        ):
             (
                 qkv_layout,
                 query_layer._data,
@@ -175,7 +183,6 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
                 inference_params=None,
             )
 
-        
         extra_kwargs: dict[str, Any] = {}
         # Get CP related args
         if self.tf_config.context_parallel_size > 1:

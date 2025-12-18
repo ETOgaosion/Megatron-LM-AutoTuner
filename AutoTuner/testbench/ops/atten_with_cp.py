@@ -1,22 +1,22 @@
 import logging
 
 import torch
-
 from megatron.core.transformer.transformer_config import TransformerConfig
-
 from megatron.core.utils import (
     nvtx_decorator,
 )
 from torch import Tensor
-
-from transformer_engine.pytorch.attention.dot_product_attention.context_parallel import AttnFuncWithCPAndKVP2P
+from transformer_engine.pytorch.attention.dot_product_attention.context_parallel import (
+    AttnFuncWithCPAndKVP2P,
+)
 
 from TransformerEngine.transformer_engine.pytorch.attention.dot_product_attention.context_parallel import *
 
 from .common import CommonOpsForTest
 
-class AttnFuncWithCPAndKVP2PWrapper():
-    def forward(       
+
+class AttnFuncWithCPAndKVP2PWrapper:
+    def forward(
         self,
         is_training,
         q,
@@ -46,27 +46,27 @@ class AttnFuncWithCPAndKVP2PWrapper():
         quantizers=None,
         pad_between_seqs=False,
         use_flash_attn_3=False,
-        ):
+    ):
 
         args = [
-        is_training,
-        q,
-        k,
-        v,
-        cu_seqlens_q,
-        cu_seqlens_kv,
-        max_seqlen_q,
-        max_seqlen_kv,
-        cu_seqlens_q_padded,
-        cu_seqlens_kv_padded,
-        dropout_p,
-        softmax_scale,
-        qkv_format,
-        attn_mask_type,
-        attn_bias_type,
-        attn_bias,
-        deterministic,
-        use_fused_attention,
+            is_training,
+            q,
+            k,
+            v,
+            cu_seqlens_q,
+            cu_seqlens_kv,
+            max_seqlen_q,
+            max_seqlen_kv,
+            cu_seqlens_q_padded,
+            cu_seqlens_kv_padded,
+            dropout_p,
+            softmax_scale,
+            qkv_format,
+            attn_mask_type,
+            attn_bias_type,
+            attn_bias,
+            deterministic,
+            use_fused_attention,
         ]
 
         args += [
@@ -79,9 +79,9 @@ class AttnFuncWithCPAndKVP2PWrapper():
             pad_between_seqs,
             use_flash_attn_3,
         ]
-        
+
         return AttnFuncWithCPAndKVP2P.apply(*args)
-    
+
     __call__ = forward
 
 
@@ -99,8 +99,8 @@ class AttnFuncWithCPAndKVP2PForTest(AttnFuncWithCPAndKVP2PWrapper, CommonOpsForT
         self.config = config
 
     @nvtx_decorator(message="AttnFuncWithCPAndKVP2P forward")
-    def _forward(     
-        self,  
+    def _forward(
+        self,
         is_training,
         q,
         k,
@@ -129,7 +129,7 @@ class AttnFuncWithCPAndKVP2PForTest(AttnFuncWithCPAndKVP2PWrapper, CommonOpsForT
         quantizers=None,
         pad_between_seqs=False,
         use_flash_attn_3=False,
-        ):
+    ):
 
         args = [
             is_training,
@@ -161,9 +161,8 @@ class AttnFuncWithCPAndKVP2PForTest(AttnFuncWithCPAndKVP2PWrapper, CommonOpsForT
             pad_between_seqs,
             use_flash_attn_3,
         ]
-        
+
         return super().forward(*args)
-    
 
     def __call__(
         self,
@@ -223,5 +222,3 @@ class AttnFuncWithCPAndKVP2PForTest(AttnFuncWithCPAndKVP2PWrapper, CommonOpsForT
                 use_flash_attn_3=False,
             )
         return ret
-
-
