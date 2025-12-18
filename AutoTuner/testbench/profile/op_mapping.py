@@ -1,3 +1,4 @@
+from AutoTuner.testbench.ops_test.atten_with_cp_test import TestAttnFuncWithCPAndKVP2P
 from AutoTuner.testbench.ops_test.decoder_test_hidden import TestDecoderWithHiddenInputs
 from AutoTuner.testbench.ops_test.dot_product_attention_test import (
     TestTEDotProductAttention,
@@ -22,4 +23,5 @@ OP_TEST_MAPPING = {
     "SelfAttention": TestSelfAttention,
     "TEDotProductAttention": TestTEDotProductAttention,
     "MoELayer": TestMoELayer,
+    "AttenWithCP": TestAttnFuncWithCPAndKVP2P,
 }
