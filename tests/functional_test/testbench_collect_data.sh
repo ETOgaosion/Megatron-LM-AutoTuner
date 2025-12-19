@@ -6,8 +6,8 @@ MEGATRON_LM_HASH=$(git -C "Megatron-LM" rev-parse --short=6 HEAD)
 TRANSFORMER_ENGINE_HASH=$(git -C "TransformerEngine" rev-parse --short=6 HEAD)
 VERL_HASH=$(git -C "verl" rev-parse --short=6 HEAD)
 
-MODEL_NAME="Qwen/Qwen3-0.6B"
-TEST_CASES_FILE="local/qwen3_0_6b.json"
+MODEL_NAME="deepseek-ai/DeepSeek-V3-Base"
+TEST_CASES_FILE="local/deepseek_coder_1_3b.json"
 
 # Use the test environment settings if available
 if [ -f tests/functional_test/test_env.sh ]; then
@@ -24,7 +24,7 @@ else
     ETP_SIZE=1
 fi
 
-GPUS_PER_NODE=$(($TP_SIZE*$CP_SIZE*$EP_SIZE*$ETP_SIZE))
+GPUS_PER_NODE=$(($TP_SIZE*$CP_SIZE))
 
 TIMESTAMP_VAR=$(date +"%Y-%m-%d_%H-%M-%S")
 OUTPUT_DIR=outputs/${TIMESTAMP_VAR}
@@ -76,7 +76,7 @@ if [[ "${TP_COMM_OVERLAP}" == "True" ]]; then
 fi
 
 export NVTE_FLASH_ATTN=1
-export NVTE_FUSED_ATTN=0
+export NVTE_FUSED_ATTN=1
 torchrun ${DISTRIBUTED_ARGS[@]} -m AutoTuner.testbench.profile.main \
     ${PROFILE_ARGS[@]} \
     ${OPTIONAL_PROFILE_ARGS[@]} \
