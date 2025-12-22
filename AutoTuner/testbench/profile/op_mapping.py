@@ -1,4 +1,7 @@
 from AutoTuner.testbench.ops_test.atten_with_cp_test import TestAttnFuncWithCPAndKVP2P
+from AutoTuner.testbench.ops_test.column_parallel_linear_test import (
+    TestColumnParallelLinear,
+)
 from AutoTuner.testbench.ops_test.decoder_test_hidden import TestDecoderWithHiddenInputs
 from AutoTuner.testbench.ops_test.dot_product_attention_test import (
     TestTEDotProductAttention,
@@ -6,6 +9,7 @@ from AutoTuner.testbench.ops_test.dot_product_attention_test import (
 from AutoTuner.testbench.ops_test.embedding_test import TestLanguageModelEmbedding
 from AutoTuner.testbench.ops_test.gpt_model_test import TestGPTModel
 from AutoTuner.testbench.ops_test.layernorm_test import TestLayerNorm
+from AutoTuner.testbench.ops_test.mlpdense_test import TestMLPDense
 from AutoTuner.testbench.ops_test.moe_layer_test import TestMoELayer
 from AutoTuner.testbench.ops_test.postprocess_test import TestPostprocess
 from AutoTuner.testbench.ops_test.preprocess_test import TestPreprocess
@@ -22,6 +26,8 @@ OP_TEST_MAPPING = {
     "GPTModel": TestGPTModel,
     "SelfAttention": TestSelfAttention,
     "TEDotProductAttention": TestTEDotProductAttention,
+    "MLPDense": TestMLPDense,
     "MoELayer": TestMoELayer,
     "AttenWithCP": TestAttnFuncWithCPAndKVP2P,
+    "ColumnParallelLinear": TestColumnParallelLinear,
 }

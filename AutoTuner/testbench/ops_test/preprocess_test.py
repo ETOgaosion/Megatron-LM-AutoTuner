@@ -10,6 +10,7 @@ from megatron.core.models.common.embeddings.rotary_pos_embedding import (
 )
 from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.transformer_config import TransformerConfig
+from megatron.core.models.common.embeddings.yarn_rotary_pos_embedding import YarnRotaryEmbedding
 from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
@@ -68,16 +69,12 @@ class TestPreprocess(TestCommon):
                         scatter_to_sequence_parallel=scatter_to_sequence_parallel,
                         tp_group=tp_group,
                     ),
-                    RotaryEmbedding(
-                        kv_channels=tf_config.kv_channels,
+                    self.build_rotary_embedding(
+                        tf_config=tf_config,
+                        hf_config=hf_config,
                         rotary_percent=rotary_percent,
-                        rotary_interleaved=tf_config.rotary_interleaved,
-                        seq_len_interpolation_factor=seq_len_interpolation_factor,
                         rotary_base=rotary_base,
-                        rope_scaling=rope_scaling,
-                        rope_scaling_factor=rope_scaling_factor,
-                        use_cpu_initialization=tf_config.use_cpu_initialization,
-                        cp_group=None,
+                        seq_len_interpolation_factor=seq_len_interpolation_factor,
                     ),
                     tf_config,
                 )
@@ -101,20 +98,53 @@ class TestPreprocess(TestCommon):
                     scatter_to_sequence_parallel=scatter_to_sequence_parallel,
                     tp_group=tp_group,
                 ),
-                RotaryEmbedding(
-                    kv_channels=tf_config.kv_channels,
+                self.build_rotary_embedding(
+                    tf_config=tf_config,
+                    hf_config=hf_config,
                     rotary_percent=rotary_percent,
-                    rotary_interleaved=tf_config.rotary_interleaved,
-                    seq_len_interpolation_factor=seq_len_interpolation_factor,
                     rotary_base=rotary_base,
-                    rope_scaling=rope_scaling,
-                    rope_scaling_factor=rope_scaling_factor,
-                    use_cpu_initialization=tf_config.use_cpu_initialization,
-                    cp_group=None,
+                    seq_len_interpolation_factor=seq_len_interpolation_factor,
                 ),
                 tf_config,
             )
+    @staticmethod
+    def build_rotary_embedding(
+        tf_config: TransformerConfig,
+        hf_config: PretrainedConfig,
+        rotary_percent: float,
+        rotary_base: float,
+        seq_len_interpolation_factor: Optional[float],
+    ):
+        rope_scaling = getattr(hf_config, "rope_scaling", None)
 
+        if rope_scaling is not None and rope_scaling.get("type", None) == "yarn":
+            return YarnRotaryEmbedding(
+                kv_channels=tf_config.kv_channels,
+                rotary_percent=rotary_percent,
+                rotary_interleaved=tf_config.rotary_interleaved,
+                rotary_base=rotary_base,
+                scaling_factor=rope_scaling["factor"],
+                original_max_position_embeddings=rope_scaling[
+                    "original_max_position_embeddings"
+                ],
+                beta_fast=rope_scaling["beta_fast"],
+                beta_slow=rope_scaling["beta_slow"],
+                mscale=rope_scaling.get("mscale", 1.0),
+                mscale_all_dim=rope_scaling.get("mscale_all_dim", 1.0),
+                use_cpu_initialization=tf_config.use_cpu_initialization,
+                cp_group=None,
+            )
+        else:
+            return RotaryEmbedding(
+                kv_channels=tf_config.kv_channels,
+                rotary_percent=rotary_percent,
+                rotary_interleaved=tf_config.rotary_interleaved,
+                seq_len_interpolation_factor=seq_len_interpolation_factor,
+                rotary_base=rotary_base,
+                use_cpu_initialization=tf_config.use_cpu_initialization,
+                cp_group=None,
+            )
+    
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
         micro_batch = micro_batch.to(torch.cuda.current_device())

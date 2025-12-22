@@ -51,3 +51,21 @@ AutoTuner
 Implement operators in `ops` folder and `ops_test` folder, add op to `AutoTuner/testbench/profile/op_mapping.py`.
 
 For inputs, we may need to checkpoint operators' input. But actually, the attention_mask and position_ids are OK to be meaningful, and the hidden_states may be not that useful, so we can generate random hidden_states for these.
+
+## DeepSeek-V3 Runtime Configuration Requirements
+
+When running tests for DeepSeek-V3, Multi Token Prediction (MTP) must be disabled. This can be configured in AutoTuner/testbench/profile/configs/local/override_model_config.json with the following setting:
+
+```json
+{
+    "num_nextn_predict_layers": 0
+}
+```
+
+Additionally, the number of model layers can be modified in the same configuration file:
+
+```json
+{
+    "num_hidden_layers": 2
+}
+```
