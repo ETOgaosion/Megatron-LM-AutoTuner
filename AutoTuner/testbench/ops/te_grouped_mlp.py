@@ -57,8 +57,7 @@ class TEGroupedMLPForTest(TEGroupedMLP, CommonOpsForTest):
         """Forward of TEGroupedMLP
 
         Args:
-            permuted_local_hidden_states (torch.Tensor): The permuted input hidden states of the
-            local experts.
+            permuted_local_hidden_states (torch.Tensor): The permuted input hidden states of the local experts.
             tokens_per_expert (torch.Tensor): The number of tokens per expert.
             permuted_probs (torch.Tensor): The permuted probs of each token produced by the router.
 
