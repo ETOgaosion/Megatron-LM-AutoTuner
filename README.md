@@ -29,3 +29,17 @@ Go to [docs directory](./docs/)
 
 - [Install](./docs/Install.md)
 - [Quick Start](./docs/QuickStart.md)
+
+## Submodules
+
+### Original Open-Source Repos
+
+- Megatron-LM
+- TransformerEngine
+- verl
+
+### Enhenced Repos
+
+- Megatron-LM-Enhanced
+- TransformerEngine-Enhanced
+- verl-enganced
