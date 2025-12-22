@@ -10,9 +10,6 @@ from megatron.core.fusions.fused_bias_geglu import (
 )
 from megatron.core.fusions.fused_bias_swiglu import weighted_bias_swiglu_impl
 from megatron.core.fusions.fused_weighted_squared_relu import weighted_squared_relu_impl
-from megatron.core.models.gpt.gpt_layer_specs import (
-    get_gpt_layer_with_transformer_engine_spec,
-)
 from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.mlp import MLP, MLPSubmodules
 from megatron.core.transformer.moe.experts import TEGroupedMLP
