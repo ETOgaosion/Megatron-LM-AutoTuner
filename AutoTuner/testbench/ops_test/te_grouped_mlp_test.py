@@ -6,8 +6,6 @@ from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
 from megatron.core.process_groups_config import ProcessGroupCollection
-from megatron.core.transformer.attention import SelfAttention
-from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
