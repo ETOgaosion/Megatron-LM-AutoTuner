@@ -6,6 +6,7 @@ from typing import Any, Iterator, List, Optional, Tuple
 
 import megatron.core.parallel_state as mpu
 import torch
+import torch.nn as nn
 from megatron.core import tensor_parallel
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
@@ -201,7 +202,8 @@ class TestCommon(TheoreticalCalculation):
                     outputs.requires_grad_(True)
                     loss = outputs.sum()
                     loss.backward()
-                    self.op.zero_grad(set_to_none=True)
+                    if isinstance(self.op, nn.Module):
+                        self.op.zero_grad(set_to_none=True)
                 del outputs
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
@@ -242,7 +244,10 @@ class TestCommon(TheoreticalCalculation):
                 del input
         if isinstance(output, torch.Tensor):
             del output
-        self.op.zero_grad()
+        # Some ops may be nn.Module, need to clear their gradients
+        # But others may be functions(eg.autograd.Function), so we check type here
+        if isinstance(self.op, nn.Module):
+            self.op.zero_grad()
         gc.collect()
         torch.cuda.empty_cache()
 

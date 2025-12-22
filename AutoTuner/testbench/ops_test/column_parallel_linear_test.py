@@ -1,0 +1,94 @@
+from typing import Dict, Optional
+
+import torch
+from megatron.core.transformer.transformer_config import TransformerConfig
+from transformers import PretrainedConfig
+from typing_extensions import override
+
+from AutoTuner.testbench.ops.column_parallel_linear import ColumnParallelLinearForTest
+from AutoTuner.testbench.ops_test.test_with_hiddens import TestWithHiddenInputs
+from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
+from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
+from AutoTuner.utils.structs import InputTestCase
+
+
+class TestColumnParallelLinear(TestWithHiddenInputs):
+    def __init__(
+        self,
+        # These args are given by launcher
+        tf_config: TransformerConfig,
+        hf_config: PretrainedConfig,
+        tp_group: Optional[torch.distributed.ProcessGroup] = None,
+        profile_mode: int = 0,
+        warmup_iters: int = 2,
+        profile_iters: int = 2,
+        theoretical_flops: bool = False,
+        theoretical_activations: bool = False,
+        tp_comm_overlap_cfg: str = None,
+    ):
+        super().__init__(
+            hf_config=hf_config,
+            tf_config=tf_config,
+            profile_mode=profile_mode,
+            warmup_iters=warmup_iters,
+            profile_iters=profile_iters,
+            tp_group=tp_group,
+            theoretical_flops=theoretical_flops,
+            theoretical_activations=theoretical_activations,
+            tp_comm_overlap_cfg=tp_comm_overlap_cfg,
+        )
+        self.module_name = "ColumnParallelLinearForTest"
+        self.input_size = tf_config.hidden_size
+        self.output_size = tf_config.ffn_hidden_size
+        if tf_config.gated_linear_unit:
+            self.output_size *= 2
+        self.init_method = tf_config.init_method
+
+        if profile_mode == ProfileMode.collect_data:
+            with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
+                self.op = ColumnParallelLinearForTest(
+                    input_size=self.input_size,
+                    output_size=self.output_size,
+                    tf_config=tf_config,
+                    init_method=self.init_method,
+                    gather_output=False,
+                    bias=tf_config.add_bias_linear,
+                    skip_bias_add=True,
+                    is_expert=False,
+                    tp_comm_buffer_name="fc1",
+                    tp_group=tp_group,
+                    hook_activation=False,
+                )  # TODO: 写完理论计算之后将这里的false改为True
+
+            detailed_mem_report = memory_tracker_ctx.get_result()
+            # TODO: theoretical weight memory
+            estimated_weight_mem_bytes = 0
+            estimated_weight_mem_str = get_memory_str(
+                estimated_weight_mem_bytes, human_readable=True
+            )
+            detailed_mem_report["estimated_peak_mem_diff"] = estimated_weight_mem_str
+            self.memory_db["weights"][self.module_name] = detailed_mem_report
+        else:
+            self.op = ColumnParallelLinearForTest(
+                input_size=self.input_size,
+                output_size=self.output_size,
+                tf_config=tf_config,
+                init_method=self.init_method,
+                gather_output=False,
+                bias=tf_config.add_bias_linear,
+                skip_bias_add=True,
+                is_expert=False,
+                tp_comm_buffer_name="fc1",
+                tp_group=tp_group,
+                hook_activation=False,
+            )
+
+    @override
+    def calc_theoretical_memory(self, test_case: InputTestCase) -> Dict[str, int]:
+        # TODO: implement theoretical activation memory calculation
+        return {"activations": {"activations": 0}}
+
+    @override
+    def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:
+        # TODO: implement theoretical FLOPS calculation
+        return {"forward": 0, "backward": 0}
