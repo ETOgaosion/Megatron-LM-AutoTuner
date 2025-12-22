@@ -21,7 +21,7 @@ from .common import CommonOpsForTest
 # from AutoTunner.utils.timing import Timer
 
 
-class LanguageModelEmbeddingForTest(LanguageModelCPUEmbedding, CommonOpsForTest):
+class LanguageModelCPUEmbeddingForTest(LanguageModelCPUEmbedding, CommonOpsForTest):
     def __init__(
         self,
         tf_config: TransformerConfig,
