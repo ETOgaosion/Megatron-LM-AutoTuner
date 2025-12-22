@@ -40,6 +40,11 @@ Go to [docs directory](./docs/)
 
 ### Enhenced Repos
 
-- Megatron-LM-Enhanced
-- TransformerEngine-Enhanced
-- verl-enganced
+- [Megatron-LM-Enhanced](https://github.com/ETOgaosion/Megatron-LM)
+    - @Jetteyc : NetworkEngine
+    - @ETOgaosion , @cyn1456492382 , @miceforrat : All basic functions and Auto-Tuner connection
+- [TransformerEngine-Enhanced](https://github.com/ETOgaosion/TransformerEngine)
+    - @Jetteyc , @Knight-of-Thunder : Context Parallel based on NVSHMEM Async Transport
+- [verl-enhanced](https://github.com/ETOgaosion/verl)
+    - @ETOgaosion , @cyn1456492382 , @miceforrat : balanced data resharding
+    - @LeonardW-sl : Scalable Train-Infer Data & Weights Transport
