@@ -10,3 +10,6 @@
 [submodule "verl"]
 	path = verl
 	url = https://github.com/volcengine/verl.git
+[submodule "Megatron-LM-Enhanced"]
+	path = Megatron-LM-Enhanced
+	url = git@github.com:ETOgaosion/Megatron-LM.git

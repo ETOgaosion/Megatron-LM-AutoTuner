@@ -6,6 +6,9 @@ from megatron.core import tensor_parallel
 from megatron.core.models.common.embeddings.language_model_embedding import (
     LanguageModelEmbedding,
 )
+from megatron.core.models.common.embeddings.language_model_cpu_embedding import (
+    LanguageModelCPUEmbedding,
+)
 from megatron.core.transformer.transformer_config import TransformerConfig
 from torch import Tensor
 from transformers import PretrainedConfig
@@ -27,7 +30,7 @@ class LanguageModelEmbeddingForTest(LanguageModelEmbedding, CommonOpsForTest):
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
         hook_activation=False,
     ):
-        LanguageModelEmbedding.__init__(
+        LanguageModelCPUEmbedding.__init__(
             self,
             config=tf_config,
             vocab_size=hf_config.vocab_size,
@@ -40,13 +43,13 @@ class LanguageModelEmbeddingForTest(LanguageModelEmbedding, CommonOpsForTest):
         CommonOpsForTest.__init__(
             self,
             hook_activation=hook_activation,
-            module_name="LanguageModelEmbedding",
+            module_name="LanguageModelCPUEmbedding",
             logging_level=logging.INFO,
         )
 
     # @MemoryTracker.track_decorator()
     # @Timer.time_decorator()
-    @nvtx_decorator(message="LanguageModelEmbedding forward")
+    @nvtx_decorator(message="LanguageModelCPUEmbedding forward")
     def _forward(
         self, input_ids: Tensor, position_ids: Tensor, tokentype_ids: int = None
     ) -> Tensor:
