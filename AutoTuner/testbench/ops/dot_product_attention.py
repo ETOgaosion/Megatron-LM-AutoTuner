@@ -80,7 +80,7 @@ class TEDotProductAttentionForTest(CommonOpsForTest, TEDotProductAttention):
                     attn_mask_type = AttnMaskType.padding_causal
                 elif attn_mask_type == AttnMaskType.no_mask:
                     attn_mask_type = AttnMaskType.padding
-                    
+
             # 这里的调用方法是对的，下面也一样，就是调用TEDotProductionAttention的父类的forward方法
             core_attn_out = super(TEDotProductAttention, self).forward(
                 query,
