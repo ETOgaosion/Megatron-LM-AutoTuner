@@ -97,7 +97,7 @@ class TestTEGroupedMLP(TestMoELayer):
             and not self.moe_layer.config.sequence_parallel
         ):
             raise ValueError(
-                "During training, performance may degrade if MoE and tensor parallelism"
+                "During training, performance may degrade if MoE and tensor parallelism "
                 "are enabled without also enabling sequence parallelism."
             )
         hidden_states, probs, _ = self.moe_layer.router_and_preprocess(hidden_states)
