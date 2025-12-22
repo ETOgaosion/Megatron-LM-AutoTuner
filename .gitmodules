@@ -13,3 +13,9 @@
 [submodule "Megatron-LM-Enhanced"]
 	path = Megatron-LM-Enhanced
 	url = git@github.com:ETOgaosion/Megatron-LM.git
+[submodule "TransformerEngine-Enhanced"]
+	path = TransformerEngine-Enhanced
+	url = git@github.com:ETOgaosion/TransformerEngine.git
+[submodule "verl-enhanced"]
+	path = verl-enhanced
+	url = git@github.com:ETOgaosion/verl.git
