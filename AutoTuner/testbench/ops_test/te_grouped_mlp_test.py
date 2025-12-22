@@ -11,7 +11,6 @@ from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
 
-from AutoTuner.utils.memory import MemoryTracker, MemoryTrackerContext, get_memory_str
 from AutoTuner.utils.structs import InputTestCase
 
 from ..ops.te_grouped_mlp import TEGroupedMLPForTest
