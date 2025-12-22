@@ -38,7 +38,7 @@ Go to [docs directory](./docs/)
 - TransformerEngine
 - verl
 
-### Enhenced Repos
+### Enhanced Repos
 
 - [Megatron-LM-Enhanced](https://github.com/ETOgaosion/Megatron-LM)
     - @Jetteyc : NetworkEngine
