@@ -71,7 +71,11 @@ class TestTransformerLayer(TestWithHiddenInputs):
                     )
                     try:
                         if use_te:
-                            spec = get_gpt_layer_with_transformer_engine_spec()
+                            spec = get_gpt_layer_with_transformer_engine_spec(
+                                moe_grouped_gemm=tf_config.moe_grouped_gemm,
+                                qk_layernorm=tf_config.qk_layernorm,
+                                multi_latent_attention=tf_config.multi_latent_attention
+                            )
                         else:
                             spec = get_gpt_layer_local_spec()
                         layer_submodules = spec.submodules
