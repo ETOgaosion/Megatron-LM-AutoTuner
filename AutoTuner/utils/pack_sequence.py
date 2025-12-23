@@ -4,13 +4,12 @@ import torch
 from megatron.core.packed_seq_params import PackedSeqParams
 from torch import Tensor
 
-from verl.models.mcore.model_forward import gptmodel_forward
+from verl.models.mcore.model_forward import model_forward_gen
 from verl.models.mcore.util import (
-    postprocess_packed_seqs,
     preprocess_packed_seqs,
-    recover_left_padding,
-    remove_left_padding,
 )
+
+gptmodel_forward = model_forward_gen()
 
 
 def generate_thd_input(
