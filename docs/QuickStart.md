@@ -77,6 +77,9 @@ docker create --rm -it --gpus all --shm-size=25GB --name megatron_autotuner -v $
 docker start megatron_autotuner
 
 docker exec -it megatron_autotuner bash
+
+# in container
+bash scripts/install_in_docker.sh
 ```
 
 2. In docker container, Update Nsight System:
