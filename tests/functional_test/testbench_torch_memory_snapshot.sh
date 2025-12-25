@@ -24,7 +24,7 @@ else
     ETP_SIZE=1
 fi
 
-GPUS_PER_NODE=$(($TP_SIZE*$CP_SIZE*$EP_SIZE*$ETP_SIZE))
+GPUS_PER_NODE=$(($TP_SIZE*$CP_SIZE))
 
 TIMESTAMP_VAR=$(date +"%Y-%m-%d_%H-%M-%S")
 OUTPUT_DIR=outputs/${TIMESTAMP_VAR}
