@@ -50,7 +50,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         tf_config: TransformerConfig,
         hf_config: PretrainedConfig,
         transformer_layer_spec: ModuleSpec,
-        hook_activation=False,
+        hook_activation: bool = False,
         scatter_to_sequence_parallel: bool = True,
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
         **kwargs,

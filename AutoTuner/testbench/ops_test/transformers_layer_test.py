@@ -1,16 +1,12 @@
 import os
-from contextlib import nullcontext
 from typing import Any, Dict, Optional
 
 import torch
-from megatron.core import parallel_state, tensor_parallel
-from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
+from megatron.core import parallel_state
 from megatron.core.models.gpt.gpt_layer_specs import (
-    get_gpt_layer_local_spec,
     get_gpt_layer_with_transformer_engine_spec,
 )
 from megatron.core.process_groups_config import ProcessGroupCollection
-from megatron.core.transformer import TransformerLayerSubmodules
 from megatron.core.transformer.transformer_config import TransformerConfig
 from transformers import PretrainedConfig
 from typing_extensions import override
@@ -18,11 +14,8 @@ from typing_extensions import override
 from AutoTuner.testbench.ops.transformer_layer import TransformerLayerForTest
 from AutoTuner.testbench.ops_test.test_with_hiddens import TestWithHiddenInputs
 from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
-from AutoTuner.utils.hidden_status_gen import HiddenStatusGenerator
-from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
+from AutoTuner.utils.memory import MemoryTrackerContext
 from AutoTuner.utils.structs import InputTestCase
-
-from .common import TestCommon
 
 os.environ["NVTE_NVTX_ENABLED"] = "1"
 
@@ -65,18 +58,13 @@ class TestTransformerLayer(TestWithHiddenInputs):
                 ):
                     layer_submodules = tf_config.layer_submodules
                 else:
-                    use_te = (
-                        getattr(tf_config, "transformer_impl", "local")
-                        == "transformer_engine"
-                    )
-                    try:
-                        if use_te:
-                            spec = get_gpt_layer_with_transformer_engine_spec()
-                        else:
-                            spec = get_gpt_layer_local_spec()
-                        layer_submodules = spec.submodules
-                    except Exception:
-                        layer_submodules = None
+                    spec = get_gpt_layer_with_transformer_engine_spec(
+                                num_experts=tf_config.num_moe_experts,
+                                multi_latent_attention = tf_config.multi_latent_attention,
+                                qk_layernorm=tf_config.qk_layernorm,
+                                moe_grouped_gemm=tf_config.moe_grouped_gemm
+                            )
+                    layer_submodules = spec.submodules
 
                 self.op = TransformerLayerForTest(
                     tf_config,
@@ -102,18 +90,13 @@ class TestTransformerLayer(TestWithHiddenInputs):
             ):
                 layer_submodules = tf_config.layer_submodules
             else:
-                use_te = (
-                    getattr(tf_config, "transformer_impl", "local")
-                    == "transformer_engine"
-                )
-                try:
-                    if use_te:
-                        spec = get_gpt_layer_with_transformer_engine_spec()
-                    else:
-                        spec = get_gpt_layer_local_spec()
-                    layer_submodules = spec.submodules
-                except Exception:
-                    layer_submodules = None
+                spec = get_gpt_layer_with_transformer_engine_spec(
+                            num_experts=tf_config.num_moe_experts,
+                            multi_latent_attention = tf_config.multi_latent_attention,
+                            qk_layernorm=tf_config.qk_layernorm,
+                            moe_grouped_gemm=tf_config.moe_grouped_gemm
+                        )
+                layer_submodules = spec.submodules
             self.op = TransformerLayerForTest(
                 tf_config,
                 submodules=layer_submodules,

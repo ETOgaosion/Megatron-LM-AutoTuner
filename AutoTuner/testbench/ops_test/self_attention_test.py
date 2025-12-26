@@ -10,6 +10,9 @@ from AutoTuner.testbench.ops_test.test_with_hiddens import TestWithHiddenInputs
 from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
 from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
 from AutoTuner.utils.structs import InputTestCase
+from megatron.core.models.gpt.gpt_layer_specs import (
+    get_gpt_layer_with_transformer_engine_spec,
+)
 
 
 class TestSelfAttention(TestWithHiddenInputs):
@@ -37,7 +40,14 @@ class TestSelfAttention(TestWithHiddenInputs):
 
         if profile_mode == ProfileMode.collect_data:
             with MemoryTrackerContext("SelfAttention init") as memory_tracker_ctx:
-                self.op = SelfAttentionForTest(tf_config)
+                self.op = SelfAttentionForTest(
+                    tf_config,
+                    hook_activation = (profile_mode == ProfileMode.collect_data),
+                    submodules = get_gpt_layer_with_transformer_engine_spec(
+                            multi_latent_attention = tf_config.multi_latent_attention,
+                            qk_layernorm=tf_config.qk_layernorm
+                            ).submodules.self_attention.submodules,
+                    )
 
             detailed_mem_report = memory_tracker_ctx.get_result()
 
@@ -50,7 +60,14 @@ class TestSelfAttention(TestWithHiddenInputs):
             self.memory_db["weights"][self.module_name] = detailed_mem_report
 
         else:
-            self.op = SelfAttentionForTest(tf_config)
+            self.op = SelfAttentionForTest(
+                    tf_config,
+                    hook_activation = (profile_mode == ProfileMode.collect_data),
+                    submodules = get_gpt_layer_with_transformer_engine_spec(
+                            multi_latent_attention = tf_config.multi_latent_attention,
+                            qk_layernorm=tf_config.qk_layernorm
+                            ).submodules.self_attention.submodules
+                    )
 
     @override
     def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:

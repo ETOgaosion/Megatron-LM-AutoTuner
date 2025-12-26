@@ -1,3 +1,4 @@
+
 import logging
 
 import torch
@@ -22,11 +23,12 @@ class PreprocessForTest(nn.Module, CommonOpsForTest):
         embedding: LanguageModelEmbedding,
         rotary_pos_emb: RotaryEmbedding,
         config: TransformerConfig,
+        hook_activation: bool = False,
     ):
         nn.Module.__init__(self)
         CommonOpsForTest.__init__(
             self,
-            hook_activation=False,
+            hook_activation=hook_activation,
             module_name="Preprocess",
             logging_level=logging.INFO,
         )

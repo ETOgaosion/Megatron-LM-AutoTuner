@@ -1,6 +1,7 @@
 import os
 from typing import Dict, Optional
 
+from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_with_transformer_engine_spec
 import torch
 from megatron.core.transformer.transformer_config import TransformerConfig
 from transformers import PretrainedConfig
@@ -44,7 +45,16 @@ class TestDecoderWithHiddenInputs(TestWithHiddenInputs):
 
         if profile_mode == ProfileMode.collect_data:
             with MemoryTrackerContext("Decoder init") as memory_tracker_ctx:
-                self.op = DecoderForTest(tf_config)
+                self.op = DecoderForTest(
+                    tf_config,
+                    spec = get_gpt_layer_with_transformer_engine_spec(
+                                num_experts=tf_config.num_moe_experts,
+                                multi_latent_attention = tf_config.multi_latent_attention,
+                                qk_layernorm=tf_config.qk_layernorm,
+                                moe_grouped_gemm=tf_config.moe_grouped_gemm
+                            ),
+                    hook_activation = (profile_mode == ProfileMode.collect_data)
+                )
 
             detailed_mem_report = memory_tracker_ctx.get_result()
 
@@ -57,7 +67,16 @@ class TestDecoderWithHiddenInputs(TestWithHiddenInputs):
             self.memory_db["weights"][self.module_name] = detailed_mem_report
 
         else:
-            self.op = DecoderForTest(tf_config)
+            self.op = DecoderForTest(
+                tf_config,
+                spec = get_gpt_layer_with_transformer_engine_spec(
+                            num_experts=tf_config.num_moe_experts,
+                            multi_latent_attention = tf_config.multi_latent_attention,
+                            qk_layernorm=tf_config.qk_layernorm,
+                            moe_grouped_gemm=tf_config.moe_grouped_gemm
+                        ),
+                hook_activation = (profile_mode == ProfileMode.collect_data)
+            )
 
     @override
     def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:

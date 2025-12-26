@@ -46,7 +46,10 @@ class TestTEDotProductAttention(TestWithHiddenInputs):
 
         self.self_attention = SelfAttention(
             tf_config,
-            get_gpt_layer_with_transformer_engine_spec().submodules.self_attention.submodules,
+            get_gpt_layer_with_transformer_engine_spec(
+                            multi_latent_attention = tf_config.multi_latent_attention,
+                            qk_layernorm=tf_config.qk_layernorm
+                            ).submodules.self_attention.submodules,
             layer_number=layer_number,
             attn_mask_type=AttnMaskType.causal,
         )
@@ -54,9 +57,10 @@ class TestTEDotProductAttention(TestWithHiddenInputs):
         if profile_mode == ProfileMode.collect_data:
             with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
                 self.op = TEDotProductAttentionForTest(
-                    tf_config, layer_number=layer_number, hook_activation=False
-                )  # TODO: 写完理论计算之后将这里的false改为True
-
+                    tf_config, layer_number=layer_number, hook_activation=(profile_mode == ProfileMode.collect_data)
+                )
+                
+            # TODO: weight estimate
             detailed_mem_report = memory_tracker_ctx.get_result()
 
             # 显然，点积的权重估计为0

@@ -25,7 +25,7 @@ class LanguageModelEmbeddingForTest(LanguageModelEmbedding, CommonOpsForTest):
         hf_config: PretrainedConfig,
         scatter_to_sequence_parallel: bool = True,
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
-        hook_activation=False,
+        hook_activation: bool = False,
     ):
         LanguageModelEmbedding.__init__(
             self,

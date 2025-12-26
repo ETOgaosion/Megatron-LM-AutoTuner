@@ -1,6 +1,7 @@
 import logging
 from typing import Optional, Tuple, Union
 
+from megatron.core.transformer.spec_utils import ModuleSpec
 import torch
 from einops import rearrange
 from megatron.core.inference.contexts import BaseInferenceContext
@@ -55,11 +56,13 @@ class SelfAttentionForTest(SelfAttention, CommonOpsForTest):
         config: TransformerConfig,
         cp_com_type: str = None,
         pg_collection: ProcessGroupCollection = None,
+        hook_activation: bool = False,
+        submodules: ModuleSpec = None,
     ):
         SelfAttention.__init__(
             self,
             config=config,
-            submodules=get_gpt_layer_with_transformer_engine_spec().submodules.self_attention.submodules,
+            submodules=submodules,
             layer_number=1,
             attn_mask_type=AttnMaskType.causal,  # TODO: check the input is THD or BSHD
             cp_comm_type=cp_com_type,
@@ -67,7 +70,7 @@ class SelfAttentionForTest(SelfAttention, CommonOpsForTest):
         )
         CommonOpsForTest.__init__(
             self,
-            hook_activation=False,
+            hook_activation=hook_activation,
             module_name="SelfAttention",
             logging_level=logging.INFO,
         )
