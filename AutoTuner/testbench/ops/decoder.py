@@ -2,15 +2,13 @@ import logging
 from contextlib import nullcontext
 from typing import Optional, Union
 
+from megatron.core.transformer.spec_utils import ModuleSpec
 import torch
 from megatron.core import tensor_parallel
 from megatron.core.enums import Fp8Recipe
 from megatron.core.fp4_utils import get_fp4_context
 from megatron.core.fp8_utils import get_fp8_context
 from megatron.core.inference.contexts.base_context import BaseInferenceContext
-from megatron.core.models.gpt.gpt_layer_specs import (
-    get_gpt_layer_with_transformer_engine_spec,
-)
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.transformer.transformer_block import (
     TransformerBlock,
@@ -34,16 +32,18 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
     def __init__(
         self,
         config: TransformerConfig,
+        spec: ModuleSpec,
+        hook_activation: bool = False,
     ):
         TransformerBlock.__init__(
             self,
             config,
-            spec=get_gpt_layer_with_transformer_engine_spec(),
+            spec=spec,
             post_process=False,
         )
         CommonOpsForTest.__init__(
             self,
-            hook_activation=False,
+            hook_activation=hook_activation,
             module_name="Decoder",
             logging_level=logging.INFO,
         )
@@ -54,7 +54,10 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
         self,
         hidden_states: Tensor,
         attention_mask: Tensor = None,
+        context: Optional[Tensor] = None,
+        context_mask: Optional[Tensor] = None,
         rotary_pos_emb: Tensor = None,
+        attention_bias: Optional[Tensor] = None,
         packed_seq_params: PackedSeqParams = None,
         sequence_len_offset: Tensor = None,
         **kwargs,
@@ -117,41 +120,54 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
             outer_quantization_context = nullcontext()
 
         with rng_context, outer_quantization_context:
-            # Forward pass.
             nvtx_range_push(suffix="Transformer Layers")
-            for l_no, layer in enumerate(self.layers):
-                # Get appropriate inner quantization context
-                if use_inner_quantization_context:
-                    if self.config.fp8:
-                        inner_quantization_context = get_fp8_context(
-                            self.config, layer.layer_number - 1
-                        )
-                    elif self.config.fp4:
-                        inner_quantization_context = get_fp4_context(
-                            self.config, layer.layer_number - 1
-                        )
+            # Forward pass.
+            if self.config.recompute_granularity == 'full' and self.training:
+                hidden_states.requires_grad_(True)
+                hidden_states = self._checkpointed_forward(
+                    hidden_states=hidden_states,
+                    attention_mask=attention_mask,
+                    context=context,
+                    context_mask=context_mask,
+                    rotary_pos_emb=rotary_pos_emb,
+                    attention_bias=attention_bias,
+                    packed_seq_params=packed_seq_params,
+                    use_inner_quantization_context=use_inner_quantization_context,
+                )
+            else:
+                for l_no, layer in enumerate(self.layers):
+                    # Get appropriate inner quantization context
+                    if use_inner_quantization_context:
+                        if self.config.fp8:
+                            inner_quantization_context = get_fp8_context(
+                                self.config, layer.layer_number - 1
+                            )
+                        elif self.config.fp4:
+                            inner_quantization_context = get_fp4_context(
+                                self.config, layer.layer_number - 1
+                            )
+                        else:
+                            inner_quantization_context = nullcontext()
                     else:
                         inner_quantization_context = nullcontext()
-                else:
-                    inner_quantization_context = nullcontext()
-                with self.offload_context, inner_quantization_context:
-                    nvtx_range_push(suffix="Transformer Layer")
-                    hidden_states, context = layer(
-                        hidden_states=hidden_states,
-                        attention_mask=attention_mask,
-                        rotary_pos_emb=rotary_pos_emb,
-                        packed_seq_params=packed_seq_params,
-                        sequence_len_offset=sequence_len_offset,
-                    )
-                    nvtx_range_pop(suffix="Transformer Layer")
-                if (
-                    torch.is_grad_enabled()
-                    and self.config.cpu_offloading
-                    and self.group_prefetch_offload_commit_async is not None
-                ):
-                    hidden_states = self.group_prefetch_offload_commit_async(
-                        hidden_states
-                    )
+
+                    with self.offload_context, inner_quantization_context:
+                        hidden_states, context = layer(
+                            hidden_states=hidden_states,
+                            attention_mask=attention_mask,
+                            context=context,
+                            context_mask=context_mask,
+                            rotary_pos_emb=rotary_pos_emb,
+                            attention_bias=attention_bias,
+                            packed_seq_params=packed_seq_params,
+                        )
+
+                    if (
+                        torch.is_grad_enabled()
+                        and self.config.cpu_offloading
+                        and self.group_prefetch_offload_commit_async is not None
+                    ):
+                        hidden_states = self.group_prefetch_offload_commit_async(hidden_states)
             nvtx_range_pop(suffix="Transformer Layers")
 
         return hidden_states
@@ -179,10 +195,13 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
             self.activation_hook.save_hook, self.activation_hook.load_hook
         ):
             ret = self._forward(
-                hidden_states,
-                attention_mask,
-                rotary_pos_emb,
-                packed_seq_params,
-                sequence_len_offset,
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                context=context,
+                context_mask=context_mask,
+                rotary_pos_emb=rotary_pos_emb,
+                attention_bias=attention_bias,
+                packed_seq_params=packed_seq_params,
+                sequence_len_offset=sequence_len_offset,
             )
         return ret

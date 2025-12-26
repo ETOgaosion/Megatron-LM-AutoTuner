@@ -94,10 +94,11 @@ class AttnFuncWithCPAndKVP2PForTest(AttnFuncWithCPAndKVP2PWrapper, CommonOpsForT
     def __init__(
         self,
         config: TransformerConfig,
+        hook_activation: bool = False,
     ):
         CommonOpsForTest.__init__(
             self,
-            hook_activation=False,
+            hook_activation=hook_activation,
             module_name="AttnFuncWithCPAndKVP2P",
             logging_level=logging.INFO,
         )

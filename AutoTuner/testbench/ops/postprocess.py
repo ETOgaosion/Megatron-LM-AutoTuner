@@ -1,6 +1,7 @@
 import logging
-from typing import Optional
+from typing import Optional, Union
 
+from megatron.core.inference.contexts.base_context import BaseInferenceContext
 import torch
 from megatron.core import parallel_state, tensor_parallel
 from megatron.core.fusions.fused_cross_entropy import fused_vocab_parallel_cross_entropy
@@ -45,7 +46,7 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
         cp_group: Optional[torch.distributed.ProcessGroup] = None,
         pg_collection: Optional[ProcessGroupCollection] = None,
         embedding: LanguageModelEmbedding = None,
-        hook_activation=False,
+        hook_activation: bool = False,
     ):
         torch.nn.Module.__init__(self)
         CommonOpsForTest.__init__(
@@ -66,57 +67,7 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
         self.cp_group = cp_group
         self.pg_collection = pg_collection
         self.embedding = embedding
-
-    # copy from LanguageModule
-    # @nvtx_decorator(message="Postprocess loss")
-    def compute_language_model_loss(self, labels: Tensor, logits: Tensor) -> Tensor:
-        """Computes the language model loss (Cross entropy across vocabulary)
-
-        Args:
-            labels (Tensor): The labels of dimension [batch size, seq length] or [total_tokens] for THD
-            logits (Tensor): The final logits returned by the output layer of the transformer model
-
-        Returns:
-            Tensor: Loss tensor of dimensions [batch size, sequence_length] or [total_tokens] for THD
-        """
-        # Handle both BSHD format (2D) and THD format (1D)
-        is_thd_format = labels.dim() == 1
-
-        if not is_thd_format:
-            # [b s] => [s b] only for BSHD format
-            labels = labels.transpose(0, 1).contiguous()
-
-        if self.tf_config.cross_entropy_loss_fusion:
-            if self.tf_config.cross_entropy_fusion_impl == "te":
-                if te_parallel_cross_entropy is not None:
-                    if not is_thd_format:
-                        # as_strided only works for 2D tensors
-                        labels = torch.as_strided(
-                            labels, labels.size(), (labels.size()[1], 1)
-                        )
-                    loss = te_parallel_cross_entropy(
-                        logits,
-                        labels,
-                        self.pg_collection.tp,
-                        False,  # is_cg_capturable=False for training
-                    )
-                else:
-                    raise RuntimeError(
-                        "Trying to use a TE block when it's not present."
-                    )
-            elif self.tf_config.cross_entropy_fusion_impl == "native":
-                loss = fused_vocab_parallel_cross_entropy(
-                    logits, labels, self.pg_collection.tp
-                )
-        else:
-            loss = tensor_parallel.vocab_parallel_cross_entropy(logits, labels)
-
-        if not is_thd_format:
-            # [s b] => [b, s] only for BSHD format
-            loss = loss.transpose(0, 1).contiguous()
-        return loss
-
-    # copy form gpt_model
+        
     def shared_embedding_or_output_weight(self) -> Tensor:
         """Gets the embedding weight or output logit weights when share input embedding and
         output weights set to True or when use Multi-Token Prediction (MTP) feature.
@@ -131,7 +82,7 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
             # In this case, if share_embeddings_and_output_weights is True, the shared weights
             # will be stored in embedding layer, and output layer will not have any weight.
             assert hasattr(
-                self, "embedding"
+                self, 'embedding'
             ), f"embedding is needed in this pipeline stage, but it is not initialized."
             return self.embedding.word_embeddings.weight
         elif self.post_process:
@@ -144,18 +95,17 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
         hidden_states: Tensor,
         input_ids,
         position_ids,
-        labels,
         rotary_pos_emb,
         mtp_in_postprocess=None,
         attention_mask=None,
         packed_seq_params=None,
         extra_block_kwargs=None,
     ):
-        if isinstance(hidden_states, WrappedTensor):
-            hidden_states = hidden_states.unwrap()
-        hidden_states = make_viewless_tensor(
-            inp=hidden_states, requires_grad=True, keep_graph=True
-        )
+        # if isinstance(hidden_states, WrappedTensor):
+        #     hidden_states = hidden_states.unwrap()
+        # hidden_states = make_viewless_tensor(
+        #     inp=hidden_states, requires_grad=True, keep_graph=True
+        # )
 
         # logits and loss
         output_weight = None
@@ -190,29 +140,25 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
 
     def forward(
         self,
-        hidden_states,
-        input_ids,
-        position_ids,
-        labels,
-        rotary_pos_emb,
-        mtp_in_postprocess=None,
-        attention_mask=None,
-        packed_seq_params=None,
-        extra_block_kwargs=None,
+        mtp_in_postprocess: bool,
+        input_ids: Optional[Tensor],
+        position_ids: Optional[Tensor],
+        hidden_states: Union[Tensor, WrappedTensor],
+        attention_mask: Optional[Tensor],
+        rotary_pos_emb: Optional[Tensor] = None,
+        packed_seq_params: Optional[PackedSeqParams] = None,
     ) -> Tensor:
         self.activation_hook.clear()
         with torch.autograd.graph.saved_tensors_hooks(
             self.activation_hook.save_hook, self.activation_hook.load_hook
         ):
             ret = self._forward(
-                hidden_states=hidden_states,
                 input_ids=input_ids,
                 position_ids=position_ids,
-                labels=labels,
-                rotary_pos_emb=rotary_pos_emb,
                 mtp_in_postprocess=mtp_in_postprocess,
+                hidden_states=hidden_states,
+                rotary_pos_emb=rotary_pos_emb,
                 attention_mask=attention_mask,
                 packed_seq_params=packed_seq_params,
-                extra_block_kwargs=extra_block_kwargs,
             )
         return ret

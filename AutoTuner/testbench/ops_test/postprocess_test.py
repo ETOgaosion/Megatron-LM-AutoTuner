@@ -1,6 +1,7 @@
 import os
 from typing import Any, Dict, Literal, Optional
 
+from AutoTuner.testbench.ops_test.test_with_hiddens import TestWithHiddenInputs
 import torch
 from megatron.core import parallel_state, tensor_parallel
 from megatron.core.models.common.embeddings.language_model_embedding import (
@@ -34,12 +35,11 @@ from AutoTuner.utils.structs import InputTestCase
 
 from ..ops.postprocess import PostprocessForTest
 from ..profile.configs.config_struct import ProfileMode
-from .common import TestCommon
 
 os.environ["NVTE_NVTX_ENABLED"] = "1"
 
 
-class TestPostprocess(TestCommon):
+class TestPostprocess(TestWithHiddenInputs):
     def __init__(
         self,
         tf_config: TransformerConfig,
@@ -55,10 +55,11 @@ class TestPostprocess(TestCommon):
         parallel_output: bool = True,
     ):
         super().__init__(
-            tf_config=tf_config,
             hf_config=hf_config,
+            tf_config=tf_config,
             profile_mode=profile_mode,
             warmup_iters=warmup_iters,
+            tp_group=tp_group,
             theoretical_flops=theoretical_flops,
             theoretical_activations=theoretical_activations,
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,
@@ -91,10 +92,12 @@ class TestPostprocess(TestCommon):
             use_te = (
                 getattr(tf_config, "transformer_impl", "local") == "transformer_engine"
             )
-            if use_te:
-                transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec()
-            else:
-                transformer_layer_spec = get_gpt_layer_local_spec()
+            transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
+                num_experts=tf_config.num_moe_experts,
+                multi_latent_attention = tf_config.multi_latent_attention,
+                qk_layernorm=tf_config.qk_layernorm,
+                moe_grouped_gemm=tf_config.moe_grouped_gemm
+            )
 
             transformer_layer_spec_for_mtp = transformer_layer_spec
 
@@ -261,101 +264,43 @@ class TestPostprocess(TestCommon):
 
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
-
+        
+        hiddenstatus = self.hiddenstatus_generator.prepare_input(test_case, micro_batch)
+        hidden_states = hiddenstatus[0]
+        attention_mask = hiddenstatus[1]
+        rotary_pos_emb = hiddenstatus[2]
+        packed_seq_params = hiddenstatus[3]
         micro_batch = micro_batch.to(torch.cuda.current_device())
         micro_batch = micro_batch.contiguous()
-
-        self.hiddenstatus_generator = HiddenStatusGenerator(
-            tf_config=self.tf_config,
-            hf_config=self.hf_config,
-            tp_group=self.tp_group,
-            scatter_to_sequence_parallel=self.scatter_to_sequence_parallel,
-            rotary_percent=1.0,
-            rotary_base=10000,
-            rope_scaling=False,
-            rope_scaling_factor=8.0,
-            seq_len_interpolation_factor=None,
-            pg_collection=self.pg_collection,
-        )
-
-        input_ids = micro_batch["input_ids"]
-        attention_mask = micro_batch["attention_mask"]
-        position_ids = micro_batch["position_ids"]
-        packed_seq_params = None  # Disable sequence packing
-        self.embedding = LanguageModelEmbedding(
-            config=self.tf_config,
-            vocab_size=self.hf_config.vocab_size,
-            max_sequence_length=self.hf_config.max_position_embeddings,
-            position_embedding_type="rope",
-            num_tokentypes=0,
-            scatter_to_sequence_parallel=self.scatter_to_sequence_parallel,
-            tp_group=self.tp_group,
-        )
-        if self.pre_process or self.mtp_process:
-            with torch.no_grad():
-                decoder_input = self.embedding(
-                    input_ids=input_ids, position_ids=position_ids
-                )
-        else:
-            hidden_size = self.tf_config.hidden_size
-            total_tokens = (
-                input_ids.shape[0] if input_ids.dim() == 1 else input_ids.numel()
-            )
-            decoder_input = torch.randn(
-                total_tokens,
-                hidden_size,
-                dtype=self.tf_config.params_dtype,
-                device=torch.cuda.current_device(),
-            )
-
-        hidden_states = decoder_input.clone()
-
-        if "labels" in micro_batch:
-            labels = micro_batch["labels"]
-        else:
-            labels = micro_batch.get("input_ids")
-
-        rotary_percent = getattr(self.tf_config, "rotary_percent", 1.0)
-        rotary_base = getattr(self.tf_config, "rotary_base", 10000)
-        seq_len_interpolation_factor = getattr(
-            self.tf_config, "seq_len_interpolation_factor", None
-        )
-        rope_scaling = getattr(self.tf_config, "rope_scaling", False)
-        rope_scaling_factor = getattr(self.tf_config, "rope_scaling_factor", 8.0)
-
-        self.rotary_pos_emb = RotaryEmbedding(
-            kv_channels=self.tf_config.kv_channels,
-            rotary_percent=rotary_percent,
-            rotary_interleaved=self.tf_config.rotary_interleaved,
-            seq_len_interpolation_factor=seq_len_interpolation_factor,
-            rotary_base=rotary_base,
-            rope_scaling=rope_scaling,
-            rope_scaling_factor=rope_scaling_factor,
-            use_cpu_initialization=self.tf_config.use_cpu_initialization,
-            cp_group=self.pg_collection.cp,
-        )
-
-        rotary_pos_emb = None
-        rotary_seq_len = (
-            position_ids.shape[1] if position_ids.dim() > 1 else position_ids.shape[0]
-        )
-        rotary_pos_emb = self.rotary_pos_emb(rotary_seq_len, packed_seq=False)
-
         mtp_in_postprocess = self.mtp_process
+        
+        if test_case.shape == "bshd":
+            input_ids = micro_batch["input_ids"]
+            position_ids = micro_batch["position_ids"]
+                
+            return (
+                mtp_in_postprocess,
+                input_ids,
+                position_ids,
+                hidden_states,
+                attention_mask,
+                rotary_pos_emb,
+                packed_seq_params,
+            )
+        else:
+            input_ids_rmpad, attention_mask_rmpad, position_ids_rmpad, packed_seq_params_rmpad = (
+                get_thd_model_input_from_bshd(micro_batch)
+            )
+            return (
+                mtp_in_postprocess,
+                input_ids_rmpad,
+                position_ids_rmpad,
+                hidden_states,
+                attention_mask,
+                rotary_pos_emb,
+                packed_seq_params,
+            )
 
-        extra_block_kwargs = None
-
-        return (
-            hidden_states,
-            input_ids,
-            position_ids,
-            labels,
-            rotary_pos_emb,
-            mtp_in_postprocess,
-            attention_mask,
-            packed_seq_params,
-            extra_block_kwargs,
-        )
 
     @override
     def calculate_tokens(

@@ -28,7 +28,7 @@ class MoELayerForTest(MoELayer, CommonOpsForTest):
         config: TransformerConfig,
         pg_collection: Optional[ProcessGroupCollection] = None,
         layer_number: int = 1,
-        hook_activation=False,
+        hook_activation: bool = False,
     ):
         transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
             num_experts=config.num_moe_experts, moe_grouped_gemm=config.moe_grouped_gemm

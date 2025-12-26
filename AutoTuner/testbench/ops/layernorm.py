@@ -20,7 +20,7 @@ class LayerNormForTest(torch.nn.Module, CommonOpsForTest):
         self,
         tf_config: TransformerConfig,
         hf_config: PretrainedConfig,
-        hook_activation=False,
+        hook_activation: bool = False,
     ):
         torch.nn.Module.__init__(self)
         CommonOpsForTest.__init__(

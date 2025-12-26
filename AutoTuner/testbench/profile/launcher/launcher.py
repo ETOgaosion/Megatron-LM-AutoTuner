@@ -81,7 +81,12 @@ class Launcher:
             )
 
             kwargs["transformer_layer_spec"] = (
-                get_gpt_layer_with_transformer_engine_spec()
+                get_gpt_layer_with_transformer_engine_spec(
+                    num_experts=self.tf_config.num_moe_experts,
+                    multi_latent_attention = self.tf_config.multi_latent_attention,
+                    qk_layernorm=self.tf_config.qk_layernorm,
+                    moe_grouped_gemm=self.tf_config.moe_grouped_gemm
+                )
             )
         op_class_instance = op_test_class(**kwargs)
         if test_case_idxs is None:

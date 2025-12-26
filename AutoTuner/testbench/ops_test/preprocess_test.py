@@ -77,6 +77,7 @@ class TestPreprocess(TestCommon):
                         seq_len_interpolation_factor=seq_len_interpolation_factor,
                     ),
                     tf_config,
+                    hook_activation = (profile_mode == ProfileMode.collect_data),
                 )
             detailed_mem_report = memory_tracker_ctx.get_result()
             # TODO: theoretical weight memory
