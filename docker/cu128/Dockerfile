@@ -1,1 +1,1 @@
-FROM verlai/verl:app-verl0.6-transformers4.56.1-sglang0.5.2-mcore0.13.0-te2.2
+FROM whatcanyousee/megatron-autotuner-env:mcore0.14.0_te2.7
