@@ -5,7 +5,6 @@ from typing import Optional, Union
 import torch
 from megatron.core import tensor_parallel
 from megatron.core.enums import Fp8Recipe
-from megatron.core.fp4_utils import get_fp4_context
 from megatron.core.fp8_utils import get_fp8_context
 from megatron.core.inference.contexts.base_context import BaseInferenceContext
 from megatron.core.packed_seq_params import PackedSeqParams
@@ -109,10 +108,10 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
                 if use_outer_quantization_context
                 else nullcontext()
             )
-        elif self.config.fp4:
-            # use_outer_quantization_context = False
-            use_inner_quantization_context = True
-            outer_quantization_context = nullcontext()
+        # elif self.config.fp4:
+        #     # use_outer_quantization_context = False
+        #     use_inner_quantization_context = True
+        #     outer_quantization_context = nullcontext()
         else:
             # No quantization
             # use_outer_quantization_context = False
@@ -142,10 +141,10 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
                             inner_quantization_context = get_fp8_context(
                                 self.config, layer.layer_number - 1
                             )
-                        elif self.config.fp4:
-                            inner_quantization_context = get_fp4_context(
-                                self.config, layer.layer_number - 1
-                            )
+                        # elif self.config.fp4:
+                        #     inner_quantization_context = get_fp4_context(
+                        #         self.config, layer.layer_number - 1
+                        #     )
                         else:
                             inner_quantization_context = nullcontext()
                     else:

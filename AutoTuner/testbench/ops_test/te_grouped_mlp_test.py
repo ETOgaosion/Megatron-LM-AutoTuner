@@ -5,12 +5,13 @@ from megatron.core import parallel_state
 from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
-from megatron.core.process_groups_config import ProcessGroupCollection
+from megatron.core.process_groups_config import ModelCommProcessGroups
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
 
+from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
 from AutoTuner.utils.structs import InputTestCase
 
 from ..ops.te_grouped_mlp import TEGroupedMLPForTest
@@ -65,7 +66,7 @@ class TestTEGroupedMLP(TestMoELayer):
                     num_local_experts=num_local_experts,
                     config=tf_config,
                     submodules=transformer_layer_spec.submodules.mlp.submodules.experts.submodules,
-                    pg_collection=ProcessGroupCollection.use_mpu_process_groups(),
+                    model_comm_pgs=ModelCommProcessGroups.use_mpu_process_groups(),
                     hook_activation=False,
                 )
 
@@ -85,7 +86,7 @@ class TestTEGroupedMLP(TestMoELayer):
                 num_local_experts=num_local_experts,
                 config=tf_config,
                 submodules=transformer_layer_spec.submodules.mlp.submodules.experts.submodules,
-                pg_collection=ProcessGroupCollection.use_mpu_process_groups(),
+                model_comm_pgs=ModelCommProcessGroups.use_mpu_process_groups(),
                 hook_activation=False,
             )
 

@@ -12,7 +12,7 @@ from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
     get_gpt_mtp_block_spec,
 )
-from megatron.core.process_groups_config import ProcessGroupCollection
+from megatron.core.process_groups_config import ModelCommProcessGroups
 from megatron.core.transformer.multi_token_prediction import (
     MTPLossAutoScaler,
     MTPLossLoggingHelper,
@@ -77,7 +77,7 @@ class TestPostprocess(TestWithHiddenInputs):
         self.post_process = parallel_state.is_pipeline_last_stage()
         self.parallel_output = parallel_output
         self.pre_process = tf_config.mtp_num_layers is not None
-        self.pg_collection = ProcessGroupCollection.use_mpu_process_groups()
+        self.model_comm_pgs = ModelCommProcessGroups.use_mpu_process_groups()
         self.cp_group = parallel_state.get_context_parallel_group()
         self.tp_group = (
             tp_group
@@ -141,7 +141,7 @@ class TestPostprocess(TestWithHiddenInputs):
                         tp_group=parallel_state.get_tensor_model_parallel_group(),
                     ),
                     cp_group=self.cp_group,
-                    pg_collection=self.pg_collection,
+                    model_comm_pgs=self.model_comm_pgs,
                     embedding=LanguageModelEmbedding(
                         config=tf_config,
                         vocab_size=hf_config.vocab_size,
@@ -249,7 +249,7 @@ class TestPostprocess(TestWithHiddenInputs):
                     tp_group=parallel_state.get_tensor_model_parallel_group(),
                 ),
                 cp_group=self.cp_group,
-                pg_collection=self.pg_collection,
+                model_comm_pgs=self.model_comm_pgs,
                 embedding=LanguageModelEmbedding(
                     config=self.tf_config,
                     vocab_size=self.hf_config.vocab_size,

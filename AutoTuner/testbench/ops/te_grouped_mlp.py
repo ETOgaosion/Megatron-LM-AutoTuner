@@ -4,13 +4,9 @@ import torch
 import torch.nn.functional as F
 from megatron.core import tensor_parallel
 from megatron.core.activations import squared_relu
-from megatron.core.fusions.fused_bias_geglu import (
-    quick_gelu,
-    weighted_bias_quick_geglu_impl,
-)
 from megatron.core.fusions.fused_bias_swiglu import weighted_bias_swiglu_impl
 from megatron.core.fusions.fused_weighted_squared_relu import weighted_squared_relu_impl
-from megatron.core.process_groups_config import ProcessGroupCollection
+from megatron.core.process_groups_config import ModelCommProcessGroups
 from megatron.core.transformer.mlp import MLPSubmodules
 from megatron.core.transformer.moe.experts import TEGroupedMLP
 from megatron.core.transformer.transformer_config import TransformerConfig
@@ -30,7 +26,7 @@ class TEGroupedMLPForTest(TEGroupedMLP, CommonOpsForTest):
         num_local_experts,
         config: TransformerConfig,
         submodules: MLPSubmodules,
-        pg_collection: Optional[ProcessGroupCollection] = None,
+        model_comm_pgs: Optional[ModelCommProcessGroups] = None,
         hook_activation: bool = False,
     ):
         TEGroupedMLP.__init__(
@@ -38,7 +34,7 @@ class TEGroupedMLPForTest(TEGroupedMLP, CommonOpsForTest):
             num_local_experts=num_local_experts,
             config=config,
             submodules=submodules,
-            pg_collection=pg_collection,
+            model_comm_pgs=model_comm_pgs,
         )
         CommonOpsForTest.__init__(
             self, module_name="TEGroupedMLP", hook_activation=hook_activation
@@ -93,15 +89,7 @@ class TEGroupedMLPForTest(TEGroupedMLP, CommonOpsForTest):
 
         def bias_act_func(intermediate_parallel, bias_parallel, permuted_probs):
             nvtx_range_push(suffix="activation")
-            if self.config.use_te_activation_func:
-                if bias_parallel is not None:
-                    intermediate_parallel = intermediate_parallel + bias_parallel
-                intermediate_parallel = self.activation_func(intermediate_parallel)
-                if permuted_probs is not None:
-                    original_dtype = intermediate_parallel.dtype
-                    intermediate_parallel = intermediate_parallel * permuted_probs
-                    intermediate_parallel = intermediate_parallel.to(original_dtype)
-            elif self.config.bias_activation_fusion:
+            if self.config.bias_activation_fusion:
                 if self.activation_func == F.silu and self.config.gated_linear_unit:
                     # dtype is handled inside the fused kernel
                     intermediate_parallel = weighted_bias_swiglu_impl(
@@ -110,21 +98,8 @@ class TEGroupedMLPForTest(TEGroupedMLP, CommonOpsForTest):
                         permuted_probs,
                         self.config.activation_func_fp8_input_store,
                     )
-                elif (
-                    self.activation_func == quick_gelu and self.config.gated_linear_unit
-                ):
-                    intermediate_parallel = weighted_bias_quick_geglu_impl(
-                        intermediate_parallel,
-                        bias_parallel,
-                        permuted_probs,
-                        self.config.activation_func_fp8_input_store,
-                        self.config.glu_linear_offset,
-                        self.config.activation_func_clamp_value,
-                    )
                 else:
-                    raise ValueError(
-                        "Only support fusion of swiglu and quick_gelu in TEGroupedMLP."
-                    )
+                    raise ValueError("Only support fusion of swiglu in TEGroupedMLP.")
             elif (
                 self.activation_func == squared_relu
                 and self.config.use_fused_weighted_squared_relu
@@ -134,16 +109,25 @@ class TEGroupedMLPForTest(TEGroupedMLP, CommonOpsForTest):
                     intermediate_parallel, permuted_probs
                 )
             else:
+                if bias_parallel is not None:
+                    shape = intermediate_parallel.shape
+                    intermediate_parallel = torch.cat(
+                        [
+                            t + b
+                            for t, b in zip(
+                                torch.split(
+                                    intermediate_parallel.view(-1, shape[-1]),
+                                    tokens_per_expert,
+                                ),
+                                bias_parallel,
+                            )
+                        ]
+                    ).view(shape)
                 if self.config.gated_linear_unit:
 
                     def glu(x):
-                        x_glu, x_linear = torch.chunk(x, 2, dim=-1)
-                        if (val := self.config.activation_func_clamp_value) is not None:
-                            x_glu = x_glu.clamp(min=None, max=val)
-                            x_linear = x_linear.clamp(min=-val, max=val)
-                        return self.config.activation_func(x_glu) * (
-                            x_linear + self.config.glu_linear_offset
-                        )
+                        x = torch.chunk(x, 2, dim=-1)
+                        return self.config.activation_func(x[0]) * x[1]
 
                     intermediate_parallel = glu(intermediate_parallel)
                 else:
@@ -178,13 +162,6 @@ class TEGroupedMLPForTest(TEGroupedMLP, CommonOpsForTest):
         # upad and concat the output
         if self.config.fp8:
             output = self.fp8_unpadding(output, actual_tokens_per_expert)
-
-        nvtx_range_push(suffix="apply_bias")
-        output = self._apply_bias(
-            output, output_bias, tokens_per_expert, permuted_probs
-        )
-        nvtx_range_pop(suffix="apply_bias")
-        output_bias = None
 
         return output, output_bias
 
