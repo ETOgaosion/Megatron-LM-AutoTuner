@@ -62,8 +62,10 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
 
         self.self_attention = SelfAttention(
             tf_config,
-            get_gpt_layer_with_transformer_engine_spec(multi_latent_attention = tf_config.multi_latent_attention,
-                                qk_layernorm=tf_config.qk_layernorm).submodules.self_attention.submodules,
+            get_gpt_layer_with_transformer_engine_spec(
+                multi_latent_attention=tf_config.multi_latent_attention,
+                qk_layernorm=tf_config.qk_layernorm,
+            ).submodules.self_attention.submodules,
             layer_number=1,
             attn_mask_type=AttnMaskType.causal,
         )
@@ -74,8 +76,8 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
             ) as memory_tracker_ctx:
                 self.op = AttnFuncWithCPAndKVP2PForTest(
                     tf_config,
-                    hook_activation = (profile_mode == ProfileMode.collect_data)
-                    )
+                    hook_activation=(profile_mode == ProfileMode.collect_data),
+                )
 
             detailed_mem_report = memory_tracker_ctx.get_result()
 
@@ -89,9 +91,8 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
 
         else:
             self.op = AttnFuncWithCPAndKVP2PForTest(
-                tf_config,
-                hook_activation = (profile_mode == ProfileMode.collect_data)
-                )
+                tf_config, hook_activation=(profile_mode == ProfileMode.collect_data)
+            )
 
     @override
     def calc_theoretical_flops(self, test_case: InputTestCase) -> Dict[str, float]:

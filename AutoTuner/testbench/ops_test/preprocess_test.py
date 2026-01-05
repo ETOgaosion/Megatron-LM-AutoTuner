@@ -8,9 +8,11 @@ from megatron.core.models.common.embeddings.language_model_embedding import (
 from megatron.core.models.common.embeddings.rotary_pos_embedding import (
     RotaryEmbedding,
 )
+from megatron.core.models.common.embeddings.yarn_rotary_pos_embedding import (
+    YarnRotaryEmbedding,
+)
 from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.transformer_config import TransformerConfig
-from megatron.core.models.common.embeddings.yarn_rotary_pos_embedding import YarnRotaryEmbedding
 from tensordict import TensorDict
 from transformers import PretrainedConfig
 from typing_extensions import override
@@ -77,7 +79,7 @@ class TestPreprocess(TestCommon):
                         seq_len_interpolation_factor=seq_len_interpolation_factor,
                     ),
                     tf_config,
-                    hook_activation = (profile_mode == ProfileMode.collect_data),
+                    hook_activation=(profile_mode == ProfileMode.collect_data),
                 )
             detailed_mem_report = memory_tracker_ctx.get_result()
             # TODO: theoretical weight memory
@@ -108,6 +110,7 @@ class TestPreprocess(TestCommon):
                 ),
                 tf_config,
             )
+
     @staticmethod
     def build_rotary_embedding(
         tf_config: TransformerConfig,
@@ -145,7 +148,7 @@ class TestPreprocess(TestCommon):
                 use_cpu_initialization=tf_config.use_cpu_initialization,
                 cp_group=None,
             )
-    
+
     @override
     def prepare_input(self, test_case: InputTestCase, micro_batch: TensorDict):
         micro_batch = micro_batch.to(torch.cuda.current_device())

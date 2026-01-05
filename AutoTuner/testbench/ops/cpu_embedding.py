@@ -3,11 +3,11 @@ from typing import Optional
 
 import torch
 from megatron.core import tensor_parallel
-from megatron.core.models.common.embeddings.language_model_embedding import (
-    LanguageModelEmbedding,
-)
 from megatron.core.models.common.embeddings.language_model_cpu_embedding import (
     LanguageModelCPUEmbedding,
+)
+from megatron.core.models.common.embeddings.language_model_embedding import (
+    LanguageModelEmbedding,
 )
 from megatron.core.transformer.transformer_config import TransformerConfig
 from torch import Tensor

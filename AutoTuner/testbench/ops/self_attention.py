@@ -1,7 +1,6 @@
 import logging
 from typing import Optional, Tuple, Union
 
-from megatron.core.transformer.spec_utils import ModuleSpec
 import torch
 from einops import rearrange
 from megatron.core.inference.contexts import BaseInferenceContext
@@ -20,6 +19,7 @@ from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.attention import HAVE_FUSED_QKV_ROPE, SelfAttention
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.identity_op import IdentityOp
+from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import (
     nvtx_decorator,

@@ -2,7 +2,6 @@ import logging
 from contextlib import nullcontext
 from typing import Optional, Union
 
-from megatron.core.transformer.spec_utils import ModuleSpec
 import torch
 from megatron.core import tensor_parallel
 from megatron.core.enums import Fp8Recipe
@@ -10,6 +9,7 @@ from megatron.core.fp4_utils import get_fp4_context
 from megatron.core.fp8_utils import get_fp8_context
 from megatron.core.inference.contexts.base_context import BaseInferenceContext
 from megatron.core.packed_seq_params import PackedSeqParams
+from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_block import (
     TransformerBlock,
 )
@@ -122,7 +122,7 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
         with rng_context, outer_quantization_context:
             nvtx_range_push(suffix="Transformer Layers")
             # Forward pass.
-            if self.config.recompute_granularity == 'full' and self.training:
+            if self.config.recompute_granularity == "full" and self.training:
                 hidden_states.requires_grad_(True)
                 hidden_states = self._checkpointed_forward(
                     hidden_states=hidden_states,
@@ -167,7 +167,9 @@ class DecoderForTest(TransformerBlock, CommonOpsForTest):
                         and self.config.cpu_offloading
                         and self.group_prefetch_offload_commit_async is not None
                     ):
-                        hidden_states = self.group_prefetch_offload_commit_async(hidden_states)
+                        hidden_states = self.group_prefetch_offload_commit_async(
+                            hidden_states
+                        )
             nvtx_range_pop(suffix="Transformer Layers")
 
         return hidden_states

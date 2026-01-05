@@ -52,8 +52,9 @@ class TestMoELayer(TestWithHiddenInputs):
         self.self_attention = SelfAttention(
             tf_config,
             get_gpt_layer_with_transformer_engine_spec(
-                                multi_latent_attention = tf_config.multi_latent_attention,
-                                qk_layernorm=tf_config.qk_layernorm).submodules.self_attention.submodules,
+                multi_latent_attention=tf_config.multi_latent_attention,
+                qk_layernorm=tf_config.qk_layernorm,
+            ).submodules.self_attention.submodules,
             layer_number=layer_number,
             attn_mask_type=AttnMaskType.causal,
         )

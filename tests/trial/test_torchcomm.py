@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # example.py
 import torch
-from torchcomms import new_comm, ReduceOp
+from torchcomms import ReduceOp, new_comm
+
 
 def main():
     # Initialize TorchComm with NCCLX backend
@@ -21,10 +22,7 @@ def main():
 
     # Create a tensor with rank-specific data
     tensor = torch.full(
-        (1024,),
-        float(rank + 1),
-        dtype=torch.float32,
-        device=target_device
+        (1024,), float(rank + 1), dtype=torch.float32, device=target_device
     )
 
     print(f"Rank {rank}: Before AllReduce: {tensor[0].item()}")
@@ -39,6 +37,7 @@ def main():
 
     # Cleanup
     torchcomm.finalize()
+
 
 if __name__ == "__main__":
     main()

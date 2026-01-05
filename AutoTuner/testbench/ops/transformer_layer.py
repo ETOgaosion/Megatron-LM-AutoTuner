@@ -2,13 +2,13 @@ import logging
 from contextlib import nullcontext
 from typing import Optional, Union
 
-from megatron.core.transformer.identity_op import IdentityOp
 import torch
 from megatron.core import tensor_parallel
 from megatron.core.inference.contexts.base_context import BaseInferenceContext
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer import TransformerLayerSubmodules
+from megatron.core.transformer.identity_op import IdentityOp
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.transformer_layer import TransformerLayer
 from megatron.core.utils import (
@@ -81,13 +81,13 @@ class TransformerLayerForTest(CommonOpsForTest, TransformerLayer):
             packed_seq_params=packed_seq_params,
         )
         nvtx_range_pop(suffix="Attention Layer")
-        
+
         nvtx_range_push(suffix="Mlp Layer")
         output = self._forward_mlp(hidden_states)
         nvtx_range_pop(suffix="Mlp Layer")
 
         return output
-    
+
     def forward(
         self,
         hidden_states: Union[Tensor, WrappedTensor],

@@ -59,11 +59,11 @@ class TestTransformerLayer(TestWithHiddenInputs):
                     layer_submodules = tf_config.layer_submodules
                 else:
                     spec = get_gpt_layer_with_transformer_engine_spec(
-                                num_experts=tf_config.num_moe_experts,
-                                multi_latent_attention = tf_config.multi_latent_attention,
-                                qk_layernorm=tf_config.qk_layernorm,
-                                moe_grouped_gemm=tf_config.moe_grouped_gemm
-                            )
+                        num_experts=tf_config.num_moe_experts,
+                        multi_latent_attention=tf_config.multi_latent_attention,
+                        qk_layernorm=tf_config.qk_layernorm,
+                        moe_grouped_gemm=tf_config.moe_grouped_gemm,
+                    )
                     layer_submodules = spec.submodules
 
                 self.op = TransformerLayerForTest(
@@ -91,11 +91,11 @@ class TestTransformerLayer(TestWithHiddenInputs):
                 layer_submodules = tf_config.layer_submodules
             else:
                 spec = get_gpt_layer_with_transformer_engine_spec(
-                            num_experts=tf_config.num_moe_experts,
-                            multi_latent_attention = tf_config.multi_latent_attention,
-                            qk_layernorm=tf_config.qk_layernorm,
-                            moe_grouped_gemm=tf_config.moe_grouped_gemm
-                        )
+                    num_experts=tf_config.num_moe_experts,
+                    multi_latent_attention=tf_config.multi_latent_attention,
+                    qk_layernorm=tf_config.qk_layernorm,
+                    moe_grouped_gemm=tf_config.moe_grouped_gemm,
+                )
                 layer_submodules = spec.submodules
             self.op = TransformerLayerForTest(
                 tf_config,

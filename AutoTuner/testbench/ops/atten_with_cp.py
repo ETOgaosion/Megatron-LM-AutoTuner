@@ -6,6 +6,7 @@ from megatron.core.utils import (
     nvtx_decorator,
 )
 from torch import Tensor
+
 try:
     from transformer_engine.pytorch.attention.dot_product_attention.context_parallel import (
         AttnFuncWithCPAndKVP2P,

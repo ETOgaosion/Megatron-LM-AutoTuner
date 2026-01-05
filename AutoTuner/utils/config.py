@@ -1,4 +1,5 @@
 import os
+import warnings
 from typing import Dict
 
 import torch
@@ -6,7 +7,6 @@ from megatron.core.transformer.enums import AttnBackend
 from transformers import AutoConfig
 
 from verl.models.mcore.registry import hf_to_mcore_config
-import warnings
 
 BASE_DATA_DIR = os.environ.get("BASE_DATA_DIR", "/data/common/")
 HUGGINGFACE_MODEL_DIR = os.environ.get(
@@ -22,9 +22,7 @@ def get_hf_model_config(model_name: str, **kwargs) -> AutoConfig:
     if model_name == "deepseek-ai/DeepSeek-V3-Base":
         if hasattr(config, "quantization_config"):
             delattr(config, "quantization_config")
-            warnings.warn(
-                "quantization is not supported for now"
-            )
+            warnings.warn("quantization is not supported for now")
     return config
 
 
