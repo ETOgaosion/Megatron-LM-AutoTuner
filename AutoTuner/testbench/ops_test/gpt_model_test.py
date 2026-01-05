@@ -206,20 +206,16 @@ class TestGPTModel(TestCommon):
         self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any
     ) -> int:
         input_ids = inputs[0]
+        print(f"input_ids shape: {input_ids.shape}")  # debug
 
         if test_case.shape == "thd":
-            num_tokens = input_ids.size(0)
+            num_tokens = input_ids.size(1)
         elif test_case.shape == "bshd":
             batch_size = input_ids.size(0)
             seq_len = input_ids.size(1)
             num_tokens = batch_size * seq_len
-            if test_case.sequence_parallel_enabled:
-                num_tokens = num_tokens // mpu.get_tensor_model_parallel_world_size()
         else:
             raise ValueError(f"Unsupported shape format: {test_case.shape}")
-
-        if test_case.context_parallel_size > 1:
-            num_tokens = num_tokens // test_case.context_parallel_size
 
         return num_tokens
 

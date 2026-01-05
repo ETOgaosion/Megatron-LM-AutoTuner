@@ -3,6 +3,7 @@ from typing import Any, Optional
 
 import torch
 from megatron.core.process_groups_config import ModelCommProcessGroups
+from megatron.core import parallel_state as mpu
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
@@ -72,5 +73,5 @@ class TestWithHiddenInputs(TestCommon):
     def calculate_tokens(
         self, test_case: InputTestCase, micro_batch: TensorDict, inputs: Any
     ) -> int:
-        tokens = inputs[0].shape[0]
+        tokens = inputs[0].shape[0] * mpu.get_tensor_model_parallel_world_size()
         return tokens
