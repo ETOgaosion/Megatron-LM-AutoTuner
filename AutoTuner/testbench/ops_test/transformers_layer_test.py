@@ -112,12 +112,6 @@ class TestTransformerLayer(TestWithHiddenInputs):
             )
 
     @override
-    def calculate_tokens(
-        self, test_case: InputTestCase, micro_batch: Any, inputs: Any
-    ) -> int:
-        return 0
-
-    @override
     def calc_theoretical_memory(self, test_case: InputTestCase) -> Dict[str, int]:
         return {"activations": {"activations": 0}}
 

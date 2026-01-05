@@ -112,7 +112,7 @@ class TestCommon(TheoreticalCalculation):
         if (
             mpu.get_tensor_model_parallel_world_size() > 1
             and self.tf_config.tp_comm_overlap
-            and test_case.shape == "thd"
+            # and test_case.shape == "thd"  # for bshd and thd
             and tokens is not None
             and tokens > 0
         ):
@@ -234,7 +234,7 @@ class TestCommon(TheoreticalCalculation):
         if (
             mpu.get_tensor_model_parallel_world_size() > 1
             and self.tf_config.tp_comm_overlap
-            and test_case.shape == "thd"
+            # and test_case.shape == "thd"  # for bshd and thd
             and tokens is not None
             and tokens > 0
         ):
