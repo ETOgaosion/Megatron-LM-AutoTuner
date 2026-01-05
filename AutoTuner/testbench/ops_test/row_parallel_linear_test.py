@@ -13,7 +13,7 @@ from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
 from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
 from AutoTuner.utils.structs import InputTestCase
 
-from ..ops.row_linear import TERowParallelLinearForTest
+from ..ops.row_parallel_linear import TERowParallelLinearForTest
 from .test_with_hiddens import TestWithHiddenInputs
 
 try:
