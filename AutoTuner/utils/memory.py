@@ -14,19 +14,24 @@ def get_gpu_memory() -> float:
     memory_free_values = [int(x.split()[0]) for i, x in enumerate(memory_free_info)]
     return statistics.mean(memory_free_values)
 
-
-def get_memory_str(mem: int, human_readable: bool = True) -> str:
-    if human_readable:
-        if mem < 1024:
-            return f"{mem} B"
-        elif mem < 1024**2:
-            return f"{mem / 1024:.2f} KB"
-        elif mem < 1024**3:
-            return f"{mem / (1024 ** 2):.2f} MB"
-        else:
-            return f"{mem / (1024 ** 3):.2f} GB"
-    else:
+UNITS = ["B", "KB", "MB", "GB"]
+UNIT2IDX = {u: i for i, u in enumerate(UNITS)}
+def get_memory_str(mem: int, human_readable: bool = True, max_unit: str = "MB", precision: int=3) -> str:
+    max_unit = os.getenv("MEMORY_STR_MAX_UNIT_LIMIT", max_unit) 
+    precision = os.getenv("MEMORY_STR_PRECISION_LIMIT", precision)
+    assert max_unit in UNIT2IDX, "please use unit in GB, MB, KB or B"
+    if not human_readable:
         return str(mem)
+    max_idx = UNIT2IDX[max_unit]
+
+    unit_idx = 0
+    while unit_idx + 1 <= max_idx and mem >= 1024 ** (unit_idx + 1):
+        unit_idx += 1
+
+    unit = UNITS[unit_idx]
+    value = mem / (1024 ** unit_idx)
+
+    return f"{value:.{precision}f} {unit}"
 
 
 class MemoryTrackerContext:
@@ -57,6 +62,7 @@ class MemoryTrackerContext:
         self.peak_mem_diff = self.end_peak_mem - self.start_peak_mem
         self.mem_diff = self.end_mem - self.start_mem
         self.real_mem_diff = self.end_real_mem - self.start_real_mem
+        self.reserved_max_mem = torch.cuda.max_memory_reserved(torch.cuda.current_device())
         self.result = {
             "start_mem": get_memory_str(self.start_mem, self.human_readable),
             "end_mem": get_memory_str(self.end_mem, self.human_readable),
@@ -67,6 +73,7 @@ class MemoryTrackerContext:
             "mem_diff": get_memory_str(self.mem_diff, self.human_readable),
             "peak_mem_diff": get_memory_str(self.peak_mem_diff, self.human_readable),
             "real_mem_diff": get_memory_str(self.real_mem_diff, self.human_readable),
+            "reserved_max_mem": get_memory_str(self.reserved_max_mem, self.human_readable)
         }
         reserved_mem = torch.cuda.memory_reserved()
         log_rank0(
@@ -127,7 +134,6 @@ class MemoryTracker:
 
         return decorator
 
-
 class ActivationHook:
     def __init__(
         self,
@@ -135,6 +141,7 @@ class ActivationHook:
         module_name: str = "",
         logging_level: int = logging.INFO,
         online: bool = False,
+        unique_ptr: bool = False
     ):
         self.activation_tensors = []
         self.enable = enable
@@ -142,6 +149,7 @@ class ActivationHook:
         self.logging_level = logging_level
         self.online_mem_res = 0
         self.online = online
+        self.unique_ptr = unique_ptr
 
     def save_hook(self, x) -> object:
         if self.enable:
@@ -170,7 +178,19 @@ class ActivationHook:
         if self.online:
             return self.online_mem_res
         mem = 0
-
+        saves = {}
         for tensor in self.activation_tensors:
-            mem += tensor.numel() * tensor.element_size()
+            if self.unique_ptr:
+                try:
+                    st = tensor.untyped_storage()
+                    storage_ptr = st.data_ptr()
+                except Exception:
+                    storage_ptr = None
+                dev= tensor.device
+                key = (dev, storage_ptr)
+                saves[key] = saves.get(key, 0) + 1
+                if saves[key] == 1:
+                    mem += tensor.numel() * tensor.element_size()
+            else:
+                mem += tensor.numel() * tensor.element_size()
         return mem
