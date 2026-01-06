@@ -93,36 +93,29 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         attention_mask: Tensor,
         decoder_input: Tensor = None,
         labels: Tensor = None,
+        inference_context: BaseInferenceContext = None,
         packed_seq_params: PackedSeqParams = None,
         extra_block_kwargs: dict = None,
         runtime_gather_output: Optional[bool] = None,
         inference_params: Optional[BaseInferenceContext] = None,
         loss_mask: Optional[Tensor] = None,
     ) -> Tensor:
-        # inference_context = deprecate_inference_params(inference_context, inference_params)
+        inference_context = deprecate_inference_params(inference_context, inference_params)
 
-        preproc_output = self._preprocess(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            decoder_input=decoder_input,
-            inference_context=None,
-            packed_seq_params=packed_seq_params,
+        decoder_input, rotary_pos_emb, rotary_pos_cos, rotary_pos_sin, sequence_len_offset = (
+            self._preprocess(
+                input_ids=input_ids,
+                position_ids=position_ids,
+                decoder_input=decoder_input,
+                inference_context=inference_context,
+                packed_seq_params=packed_seq_params,
+            )
         )
-
-        (
-            decoder_input,
-            rotary_pos_emb,
-            rotary_pos_cos,
-            rotary_pos_sin,
-            sequence_len_offset,
-        ) = preproc_output[:5]
-
-        rotary_pos_cos_sin = preproc_output[5] if len(preproc_output) == 6 else None
 
         hidden_states = self.decoder(
             hidden_states=decoder_input,
             attention_mask=attention_mask,
-            inference_context=None,
+            inference_context=inference_context,
             rotary_pos_emb=rotary_pos_emb,
             rotary_pos_cos=rotary_pos_cos,
             rotary_pos_sin=rotary_pos_sin,
@@ -148,7 +141,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             sequence_len_offset=sequence_len_offset,
             runtime_gather_output=runtime_gather_output,
             extra_block_kwargs=extra_block_kwargs,
-            inference_context=None,
+            inference_context=inference_context,
         )
 
     @nvtx_decorator(message="preprocess")
@@ -190,96 +183,39 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         rotary_pos_emb = None
         rotary_pos_cos = None
         rotary_pos_sin = None
-        # this is used to store combined cos/sin embeddings, exclusively for flash infer rope
-        rotary_pos_cos_sin = None
-
-        if (
-            self.position_embedding_type == "rope"
-            and not self.config.multi_latent_attention
-        ):
-            use_flash_infer_fused_rope = (
-                hasattr(inference_context, "use_flashinfer_fused_rope")
-                and inference_context.use_flashinfer_fused_rope
-            )
-            if in_inference_mode and (
-                self.config.flash_decode or use_flash_infer_fused_rope
-            ):
+        if self.position_embedding_type == 'rope' and not self.config.multi_latent_attention:
+            if in_inference_mode and self.config.flash_decode:
                 assert (
-                    not self.config.flash_decode
-                ) or inference_context.is_static_batching(), (
-                    "Flash decode is only applicable to static batching."
-                )
+                    inference_context.is_static_batching()
+                ), "GPTModel currently only supports static inference batching."
                 # Flash decoding uses precomputed cos and sin for RoPE
-                if self.config.flash_decode:
-                    rotary_pos_cos, rotary_pos_sin = (
-                        self.rotary_pos_emb_cache.setdefault(
-                            inference_context.max_sequence_length,
-                            self.rotary_pos_emb.get_cos_sin(
-                                inference_context.max_sequence_length
-                            ),
-                        )
-                    )
-                elif use_flash_infer_fused_rope:
-                    assert (
-                        not self.mtp_process
-                    ), "MTP not tested with flashinfer_fused_rope"
-                    rotary_pos_cos_sin = self.rotary_pos_emb_cache.setdefault(
-                        inference_context.max_sequence_length,
-                        torch.cat(
-                            self.rotary_pos_emb.get_cos_sin(
-                                inference_context.max_sequence_length
-                            ),
-                            -1,
-                        ),
-                    )
+                rotary_pos_cos, rotary_pos_sin = self.rotary_pos_emb_cache.setdefault(
+                    inference_context.max_sequence_length,
+                    self.rotary_pos_emb.get_cos_sin(inference_context.max_sequence_length),
+                )
             else:
                 rotary_seq_len = self.rotary_pos_emb.get_rotary_seq_len(
-                    inference_context,
-                    self.decoder,
-                    decoder_input,
-                    self.config,
-                    packed_seq_params,
+                    inference_context, self.decoder, decoder_input, self.config, packed_seq_params
                 )
                 rotary_pos_emb = self.rotary_pos_emb(
                     rotary_seq_len,
                     packed_seq=packed_seq_params is not None
-                    and packed_seq_params.qkv_format == "thd",
+                    and packed_seq_params.qkv_format == 'thd',
                 )
-        elif self.position_embedding_type == "yarn":
-            if self.training or not self.config.flash_decode:
-                rotary_seq_len = self.rotary_pos_emb.get_rotary_seq_len(
-                    inference_context,
-                    self.decoder,
-                    decoder_input,
-                    self.config,
-                    packed_seq_params,
-                )
-                rotary_pos_emb, _ = self.rotary_pos_emb(rotary_seq_len)
-            else:
-                raise NotImplementedError(
-                    "Flash decoding uses precomputed cos and sin for RoPE, not implemented in "
-                    "YarnRotaryEmbedding yet."
-                )
-        elif (
-            self.position_embedding_type == "mrope"
-            and not self.config.multi_latent_attention
-        ):
+        elif self.position_embedding_type == 'mrope' and not self.config.multi_latent_attention:
             if self.training or not self.config.flash_decode:
                 rotary_pos_emb = self.rotary_pos_emb(position_ids, self.mrope_section)
             else:
                 # Flash decoding uses precomputed cos and sin for RoPE
                 raise NotImplementedError(
-                    "Flash decoding uses precomputed cos and sin for RoPE, not implemented in "
+                    "Flash decoding uses precomputed cos and sin for RoPE, not implmented in "
                     "MultimodalRotaryEmbedding yet."
                 )
         nvtx_range_pop(suffix="rotary_embedding")
         if (
             in_inference_mode
             and (
-                (
-                    self.config.enable_cuda_graph
-                    and self.config.cuda_graph_scope != "full_iteration"
-                )
+                (self.config.enable_cuda_graph and self.config.cuda_graph_scope != "full_iteration")
                 or self.config.flash_decode
             )
             and rotary_pos_cos is not None
@@ -300,22 +236,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         if in_inference_mode and not has_config_logger_enabled(self.config):
             decoder_input = WrappedTensor(decoder_input)
 
-        preproc_output = (
-            decoder_input,
-            rotary_pos_emb,
-            rotary_pos_cos,
-            rotary_pos_sin,
-            sequence_len_offset,
-        )
-        if rotary_pos_cos_sin is not None:
-            # only in the case of flashinfer fused rope will we
-            # return this extra tensor
-            # this is for backwards compatibility with
-            # legacy unit tests, which break if you
-            # return a 6 tuple instead of 5.
-            preproc_output += (rotary_pos_cos_sin,)
-
-        return preproc_output
+        return decoder_input, rotary_pos_emb, rotary_pos_cos, rotary_pos_sin, sequence_len_offset
 
     @nvtx_decorator(message="postprocess")
     def _postprocess(
@@ -352,9 +273,6 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         if self.share_embeddings_and_output_weights:
             output_weight = self.shared_embedding_or_output_weight()
 
-        if not self.post_process:
-            return hidden_states
-
         if mtp_in_postprocess:
             nvtx_range_push(suffix="mtp_forward")
             hidden_states = self.mtp(
@@ -373,12 +291,12 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             )
             nvtx_range_pop(suffix="mtp_forward")
 
+        if not self.post_process:
+            return hidden_states
         if self.mtp_process:
             nvtx_range_push(suffix="mtp_loss")
             mtp_labels = labels.clone()
-            hidden_states_list = torch.chunk(
-                hidden_states, 1 + self.config.mtp_num_layers, dim=0
-            )
+            hidden_states_list = torch.chunk(hidden_states, 1 + self.config.mtp_num_layers, dim=0)
             hidden_states = hidden_states_list[0]
             if loss_mask is None:
                 # if loss_mask is not provided, use all ones as loss_mask
@@ -391,9 +309,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
                     runtime_gather_output=runtime_gather_output,
                 )
                 # Calc loss for the current Multi-Token Prediction (MTP) layers.
-                mtp_labels, _ = roll_tensor(
-                    mtp_labels, shifts=-1, dims=-1, cp_group=self.cp_group
-                )
+                mtp_labels, _ = roll_tensor(mtp_labels, shifts=-1, dims=-1, cp_group=self.cp_group)
                 loss_mask, num_tokens = roll_tensor(
                     loss_mask, shifts=-1, dims=-1, cp_group=self.cp_group
                 )
@@ -410,9 +326,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
                             with_context_parallel=True
                         ),
                     )
-                mtp_loss_scale = (
-                    self.config.mtp_loss_scaling_factor / self.config.mtp_num_layers
-                )
+                mtp_loss_scale = self.config.mtp_loss_scaling_factor / self.config.mtp_num_layers
                 if self.config.calculate_per_token_loss:
                     hidden_states = MTPLossAutoScaler.apply(
                         hidden_states, mtp_loss_scale * mtp_loss
@@ -448,12 +362,11 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
                 ).unsqueeze(1)
 
         logits, _ = self.output_layer(
-            hidden_states,
-            weight=output_weight,
-            runtime_gather_output=runtime_gather_output,
+            hidden_states, weight=output_weight, runtime_gather_output=runtime_gather_output
         )
         nvtx_range_pop(suffix="output_layer")
 
+        # Restore sequence parallel execution to the output layer if necessary.
         # Restore sequence parallel execution to the output layer if necessary.
         if sequence_parallel_override:
             assert (
@@ -466,14 +379,14 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         if has_config_logger_enabled(self.config):
             payload = OrderedDict(
                 {
-                    "input_ids": input_ids,
-                    "position_ids": position_ids,
-                    "attention_mask": attention_mask,
-                    "decoder_input": decoder_input,
-                    "logits": logits,
+                    'input_ids': input_ids,
+                    'position_ids': position_ids,
+                    'attention_mask': attention_mask,
+                    'decoder_input': decoder_input,
+                    'logits': logits,
                 }
             )
-            log_config_to_disk(self.config, payload, prefix="input_and_logits")
+            log_config_to_disk(self.config, payload, prefix='input_and_logits')
 
         if labels is None:
             # [s b h] => [b s h]
@@ -547,14 +460,12 @@ class NVTXDecoder(TransformerBlock):
         rotary_pos_emb: Optional[Tensor] = None,
         rotary_pos_cos: Optional[Tensor] = None,
         rotary_pos_sin: Optional[Tensor] = None,
-        rotary_pos_cos_sin: Optional[Tensor] = None,
         attention_bias: Optional[Tensor] = None,
         inference_context: Optional[BaseInferenceContext] = None,
         packed_seq_params: Optional[PackedSeqParams] = None,
         sequence_len_offset: Optional[Tensor] = None,
         *,
         inference_params: Optional[BaseInferenceContext] = None,
-        dynamic_inference_decode_only: Optional[bool] = None,
     ):
         """
         Perform the forward pass through the transformer block.
@@ -572,10 +483,6 @@ class NVTXDecoder(TransformerBlock):
             context (Tensor, optional): Context tensor for cross-attention.
             context_mask (Tensor, optional): Mask for cross-attention context
             rotary_pos_emb (Tensor, optional): Rotary positional embeddings.
-            rotary_pos_cos (Optional[Tensor]): Rotary embedding cosine.
-            rotary_pos_sin (Optional[Tensor]): Rotary embedding sine.
-            rotary_pos_cos_sin (Optional[Tensor]): Combined rotary embedding cosine and sine.
-            Currently used exclusively for inference with dynamic batching and flashinfer RoPE.
             attention_bias (Tensor): Bias tensor for Q * K.T of shape in shape broadcastable
                 to [b, num_head, sq, skv], e.g. [1, 1, sq, skv].
                 Used as an alternative to apply attention mask for TE cuDNN attention.
@@ -583,22 +490,14 @@ class NVTXDecoder(TransformerBlock):
                 optimizations.
             packed_seq_params (PackedSeqParams, optional): Parameters for packed sequence
                 processing.
-            dynamic_inference_decode_only: Optional[bool]: If true, indicates that the current
-                inference context is for decode-only. This args is only used to uniquely
-                identify decode and non-decode cuda graph runners in the cuda graph manager.
 
         Returns:
             Union[Tensor, Tuple[Tensor, Tensor]]: The output hidden states tensor of shape
             [s, b, h], and optionally the updated context tensor if cross-attention is used.
         """
 
-        inference_context = deprecate_inference_params(
-            inference_context, inference_params
-        )
-        # Remove 'dynamic_inference_decode_only' from kwargs if present
-        # this is only used to uniquely identify decode and non-decode cuda graph
-        # runners in the cuda graph manager
-
+        inference_context = deprecate_inference_params(inference_context, inference_params)
+        
         # Delete the obsolete reference to the initial input tensor if necessary
         if isinstance(hidden_states, WrappedTensor):
             hidden_states = hidden_states.unwrap()
@@ -622,9 +521,7 @@ class NVTXDecoder(TransformerBlock):
         #   likely redundant, since p2p_communication.py (likely originator)
         #   already creates viewless tensors. That said, make_viewless_tensor()
         #   is called here to be future-proof and corner-case-proof.
-        hidden_states = make_viewless_tensor(
-            inp=hidden_states, requires_grad=True, keep_graph=True
-        )
+        hidden_states = make_viewless_tensor(inp=hidden_states, requires_grad=True, keep_graph=True)
 
         if self.config.sequence_parallel:
             rng_context = tensor_parallel.get_cuda_rng_tracker().fork()
@@ -636,29 +533,13 @@ class NVTXDecoder(TransformerBlock):
         # if we are using other fp8 recipes, then the context manager enter&exit are free
         # we can wrap fp8_context within the for loop over layers, so that we can fine-grained
         # control which layer will be fp8 or bf16
-        # For FP4: NVFP4BlockScaling doesn't have delayed scaling, always uses inner context
-        if self.config.fp8:
-            use_outer_quantization_context = self.config.fp8_recipe == Fp8Recipe.delayed
-            use_inner_quantization_context = self.config.fp8_recipe != Fp8Recipe.delayed
-            outer_quantization_context = (
-                get_fp8_context(self.config)
-                if use_outer_quantization_context
-                else nullcontext()
-            )
-        # elif self.config.fp4:
-        #     use_outer_quantization_context = False
-        #     use_inner_quantization_context = True
-        #     outer_quantization_context = nullcontext()
-        else:
-            # No quantization
-            use_outer_quantization_context = False
-            use_inner_quantization_context = False
-            outer_quantization_context = nullcontext()
-
-        with rng_context, outer_quantization_context:
+        use_outer_fp8_context = self.config.fp8 and self.config.fp8_recipe == Fp8Recipe.delayed
+        use_inner_fp8_context = self.config.fp8 and self.config.fp8_recipe != Fp8Recipe.delayed
+        outer_fp8_context = get_fp8_context(self.config) if use_outer_fp8_context else nullcontext()
+        with rng_context, outer_fp8_context:
             # Forward pass.
             nvtx_range_push(suffix="Transformer Layers")
-            if self.config.recompute_granularity == "full" and self.training:
+            if self.config.recompute_granularity == 'full' and self.training:
                 hidden_states = self._checkpointed_forward(
                     hidden_states=hidden_states,
                     attention_mask=attention_mask,
@@ -667,28 +548,17 @@ class NVTXDecoder(TransformerBlock):
                     rotary_pos_emb=rotary_pos_emb,
                     attention_bias=attention_bias,
                     packed_seq_params=packed_seq_params,
-                    use_inner_quantization_context=use_inner_quantization_context,
+                    use_inner_fp8_context=use_inner_fp8_context,
                 )
             else:
                 for l_no, layer in enumerate(self.layers):
-                    # Get appropriate inner quantization context
-                    layer_number = getattr(layer, "layer_number", l_no + 1)
-                    nvtx_range_push(suffix=f"Layer_{layer_number}")
-                    if use_inner_quantization_context:
-                        if self.config.fp8:
-                            inner_quantization_context = get_fp8_context(
-                                self.config, layer.layer_number - 1
-                            )
-                        elif self.config.fp4:
-                            inner_quantization_context = get_fp4_context(
-                                self.config, layer.layer_number - 1
-                            )
-                        else:
-                            inner_quantization_context = nullcontext()
-                    else:
-                        inner_quantization_context = nullcontext()
-
-                    with self.offload_context, inner_quantization_context:
+                    nvtx_range_push(suffix=f"Layer_{layer.layer_number}")
+                    inner_fp8_context = (
+                        get_fp8_context(self.config, layer.layer_number - 1)
+                        if use_inner_fp8_context
+                        else nullcontext()
+                    )
+                    with self.offload_context, inner_fp8_context:
                         hidden_states, context = layer(
                             hidden_states=hidden_states,
                             attention_mask=attention_mask,
@@ -708,10 +578,8 @@ class NVTXDecoder(TransformerBlock):
                         and self.config.cpu_offloading
                         and self.group_prefetch_offload_commit_async is not None
                     ):
-                        hidden_states = self.group_prefetch_offload_commit_async(
-                            hidden_states
-                        )
-                    nvtx_range_pop(suffix=f"Layer_{layer_number}")
+                        hidden_states = self.group_prefetch_offload_commit_async(hidden_states)
+                    nvtx_range_pop(suffix=f"Layer_{layer.layer_number}")
             nvtx_range_pop(suffix="Transformer Layers")
         # Final layer norm.
         if self.final_layernorm is not None:
