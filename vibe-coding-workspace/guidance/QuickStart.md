@@ -64,6 +64,12 @@ git pull origin main --rebase
 git push origin [Your Desired Branch]
 ```
 
+Notice that the submodule's "main" branch is also protected, do not directly push to them, their main branches include:
+
+- megatron_enhanced
+- te_enhanced
+- verl_enhanced
+
 And you can test them in other machine:
 
 ```sh
