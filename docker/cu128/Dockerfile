@@ -1,1 +1,1 @@
-FROM whatcanyousee/megatron-autotuner-env:mcore0.14.0_te2.7
+FROM whatcanyousee/megatron-autotuner-env:mcore0.15.1_te2.7

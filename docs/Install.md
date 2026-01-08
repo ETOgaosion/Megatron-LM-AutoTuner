@@ -26,11 +26,11 @@ git submodule update --init --recursive
 
 ## Image
 
-Use `whatcanyousee/megatron-autotuner-env:mcore0.14.0_te2.7`, too slow
+Use `whatcanyousee/megatron-autotuner-env:mcore0.15.1_te2.7`, too slow
 
 ```bash
 tmux new -s megatron-auto-tuner-0
-bash scripts/docker_robust_pull.sh whatcanyousee/megatron-autotuner-env:mcore0.14.0_te2.7
+bash scripts/docker_robust_pull.sh whatcanyousee/megatron-autotuner-env:mcore0.15.1_te2.7
 ```
 
 You should use `Ctrl-C` to activate stop-then-continue download

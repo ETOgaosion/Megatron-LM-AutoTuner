@@ -67,12 +67,12 @@ Backed by verl.utils.memory_utils (imported in `AutoTuner/testbench/profile/laun
 
 ## To Try Nsys Profiler
 
-**NOTE: This function requires to use docker: `whatcanyousee/megatron-autotuner-env:mcore0.14.0_te2.7`, since nsys can only work in root mode.**
+**NOTE: This function requires to use docker: `whatcanyousee/megatron-autotuner-env:mcore0.15.1_te2.7`, since nsys can only work in root mode.**
 
 1. Launch docker:
 
 ```bash
-docker create --rm -it --gpus all --shm-size=25GB --name megatron_autotuner -v $(pwd):/workspace/Megatron-LM-AutoTuner --network=host --cap-add SYS_ADMIN whatcanyousee/megatron-autotuner-env:mcore0.14.0_te2.7
+docker create --rm -it --gpus all --shm-size=25GB --name megatron_autotuner -v $(pwd):/workspace/Megatron-LM-AutoTuner --network=host --cap-add SYS_ADMIN whatcanyousee/megatron-autotuner-env:mcore0.15.1_te2.7
 
 docker start megatron_autotuner
 
