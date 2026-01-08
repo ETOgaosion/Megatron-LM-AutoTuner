@@ -30,7 +30,7 @@ git add .
 git commit -m "[Your Commits]"
 ```
 
-- After your job
+- After your job, check all contents, if there are contents like `.DS_Store` which shall not be included, exclude and delete them.
 
 ```sh
 git add .
