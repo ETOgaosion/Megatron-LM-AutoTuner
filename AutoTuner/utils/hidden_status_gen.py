@@ -8,7 +8,7 @@ from megatron.core.models.common.embeddings.language_model_embedding import (
 from megatron.core.models.common.embeddings.rotary_pos_embedding import (
     RotaryEmbedding,
 )
-from megatron.core.process_groups_config import ModelCommProcessGroups
+from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
@@ -38,7 +38,7 @@ class HiddenStatusGenerator:
         rope_scaling: bool = False,
         rope_scaling_factor: float = 8.0,
         seq_len_interpolation_factor: Optional[float] = None,
-        model_comm_pgs: Optional[ModelCommProcessGroups] = None,
+        pg_collection: Optional[ProcessGroupCollection] = None,
     ):
         self.genhidden = GenHidden(
             LanguageModelEmbedding(
@@ -59,7 +59,7 @@ class HiddenStatusGenerator:
                 rope_scaling=rope_scaling,
                 rope_scaling_factor=rope_scaling_factor,
                 use_cpu_initialization=tf_config.use_cpu_initialization,
-                # cp_group=model_comm_pgs.cp,
+                # cp_group=pg_collection.cp,
                 cp_group=None,
             ),
             tf_config,

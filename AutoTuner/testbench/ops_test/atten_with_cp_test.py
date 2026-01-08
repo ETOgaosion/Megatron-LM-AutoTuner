@@ -7,7 +7,7 @@ from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
 from megatron.core.packed_seq_params import PackedSeqParams
-from megatron.core.process_groups_config import ModelCommProcessGroups
+from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.attention import SelfAttention
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.transformer_config import TransformerConfig
@@ -38,7 +38,7 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
         theoretical_activations: bool = False,
         tp_comm_overlap_cfg: str = None,
         #
-        model_comm_pgs=None,
+        pg_collection=None,
     ):
         super().__init__(
             hf_config=hf_config,
@@ -52,9 +52,9 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
         # Initialize process group collection
-        if model_comm_pgs is None:
-            model_comm_pgs = ModelCommProcessGroups.use_mpu_process_groups()
-        self.model_comm_pgs = model_comm_pgs
+        if pg_collection is None:
+            pg_collection = ProcessGroupCollection.use_mpu_process_groups()
+        self.pg_collection = pg_collection
         self.kept_packed_seq_params = set(
             field.name for field in dataclasses.fields(PackedSeqParams)
         )
@@ -195,9 +195,9 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
         # Get CP related args
         if self.tf_config.context_parallel_size > 1:
             cp_stream = torch.cuda.Stream()
-            extra_kwargs["cp_group"] = self.model_comm_pgs.cp
+            extra_kwargs["cp_group"] = self.pg_collection.cp
             extra_kwargs["cp_global_ranks"] = torch.distributed.get_process_group_ranks(
-                self.model_comm_pgs.cp
+                self.pg_collection.cp
             )
             extra_kwargs["cp_stream"] = cp_stream
             extra_kwargs["cp_comm_type"] = "p2p"

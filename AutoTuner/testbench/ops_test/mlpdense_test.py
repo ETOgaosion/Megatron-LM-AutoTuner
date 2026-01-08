@@ -48,9 +48,9 @@ class TestMLPDense(TestWithHiddenInputs):
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
         self.module_name = "MLPDense"
-        # self.submodules = MLPSubmodules(
-        #     linear_fc1=TELayerNormColumnParallelLinear, linear_fc2=TERowParallelLinear
-        # )
+        self.submodules = MLPSubmodules(
+            linear_fc1=TELayerNormColumnParallelLinear, linear_fc2=TERowParallelLinear
+        )
         self.hidden_size = tf_config.hidden_size
         self.ffn_hidden_size = tf_config.ffn_hidden_size
         self.activation_func = tf_config.activation_func
@@ -58,7 +58,7 @@ class TestMLPDense(TestWithHiddenInputs):
             with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
                 self.op = MLPDenseForTest(
                     tf_config=tf_config,
-                    # submodules=self.submodules,
+                    submodules=self.submodules,
                     # For Dense, is_expert should be set to False.
                     is_expert=False,
                     input_size=self.hidden_size,
@@ -79,7 +79,7 @@ class TestMLPDense(TestWithHiddenInputs):
         else:
             self.op = MLPDenseForTest(
                 tf_config=tf_config,
-                # submodules=self.submodules,
+                submodules=self.submodules,
                 # For Dense, is_expert should be set to False.
                 is_expert=False,
                 input_size=self.hidden_size,

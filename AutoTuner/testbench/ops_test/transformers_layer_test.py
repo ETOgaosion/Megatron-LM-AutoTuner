@@ -6,7 +6,7 @@ from megatron.core import parallel_state
 from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
-from megatron.core.process_groups_config import ModelCommProcessGroups
+from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.transformer_config import TransformerConfig
 from transformers import PretrainedConfig
 from typing_extensions import override
@@ -75,7 +75,7 @@ class TestTransformerLayer(TestWithHiddenInputs):
                         if tf_config.hidden_dropout is not None
                         else 0.1
                     ),
-                    model_comm_pgs=ModelCommProcessGroups.use_mpu_process_groups(),
+                    pg_collection=ProcessGroupCollection.use_mpu_process_groups(),
                     vp_stage=parallel_state.get_virtual_pipeline_model_parallel_rank(),
                     hook_activation=(profile_mode == ProfileMode.collect_data),
                 )
@@ -106,7 +106,7 @@ class TestTransformerLayer(TestWithHiddenInputs):
                     if tf_config.hidden_dropout is not None
                     else 0.1
                 ),
-                model_comm_pgs=ModelCommProcessGroups.use_mpu_process_groups(),
+                pg_collection=ProcessGroupCollection.use_mpu_process_groups(),
                 vp_stage=parallel_state.get_virtual_pipeline_model_parallel_rank(),
                 hook_activation=(profile_mode == ProfileMode.collect_data),
             )

@@ -8,11 +8,12 @@ from megatron.core import parallel_state, tensor_parallel
 from megatron.core.config_logger import has_config_logger_enabled, log_config_to_disk
 from megatron.core.enums import Fp8Recipe
 from megatron.core.extensions.transformer_engine import te_checkpoint
+from megatron.core.fp4_utils import get_fp4_context
 from megatron.core.fp8_utils import get_fp8_context
 from megatron.core.inference.contexts.base_context import BaseInferenceContext
 from megatron.core.models.gpt.gpt_model import GPTModel
 from megatron.core.packed_seq_params import PackedSeqParams
-from megatron.core.process_groups_config import ModelCommProcessGroups
+from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.tensor_parallel import gather_from_sequence_parallel_region
 from megatron.core.transformer.multi_token_prediction import (
     MTPLossAutoScaler,
@@ -81,7 +82,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             spec=transformer_layer_spec,
             pre_process=self.pre_process,
             post_process=self.post_process,
-            model_comm_pgs=self.model_comm_pgs,
+            pg_collection=self.pg_collection,
             # vp_stage=vp_stage,
         )
 
@@ -126,6 +127,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             rotary_pos_emb=rotary_pos_emb,
             rotary_pos_cos=rotary_pos_cos,
             rotary_pos_sin=rotary_pos_sin,
+            rotary_pos_cos_sin=rotary_pos_cos_sin,
             packed_seq_params=packed_seq_params,
             sequence_len_offset=sequence_len_offset,
             **(extra_block_kwargs or {}),
@@ -435,7 +437,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
                     # TODO(ksanthanam): Make the equivalent change in the `MambaModel` code after
                     # merging in !3722.
                     hidden_states = gather_from_sequence_parallel_region(
-                        hidden_states, group=self.model_comm_pgs.tp
+                        hidden_states, group=self.pg_collection.tp
                     )
                     self.output_layer.sequence_parallel = False
                     sequence_parallel_override = True
@@ -524,7 +526,7 @@ class NVTXDecoder(TransformerBlock):
         post_layer_norm: bool = True,
         pre_process: bool = True,
         post_process: bool = True,
-        model_comm_pgs: ModelCommProcessGroups = None,
+        pg_collection: ProcessGroupCollection = None,
         vp_stage: Optional[int] = None,
     ):
         super().__init__(
@@ -533,7 +535,7 @@ class NVTXDecoder(TransformerBlock):
             post_layer_norm=post_layer_norm,
             pre_process=pre_process,
             post_process=post_process,
-            model_comm_pgs=model_comm_pgs,
+            pg_collection=pg_collection,
             vp_stage=vp_stage,
         )
 
@@ -645,10 +647,10 @@ class NVTXDecoder(TransformerBlock):
                 if use_outer_quantization_context
                 else nullcontext()
             )
-        # elif self.config.fp4:
-        #     use_outer_quantization_context = False
-        #     use_inner_quantization_context = True
-        #     outer_quantization_context = nullcontext()
+        elif self.config.fp4:
+            use_outer_quantization_context = False
+            use_inner_quantization_context = True
+            outer_quantization_context = nullcontext()
         else:
             # No quantization
             use_outer_quantization_context = False
@@ -697,6 +699,7 @@ class NVTXDecoder(TransformerBlock):
                             rotary_pos_emb=rotary_pos_emb,
                             rotary_pos_cos=rotary_pos_cos,
                             rotary_pos_sin=rotary_pos_sin,
+                            rotary_pos_cos_sin=rotary_pos_cos_sin,
                             attention_bias=attention_bias,
                             inference_context=inference_context,
                             packed_seq_params=packed_seq_params,

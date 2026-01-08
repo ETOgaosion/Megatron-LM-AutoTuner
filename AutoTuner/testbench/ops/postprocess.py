@@ -9,7 +9,7 @@ from megatron.core.models.common.embeddings.language_model_embedding import (
     LanguageModelEmbedding,
 )
 from megatron.core.packed_seq_params import PackedSeqParams
-from megatron.core.process_groups_config import ModelCommProcessGroups
+from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.multi_token_prediction import (
     MTPLossAutoScaler,
     MTPLossLoggingHelper,
@@ -44,7 +44,7 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
         mtp_process: bool = False,
         output_layer: Optional[tensor_parallel.ColumnParallelLinear] = None,
         cp_group: Optional[torch.distributed.ProcessGroup] = None,
-        model_comm_pgs: Optional[ModelCommProcessGroups] = None,
+        pg_collection: Optional[ProcessGroupCollection] = None,
         embedding: LanguageModelEmbedding = None,
         hook_activation: bool = False,
     ):
@@ -65,7 +65,7 @@ class PostprocessForTest(torch.nn.Module, CommonOpsForTest):
         )
         self.output_layer = output_layer
         self.cp_group = cp_group
-        self.model_comm_pgs = model_comm_pgs
+        self.pg_collection = pg_collection
         self.embedding = embedding
 
     def shared_embedding_or_output_weight(self) -> Tensor:

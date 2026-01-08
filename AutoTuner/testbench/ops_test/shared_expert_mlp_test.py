@@ -59,11 +59,12 @@ class TestSharedExpertMLP(TestMoELayer):
 
         linear_fc1 = backend.column_parallel_linear()
         linear_fc2 = backend.row_parallel_linear()
-        # activation_func = backend.activation_func()
+        activation_func = backend.activation_func()
 
         mlp = MLPSubmodules(
             linear_fc1=linear_fc1,
             linear_fc2=linear_fc2,
+            activation_func=activation_func,
         )
         if profile_mode == ProfileMode.collect_data:
             with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:

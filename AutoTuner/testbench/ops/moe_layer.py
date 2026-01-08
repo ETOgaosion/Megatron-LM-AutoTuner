@@ -4,7 +4,7 @@ import torch
 from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
-from megatron.core.process_groups_config import ModelCommProcessGroups
+from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.moe.moe_layer import MoELayer, MoESubmodules
 from megatron.core.transformer.transformer_config import TransformerConfig
 
@@ -26,7 +26,7 @@ class MoELayerForTest(MoELayer, CommonOpsForTest):
     def __init__(
         self,
         config: TransformerConfig,
-        model_comm_pgs: Optional[ModelCommProcessGroups] = None,
+        pg_collection: Optional[ProcessGroupCollection] = None,
         layer_number: int = 1,
         hook_activation: bool = False,
     ):
@@ -39,13 +39,13 @@ class MoELayerForTest(MoELayer, CommonOpsForTest):
             Also, please carefully check the value, there might be more strictions to be satisfied.
         """
         assert config.num_moe_experts is not None
-        assert config.num_moe_experts % utils.get_pg_size(model_comm_pgs.ep) == 0
+        assert config.num_moe_experts % utils.get_pg_size(pg_collection.ep) == 0
         MoELayer.__init__(
             self,
             config,
             submodules=transformer_layer_spec.submodules.mlp.submodules,
             layer_number=layer_number,
-            model_comm_pgs=model_comm_pgs,
+            pg_collection=pg_collection,
         )
         CommonOpsForTest.__init__(
             self, hook_activation=hook_activation, module_name="MoELayer"
@@ -97,7 +97,6 @@ class MoELayerForTest(MoELayer, CommonOpsForTest):
             return output, mlp_bias
 
         if self.moe_layer_recompute:
-            hidden_states.requires_grad_(True)
             if self.config.fp8:
                 output, mlp_bias = te_checkpoint(
                     custom_forward,

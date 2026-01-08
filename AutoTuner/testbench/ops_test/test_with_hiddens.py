@@ -2,8 +2,8 @@ import os
 from typing import Any, Optional
 
 import torch
-from megatron.core.process_groups_config import ModelCommProcessGroups
 from megatron.core import parallel_state as mpu
+from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
 from transformers import PretrainedConfig
@@ -34,7 +34,7 @@ class TestWithHiddenInputs(TestCommon):
         rope_scaling: bool = False,
         rope_scaling_factor: float = 8.0,
         seq_len_interpolation_factor: Optional[float] = None,
-        model_comm_pgs: Optional[ModelCommProcessGroups] = None,
+        pg_collection: Optional[ProcessGroupCollection] = None,
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
         tp_comm_overlap_cfg: str = None,
@@ -60,7 +60,7 @@ class TestWithHiddenInputs(TestCommon):
             rope_scaling=rope_scaling,
             rope_scaling_factor=rope_scaling_factor,
             seq_len_interpolation_factor=seq_len_interpolation_factor,
-            model_comm_pgs=model_comm_pgs,
+            pg_collection=pg_collection,
         )
 
     # We get inputs for decoder after preprocess

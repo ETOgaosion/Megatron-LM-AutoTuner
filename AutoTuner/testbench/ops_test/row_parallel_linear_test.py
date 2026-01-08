@@ -33,6 +33,8 @@ except ImportError:
 
 from megatron.core.fusions.fused_bias_geglu import (
     bias_geglu_impl,
+    quick_gelu,
+    weighted_bias_quick_geglu_impl,
 )
 from megatron.core.fusions.fused_bias_swiglu import (
     bias_swiglu_impl,
@@ -59,7 +61,17 @@ class MLPBeforeFc2(MLP):
         # [s, b, 4 * h/p]
         intermediate_parallel, bias_parallel = self.linear_fc1(hidden_states)
 
-        if self.config.bias_activation_fusion:
+        if self.config.use_te_activation_func:
+            if bias_parallel is not None:
+                intermediate_parallel = intermediate_parallel + bias_parallel
+            intermediate_parallel = self.activation_func(intermediate_parallel)
+            if per_token_scale is not None:
+                original_dtype = intermediate_parallel.dtype
+                intermediate_parallel = (
+                    intermediate_parallel * per_token_scale.unsqueeze(-1)
+                )
+                intermediate_parallel = intermediate_parallel.to(original_dtype)
+        elif self.config.bias_activation_fusion:
             if per_token_scale is not None:
                 if self.activation_func == F.silu and self.config.gated_linear_unit:
                     # dtype is handled inside the fused kernel
@@ -68,6 +80,17 @@ class MLPBeforeFc2(MLP):
                         bias_parallel,
                         per_token_scale.unsqueeze(-1),
                         self.config.activation_func_fp8_input_store,
+                    )
+                elif (
+                    self.activation_func == quick_gelu and self.config.gated_linear_unit
+                ):
+                    intermediate_parallel = weighted_bias_quick_geglu_impl(
+                        intermediate_parallel,
+                        bias_parallel,
+                        per_token_scale.unsqueeze(-1),
+                        self.config.activation_func_fp8_input_store,
+                        self.config.glu_linear_offset,
+                        self.config.activation_func_clamp_value,
                     )
                 else:
                     raise ValueError(
@@ -101,8 +124,13 @@ class MLPBeforeFc2(MLP):
             if self.config.gated_linear_unit:
 
                 def glu(x):
-                    x = torch.chunk(x, 2, dim=-1)
-                    return self.config.activation_func(x[0]) * x[1]
+                    x_glu, x_linear = torch.chunk(x, 2, dim=-1)
+                    if (val := self.config.activation_func_clamp_value) is not None:
+                        x_glu = x_glu.clamp(min=None, max=val)
+                        x_linear = x_linear.clamp(min=-val, max=val)
+                    return self.config.activation_func(x_glu) * (
+                        x_linear + self.config.glu_linear_offset
+                    )
 
                 intermediate_parallel = glu(intermediate_parallel)
             else:
@@ -135,7 +163,7 @@ class TestTERowParallelLinear(TestWithHiddenInputs):
             else TESpecProvider()
         )
         linear_fc2 = backend.row_parallel_linear()
-        # activation_func = backend.activation_func()
+        activation_func = backend.activation_func()
 
         if backend.fuse_layernorm_and_linear():
             linear_fc1 = backend.column_parallel_layer_norm_linear()
@@ -143,7 +171,9 @@ class TestTERowParallelLinear(TestWithHiddenInputs):
         else:
             linear_fc1 = backend.column_parallel_linear()
 
-        self.fc1_act = MLPBeforeFc2(tf_config, MLPSubmodules(linear_fc1, linear_fc2))
+        self.fc1_act = MLPBeforeFc2(
+            tf_config, MLPSubmodules(linear_fc1, activation_func, linear_fc2)
+        )
         super().__init__(
             hf_config=hf_config,
             tf_config=tf_config,

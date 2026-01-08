@@ -9,14 +9,14 @@ from megatron.core.models.common.embeddings.rope_utils import (
     apply_rotary_pos_emb,
 )
 from megatron.core.models.common.embeddings.yarn_rotary_pos_embedding import (
-    _yarn_get_mscale,
+    _yarn_get_concentration_factor_from_config,
 )
 from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
 from megatron.core.packed_seq_params import PackedSeqParams
-from megatron.core.process_groups_config import ModelCommProcessGroups
-from megatron.core.transformer.attention import SelfAttention
+from megatron.core.process_groups_config import ProcessGroupCollection
+from megatron.core.transformer.attention import HAVE_FUSED_QKV_ROPE, SelfAttention
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.identity_op import IdentityOp
 from megatron.core.transformer.spec_utils import ModuleSpec
@@ -42,7 +42,6 @@ try:
 except ImportError:
     HAVE_TE = False
 
-# we temporarily comment the HAVE_FUSED_QKV_ROPE, for it's not in v14 of Megatron
 try:
     from transformer_engine.pytorch.attention.rope import apply_fused_qkv_rotary_pos_emb
 
@@ -56,7 +55,7 @@ class SelfAttentionForTest(SelfAttention, CommonOpsForTest):
         self,
         config: TransformerConfig,
         cp_com_type: str = None,
-        model_comm_pgs: ModelCommProcessGroups = None,
+        pg_collection: ProcessGroupCollection = None,
         hook_activation: bool = False,
         submodules: ModuleSpec = None,
     ):
@@ -67,7 +66,7 @@ class SelfAttentionForTest(SelfAttention, CommonOpsForTest):
             layer_number=1,
             attn_mask_type=AttnMaskType.causal,  # TODO: check the input is THD or BSHD
             cp_comm_type=cp_com_type,
-            model_comm_pgs=model_comm_pgs,
+            pg_collection=pg_collection,
         )
         CommonOpsForTest.__init__(
             self,
@@ -106,6 +105,8 @@ class SelfAttentionForTest(SelfAttention, CommonOpsForTest):
                 embedding tensor(s).
             rotary_pos_cos (Optional[Tensor]): Rotary embedding cosine.
             rotary_pos_sin (Optional[Tensor]): Rotary embedding sine.
+            rotary_pos_cos_sin (Optional[Tensor]): Combined rotary embedding cosine and sine.
+            Currently used exclusively for inference with dynamic batching and flashinfer RoPE.
             attention_bias (Optional[Tensor]): Attention bias.
             packed_seq_params (Optional[PackedSeqparams]): Parameters used for THD format.
             sequence_len_offset (Optional[int]): Sequence length offset used for
@@ -124,7 +125,6 @@ class SelfAttentionForTest(SelfAttention, CommonOpsForTest):
         )
         if no_rope:
             rotary_pos_emb = None
-        attn_mask_type = self.attn_mask_type
 
         assert rotary_pos_cos is None and rotary_pos_sin is None
 
@@ -138,12 +138,39 @@ class SelfAttentionForTest(SelfAttention, CommonOpsForTest):
         # Get the query, key and value tensors based on the type of attention -
         # self or cross attn.
         nvtx_range_push(suffix="qkv")
+        split_qkv = (self.attention_type == "cross") or not all(
+            [
+                not self.config.test_mode,
+                self.config.fused_single_qkv_rope,
+                inference_context is None,
+                packed_seq_params is None,
+                (
+                    rotary_pos_emb is not None
+                    and rotary_pos_emb[0] is not None
+                    and rotary_pos_emb[1] is not None
+                ),
+                not self.config.flash_decode,
+                HAVE_FUSED_QKV_ROPE,
+                self.q_layernorm is None or isinstance(self.q_layernorm, IdentityOp),
+                self.k_layernorm is None or isinstance(self.k_layernorm, IdentityOp),
+            ]
+        )
+        # Check if fused_single_qkv_rope is requested but either unavailable or not
+        # supported for the current use case.
+        if self.attention_type != "cross":
+            assert not (
+                self.config.fused_single_qkv_rope and split_qkv
+            ), "fused_single_qkv_rope requested but not available/supported for the config."
 
-        qkv_output = self.get_query_key_value_tensors(hidden_states, key_value_states)
+        qkv_output = self.get_query_key_value_tensors(
+            hidden_states, key_value_states, split_qkv=split_qkv
+        )
         attn_mask_type = self.attn_mask_type
         block_table = None
-        query, key, value = qkv_output
-
+        if split_qkv:
+            query, key, value = qkv_output
+        else:
+            mixed_qkv, qkv_split_arg_list = qkv_output
         nvtx_range_pop(suffix="qkv")
 
         # ===================================================
@@ -160,7 +187,9 @@ class SelfAttentionForTest(SelfAttention, CommonOpsForTest):
         # relative positional embedding (rotary embedding)
         # ================================================
         nvtx_range_push(suffix="rotary_pos_emb")
-        if rotary_pos_emb is not None and not self.config.flash_decode:
+        if rotary_pos_emb is not None and (
+            not self.config.flash_decode or inference_context is None
+        ):
             q_pos_emb, k_pos_emb = rotary_pos_emb
 
             if packed_seq_params is not None:
@@ -175,31 +204,43 @@ class SelfAttentionForTest(SelfAttention, CommonOpsForTest):
             else:
                 cu_seqlens_q = cu_seqlens_kv = None
 
-            if q_pos_emb is not None:
-                # TODO VIJAY: simplify
-                if inference_context is None or inference_context.is_static_batching():
-                    query = apply_rotary_pos_emb(
-                        query,
-                        q_pos_emb,
+            if split_qkv:
+                if q_pos_emb is not None:
+                    # TODO VIJAY: simplify
+                    if (
+                        inference_context is None
+                        or inference_context.is_static_batching()
+                    ):
+                        query = apply_rotary_pos_emb(
+                            query,
+                            q_pos_emb,
+                            config=self.config,
+                            cu_seqlens=cu_seqlens_q,
+                            mscale=_yarn_get_concentration_factor_from_config(
+                                self.config
+                            ),
+                            cp_group=self.pg_collection.cp,
+                        )
+                    else:
+                        query = inference_context.apply_rotary_emb_query(
+                            query,
+                            q_pos_emb,
+                            self.config,
+                            cu_seqlens_q,
+                            self.pg_collection.cp,
+                        )
+                if k_pos_emb is not None:
+                    key = apply_rotary_pos_emb(
+                        key,
+                        k_pos_emb,
                         config=self.config,
-                        cu_seqlens=cu_seqlens_q,
-                        cp_group=self.model_comm_pgs.cp,
+                        cu_seqlens=cu_seqlens_kv,
+                        mscale=_yarn_get_concentration_factor_from_config(self.config),
+                        cp_group=self.pg_collection.cp,
                     )
-                else:
-                    query = inference_context.apply_rotary_emb_query(
-                        query,
-                        q_pos_emb,
-                        self.config,
-                        cu_seqlens_q,
-                        self.model_comm_pgs.cp,
-                    )
-            if k_pos_emb is not None:
-                key = apply_rotary_pos_emb(
-                    key,
-                    k_pos_emb,
-                    config=self.config,
-                    cu_seqlens=cu_seqlens_kv,
-                    cp_group=self.model_comm_pgs.cp,
+            else:
+                query, key, value = apply_fused_qkv_rotary_pos_emb(
+                    mixed_qkv, q_pos_emb, k_pos_emb, qkv_split_arg_list
                 )
 
             # TODO, can apply positional embedding to value_layer so it has
