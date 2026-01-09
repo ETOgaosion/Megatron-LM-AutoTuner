@@ -22,6 +22,7 @@ These packages are always fixed for this project:
 - CUDA: 12.8
 - CUDNN: 9.10.2 (not strictly needed)
 - nvidia-cudnn-cu12: 9.10.2.21
+- Flash Attention: 2.7.4.post1
 - torch: 2.8.0+cu128
 - TransformerEngine: 2.7.0
 - Megatron Core: core_v0.15.1

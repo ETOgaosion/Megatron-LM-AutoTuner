@@ -43,7 +43,7 @@ einops==0.8.1
 executing==2.2.1
 fastjsonschema==2.21.2
 filelock==3.13.1
-flash_attn==2.8.3
+flash_attn==2.7.4.post1
 fonttools==4.60.1
 fqdn==1.5.1
 frozenlist==1.7.0
