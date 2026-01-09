@@ -16,6 +16,8 @@ There are submodules in our repo, so the standard development procedure is compl
 
 Notice that you shall never modify submodule and main repo in one task.
 
+When you try to commit your changes, save the explanation of your task to [record directory](../record/), filename include date in the front.
+
 #### Developing in submodules
 
 Before you make contributions to submodules, please

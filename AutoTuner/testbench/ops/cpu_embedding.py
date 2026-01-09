@@ -53,23 +53,35 @@ class LanguageModelCPUEmbeddingForTest(LanguageModelCPUEmbedding, CommonOpsForTe
     def _forward(
         self, input_ids: Tensor, position_ids: Tensor, tokentype_ids: int = None
     ) -> Tensor:
-        """Forward pass of the embedding module.
+        """Forward pass of the CPU embedding module.
+
+        This method performs embedding lookups on CPU and then moves the result to GPU.
 
         Args:
-            input_ids (Tensor): The input tokens
-            position_ids (Tensor): The position id's used to calculate position embeddings
+            input_ids (Tensor): The input tokens (on CPU)
+            position_ids (Tensor): The position id's used to calculate position embeddings (on CPU)
             tokentype_ids (int): The token type ids. Used when args.bert_binary_head is
                 set to True. Defaults to None
 
         Returns:
-            Tensor: The output embeddings
+            Tensor: The output embeddings (on GPU)
         """
+        # Ensure inputs are on CPU
+        nvtx_range_push(suffix="move_to_cpu")
+        input_ids_cpu = input_ids.cpu() if input_ids.device.type != 'cpu' else input_ids
+        position_ids_cpu = position_ids.cpu() if position_ids.device.type != 'cpu' else position_ids
+        nvtx_range_pop(suffix="move_to_cpu")
+
+        # Perform embedding lookup on CPU
         nvtx_range_push(suffix="word_embeddings")
-        word_embeddings = self.word_embeddings(input_ids)
+        word_embeddings = self.word_embeddings(input_ids_cpu)
         nvtx_range_pop(suffix="word_embeddings")
+
         if self.add_position_embedding:
-            position_embeddings = self.position_embeddings(position_ids)
+            nvtx_range_push(suffix="position_embeddings")
+            position_embeddings = self.position_embeddings(position_ids_cpu)
             embeddings = word_embeddings + position_embeddings
+            nvtx_range_pop(suffix="position_embeddings")
         else:
             embeddings = word_embeddings
 
@@ -79,13 +91,19 @@ class LanguageModelCPUEmbeddingForTest(LanguageModelCPUEmbedding, CommonOpsForTe
 
         if tokentype_ids is not None:
             assert self.tokentype_embeddings is not None
+            tokentype_ids_cpu = tokentype_ids.cpu() if tokentype_ids.device.type != 'cpu' else tokentype_ids
             # [b s h] -> [s b h] (So that it can be added with embeddings)
-            tokentype_embedding = self.tokentype_embeddings(tokentype_ids).permute(
+            tokentype_embedding = self.tokentype_embeddings(tokentype_ids_cpu).permute(
                 1, 0, 2
             )
             embeddings = embeddings + tokentype_embedding
         else:
             assert self.tokentype_embeddings is None
+
+        # Move embeddings to GPU before applying dropout and other operations
+        nvtx_range_push(suffix="move_to_gpu")
+        embeddings = embeddings.cuda()
+        nvtx_range_pop(suffix="move_to_gpu")
 
         # If the input flag for fp32 residual connection is set, convert for float.
         if self.config.fp32_residual_connection:
