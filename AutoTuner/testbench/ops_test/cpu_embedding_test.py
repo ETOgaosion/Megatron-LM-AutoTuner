@@ -46,7 +46,7 @@ class TestLanguageModelCPUEmbedding(TestCommon):
             theoretical_activations=theoretical_activations,
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,
         )
-        self.module_name = "Embedding"
+        self.module_name = "LanguageModelCPUEmbedding"
 
         if profile_mode == ProfileMode.collect_data:
             with MemoryTrackerContext(self.module_name) as memory_tracker_ctx:
@@ -65,11 +65,8 @@ class TestLanguageModelCPUEmbedding(TestCommon):
             embedding_weight = self.op.word_embeddings.weight
             bytes_per_param = torch.finfo(embedding_weight.dtype).bits // 8
 
+            # For CPU embedding, weights are on CPU, so GPU memory is 0
             estimated_weight_mem_bytes = 0
-            if mpu.get_pipeline_model_parallel_rank() == 0:
-                estimated_weight_mem_bytes = (
-                    (vocab_size // tp_size) * hidden_size * bytes_per_param
-                )
 
             estimated_weight_mem_str = get_memory_str(
                 estimated_weight_mem_bytes, human_readable=True

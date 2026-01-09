@@ -2,6 +2,9 @@ from AutoTuner.testbench.ops_test.atten_with_cp_test import TestAttnFuncWithCPAn
 from AutoTuner.testbench.ops_test.column_parallel_linear_test import (
     TestColumnParallelLinear,
 )
+from AutoTuner.testbench.ops_test.cpu_embedding_test import (
+    TestLanguageModelCPUEmbedding,
+)
 from AutoTuner.testbench.ops_test.decoder_test_hidden import TestDecoderWithHiddenInputs
 from AutoTuner.testbench.ops_test.dot_product_attention_test import (
     TestTEDotProductAttention,
@@ -23,6 +26,7 @@ from AutoTuner.testbench.ops_test.transformers_layer_test import TestTransformer
 
 OP_TEST_MAPPING = {
     "Embedding": TestLanguageModelEmbedding,
+    "LanguageModelCPUEmbedding": TestLanguageModelCPUEmbedding,
     "Preprocess": TestPreprocess,
     "Decoder": TestDecoderWithHiddenInputs,
     "Postprocess": TestPostprocess,
