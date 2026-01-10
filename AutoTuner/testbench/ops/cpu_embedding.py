@@ -80,6 +80,9 @@ class LanguageModelCPUEmbeddingForTest(LanguageModelCPUEmbedding, CommonOpsForTe
         if self.add_position_embedding:
             nvtx_range_push(suffix="position_embeddings")
             position_embeddings = self.position_embeddings(position_ids_cpu)
+            # Handle device mismatch if word_embeddings is on GPU (TP > 1 case)
+            if word_embeddings.device != position_embeddings.device:
+                position_embeddings = position_embeddings.to(word_embeddings.device)
             embeddings = word_embeddings + position_embeddings
             nvtx_range_pop(suffix="position_embeddings")
         else:
@@ -96,13 +99,18 @@ class LanguageModelCPUEmbeddingForTest(LanguageModelCPUEmbedding, CommonOpsForTe
             tokentype_embedding = self.tokentype_embeddings(tokentype_ids_cpu).permute(
                 1, 0, 2
             )
+            # Handle device mismatch if embeddings is on GPU (TP > 1 case)
+            if embeddings.device != tokentype_embedding.device:
+                tokentype_embedding = tokentype_embedding.to(embeddings.device)
             embeddings = embeddings + tokentype_embedding
         else:
             assert self.tokentype_embeddings is None
 
         # Move embeddings to GPU before applying dropout and other operations
+        # (may already be on GPU if TP > 1 due to collective operations)
         nvtx_range_push(suffix="move_to_gpu")
-        embeddings = embeddings.cuda()
+        if embeddings.device.type != 'cuda':
+            embeddings = embeddings.cuda()
         nvtx_range_pop(suffix="move_to_gpu")
 
         # If the input flag for fp32 residual connection is set, convert for float.
