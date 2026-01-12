@@ -10,11 +10,13 @@ from AutoTuner.testbench.ops_test.dot_product_attention_test import (
     TestTEDotProductAttention,
 )
 from AutoTuner.testbench.ops_test.embedding_test import TestLanguageModelEmbedding
+from AutoTuner.testbench.ops_test.gpt_model_enhanced_test import TestGPTModelEnhanced
 from AutoTuner.testbench.ops_test.gpt_model_test import TestGPTModel
 from AutoTuner.testbench.ops_test.layernorm_test import TestLayerNorm
 from AutoTuner.testbench.ops_test.mlpdense_test import TestMLPDense
 from AutoTuner.testbench.ops_test.moe_layer_test import TestMoELayer
 from AutoTuner.testbench.ops_test.postprocess_test import TestPostprocess
+from AutoTuner.testbench.ops_test.preprocess_enhanced_test import TestPreprocessEnhanced
 from AutoTuner.testbench.ops_test.preprocess_test import TestPreprocess
 from AutoTuner.testbench.ops_test.row_parallel_linear_test import (
     TestTERowParallelLinear,
@@ -28,11 +30,13 @@ OP_TEST_MAPPING = {
     "Embedding": TestLanguageModelEmbedding,
     "LanguageModelCPUEmbedding": TestLanguageModelCPUEmbedding,
     "Preprocess": TestPreprocess,
+    "PreprocessEnhanced": TestPreprocessEnhanced,
     "Decoder": TestDecoderWithHiddenInputs,
     "Postprocess": TestPostprocess,
     "LayerNorm": TestLayerNorm,
     "TransformerLayer": TestTransformerLayer,
     "GPTModel": TestGPTModel,
+    "GPTModelEnhanced": TestGPTModelEnhanced,
     "SelfAttention": TestSelfAttention,
     "MLPDense": TestMLPDense,
     "MoELayer": TestMoELayer,
