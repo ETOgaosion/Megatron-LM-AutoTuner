@@ -3,6 +3,7 @@
 This test class is designed for testing the last pipeline stage model
 (pre_process=False, post_process=True) with module queue memory optimization.
 """
+
 import os
 from typing import Any, Dict, Optional
 
@@ -294,9 +295,7 @@ class TestGPTModelModuleQueue(TestWithHiddenInputs):
             ln_flops = 5 * tokens * hidden_size
 
             # Total FLOPS per layer
-            layer_flops = (
-                qkv_flops + attn_flops + proj_flops + mlp_flops + 2 * ln_flops
-            )
+            layer_flops = qkv_flops + attn_flops + proj_flops + mlp_flops + 2 * ln_flops
 
             # Adjust for tensor parallelism
             layer_flops = layer_flops / tp_size

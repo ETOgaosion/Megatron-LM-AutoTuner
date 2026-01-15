@@ -4,6 +4,7 @@ This module provides a test wrapper for GPTModelModuleQueue, which is designed
 for the last pipeline stage (pre_process=False, post_process=True) with
 memory-efficient CPU offloading of transformer layers.
 """
+
 import logging
 from typing import Optional
 

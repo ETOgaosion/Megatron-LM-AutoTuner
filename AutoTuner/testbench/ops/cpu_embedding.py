@@ -68,8 +68,10 @@ class LanguageModelCPUEmbeddingForTest(LanguageModelCPUEmbedding, CommonOpsForTe
         """
         # Ensure inputs are on CPU
         nvtx_range_push(suffix="move_to_cpu")
-        input_ids_cpu = input_ids.cpu() if input_ids.device.type != 'cpu' else input_ids
-        position_ids_cpu = position_ids.cpu() if position_ids.device.type != 'cpu' else position_ids
+        input_ids_cpu = input_ids.cpu() if input_ids.device.type != "cpu" else input_ids
+        position_ids_cpu = (
+            position_ids.cpu() if position_ids.device.type != "cpu" else position_ids
+        )
         nvtx_range_pop(suffix="move_to_cpu")
 
         # Perform embedding lookup on CPU
@@ -94,7 +96,11 @@ class LanguageModelCPUEmbeddingForTest(LanguageModelCPUEmbedding, CommonOpsForTe
 
         if tokentype_ids is not None:
             assert self.tokentype_embeddings is not None
-            tokentype_ids_cpu = tokentype_ids.cpu() if tokentype_ids.device.type != 'cpu' else tokentype_ids
+            tokentype_ids_cpu = (
+                tokentype_ids.cpu()
+                if tokentype_ids.device.type != "cpu"
+                else tokentype_ids
+            )
             # [b s h] -> [s b h] (So that it can be added with embeddings)
             tokentype_embedding = self.tokentype_embeddings(tokentype_ids_cpu).permute(
                 1, 0, 2
@@ -109,7 +115,7 @@ class LanguageModelCPUEmbeddingForTest(LanguageModelCPUEmbedding, CommonOpsForTe
         # Move embeddings to GPU before applying dropout and other operations
         # (may already be on GPU if TP > 1 due to collective operations)
         nvtx_range_push(suffix="move_to_gpu")
-        if embeddings.device.type != 'cuda':
+        if embeddings.device.type != "cuda":
             embeddings = embeddings.cuda()
         nvtx_range_pop(suffix="move_to_gpu")
 

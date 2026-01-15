@@ -1060,14 +1060,10 @@ def hack_forward(
         is_first_microbatch = False
 
     if self.ub_overlap_rs_fprop:
-        if get_ub(
-            self.ub_name + "_fprop"
-        ).is_fp8_ubuf():
+        if get_ub(self.ub_name + "_fprop").is_fp8_ubuf():
             fp8_output = True
     if self.ub_overlap_rs_dgrad:
-        if get_ub(
-            self.ub_name + "_dgrad"
-        ).is_fp8_ubuf():
+        if get_ub(self.ub_name + "_dgrad").is_fp8_ubuf():
             fp8_grad = True
 
     with (
