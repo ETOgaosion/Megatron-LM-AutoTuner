@@ -11,6 +11,9 @@ from AutoTuner.testbench.ops_test.dot_product_attention_test import (
 )
 from AutoTuner.testbench.ops_test.embedding_test import TestLanguageModelEmbedding
 from AutoTuner.testbench.ops_test.gpt_model_enhanced_test import TestGPTModelEnhanced
+from AutoTuner.testbench.ops_test.gpt_model_module_queue_test import (
+    TestGPTModelModuleQueue,
+)
 from AutoTuner.testbench.ops_test.gpt_model_test import TestGPTModel
 from AutoTuner.testbench.ops_test.layernorm_test import TestLayerNorm
 from AutoTuner.testbench.ops_test.mlpdense_test import TestMLPDense
@@ -37,6 +40,7 @@ OP_TEST_MAPPING = {
     "TransformerLayer": TestTransformerLayer,
     "GPTModel": TestGPTModel,
     "GPTModelEnhanced": TestGPTModelEnhanced,
+    "GPTModelModuleQueue": TestGPTModelModuleQueue,
     "SelfAttention": TestSelfAttention,
     "MLPDense": TestMLPDense,
     "MoELayer": TestMoELayer,
