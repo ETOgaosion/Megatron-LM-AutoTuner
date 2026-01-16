@@ -174,6 +174,11 @@ def parse_args():
         choices=["fc1", "fc2", "qkv", "proj"],
         help="Name of the tensor parallel communication buffer to track.",
     )
+    parser.add_argument(
+        "--run-one-data",
+        action="store_true",
+        help="Only run one data for each test case.",
+    )
 
     # Profile configs
     parser.add_argument(
@@ -267,6 +272,7 @@ def handle_profile_configs(args) -> ProfileConfig:
         args.warmup_iters,
         args.theoretical_flops,
         args.theoretical_activations,
+        args.run_one_data,
     )
 
 

@@ -251,7 +251,7 @@ class TestCommon(TheoreticalCalculation):
         gc.collect()
         torch.cuda.empty_cache()
 
-    def run_test(self, test_case: InputTestCase, batch_data_generator: Iterator):
+    def run_test(self, test_case: InputTestCase, batch_data_generator: Iterator, run_one_data: bool = False):
         for batch_data in batch_data_generator:
             with torch.no_grad():
                 inputs = self.prepare_input(test_case, batch_data)
@@ -260,6 +260,8 @@ class TestCommon(TheoreticalCalculation):
             del inputs
             gc.collect()
             torch.cuda.empty_cache()
+            if run_one_data:
+                break
 
         if self.profile_mode == ProfileMode.collect_data:
             avg_forward_time = average_microbatch_metric(

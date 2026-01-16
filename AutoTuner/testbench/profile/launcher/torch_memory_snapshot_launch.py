@@ -67,7 +67,7 @@ class LaunchTorchMemorySnapshotForOps(Launcher):
         test_cases = [self.test_cases[i] for i in test_case_idxs]
         for test_case in test_cases:
             batch_data_generator = self.datasets.get_batch_generator(test_case)
-            op_class_instance.run_test(test_case, batch_data_generator)
+            op_class_instance.run_test(test_case, batch_data_generator, run_one_data=self.profile_config.run_one_data)
         aggressive_empty_cache(force_sync=True)
         return op_class_instance
 
@@ -105,7 +105,7 @@ class LaunchTorchMemorySnapshotForOps(Launcher):
             for i in range(self.profile_config.warmup_iters + 1):
                 for test_case in test_cases:
                     batch_data_generator = self.datasets.get_batch_generator(test_case)
-                    op_class_instance.run_test(test_case, batch_data_generator)
+                    op_class_instance.run_test(test_case, batch_data_generator, run_one_data=self.profile_config.run_one_data)
             print(
                 f"Torch profiling completed, trace saved to {self.memory_snapshot_config.output_dir}."
             )

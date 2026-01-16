@@ -20,10 +20,11 @@ PROFILE_MODEL_MAP = {
 class ProfileConfig:
     profile_mode: int = (
         ProfileMode.collect_data
-    )  # 0: collect data, 1: nsys profile, 2: torch profiler
+    )  # 0: collect data, 1: nsys profile, 2: torch profiler, 3: torch memory snapshot
     warmup_iters: int = 2  # warmup_iters operator executions
     theoretical_flops: bool = False
     theoretical_activations: bool = False
+    run_one_data: bool = False  # only run one data for each test case
 
 
 @dataclass

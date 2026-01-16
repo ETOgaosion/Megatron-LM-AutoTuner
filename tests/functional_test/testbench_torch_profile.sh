@@ -17,6 +17,7 @@ else
     TEST_CASE_IDXS=None
     TP_COMM_OVERLAP=False
     TP_COMM_BUFFER_NAME="fc1"
+    RUN_ONE_DATA=False
     
     TP_SIZE=1
     CP_SIZE=1
@@ -60,6 +61,10 @@ PROFILE_ARGS=(
     --fix-compute-amount
     --tp-comm-buffer-name $TP_COMM_BUFFER_NAME   # specify the tensor parallel communication buffer name
 )
+
+if [[ "${RUN_ONE_DATA}" == "True" ]]; then
+    PROFILE_ARGS+=(--run-one-data)
+fi
 
 OPTIONAL_PROFILE_ARGS=()
 if [[ "${TEST_OPS_LIST}" != "None" ]]; then
