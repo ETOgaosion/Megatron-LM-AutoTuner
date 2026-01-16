@@ -3,10 +3,8 @@ qkv_fprop:
   aggregate: 1
 
 proj_fprop:
-  method: pipeline
-  num_sm: 4
-  num_splits: 4
-  set_sm_margin: 0
+  method: ring_exchange
+  aggregate: 1
 
 fc1_fprop:
   method: ring_exchange

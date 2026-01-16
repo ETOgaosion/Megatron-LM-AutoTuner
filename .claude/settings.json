@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "defaultMode": "plan",
+    "allow": [
+      "Bash(python3 -m py_compile:*)"
+    ]
+  }
+}
