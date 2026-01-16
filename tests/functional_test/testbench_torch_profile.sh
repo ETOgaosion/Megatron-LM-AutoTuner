@@ -14,7 +14,7 @@ else
     MODEL_NAME="Qwen/Qwen3-0.6B"
     TEST_CASES_FILE="local/qwen3_0_6b.json"
     TEST_OPS_LIST=None
-    TEST_CASE_IDXES=None
+    TEST_CASE_IDXS=None
     TP_COMM_OVERLAP=False
     
     TP_SIZE=1
@@ -63,8 +63,8 @@ OPTIONAL_PROFILE_ARGS=()
 if [[ "${TEST_OPS_LIST}" != "None" ]]; then
     OPTIONAL_PROFILE_ARGS+=(--test-ops-list "${TEST_OPS_LIST[@]}")
 fi
-if [[ "${TEST_CASE_IDXES}" != "None" ]]; then
-    OPTIONAL_PROFILE_ARGS+=(--test-case-idxes ${TEST_CASE_IDXES[@]})
+if [[ "${TEST_CASE_IDXS}" != "None" ]]; then
+    OPTIONAL_PROFILE_ARGS+=(--test-case-idxs ${TEST_CASE_IDXS[@]})
 fi
 
 if [[ "${TP_COMM_OVERLAP}" == "True" ]]; then
