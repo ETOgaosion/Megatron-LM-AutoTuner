@@ -155,6 +155,7 @@ class TestTERowParallelLinear(TestWithHiddenInputs):
         warmup_iters: int = 2,
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
+        tp_comm_buffer_name: str = "fc2",
     ):
         # Dense MLP w/ or w/o TE modules.
         backend: BackendSpecProvider = (
@@ -194,6 +195,7 @@ class TestTERowParallelLinear(TestWithHiddenInputs):
                     bias=tf_config.add_bias_linear,
                     tp_group=tp_group,
                     hook_activation=False,
+                    tp_comm_buffer_name=tp_comm_buffer_name,
                 )
 
             detailed_mem_report = memory_tracker_ctx.get_result()
@@ -215,6 +217,7 @@ class TestTERowParallelLinear(TestWithHiddenInputs):
                 bias=tf_config.add_bias_linear,
                 tp_group=tp_group,
                 hook_activation=False,
+                tp_comm_buffer_name=tp_comm_buffer_name,
             )
 
     def prepare_input(self, test_case, micro_batch):

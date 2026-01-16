@@ -3,6 +3,7 @@ from collections import defaultdict
 
 import torch
 from megatron.core import parallel_state as mpu
+import warnings
 
 from AutoTuner.utils.config import (
     get_hf_model_config,
@@ -29,6 +30,7 @@ class Launcher:
         override_tf_config_kwargs: dict,
         fix_compute_amount: bool = True,
         tp_comm_overlap_cfg: str = None,
+        tp_comm_buffer_name: str = None,
     ):
         self.model_name = model_name
         self.profile_config = profile_config
@@ -60,6 +62,7 @@ class Launcher:
 
         self.all_supported_ops = list(OP_TEST_MAPPING.keys())
         self.tp_comm_overlap_cfg = tp_comm_overlap_cfg
+        self.tp_comm_buffer_name = tp_comm_buffer_name
 
     def run_op(self, op_name: str, test_case_idxs: list[int]):
         op_test_class = OP_TEST_MAPPING.get(op_name)
@@ -87,6 +90,21 @@ class Launcher:
                     moe_grouped_gemm=self.tf_config.moe_grouped_gemm,
                 )
             )
+        kwargs["tp_comm_overlap_cfg"] = self.tp_comm_overlap_cfg
+        if op_name == "ColumnParallelLinearForTest":
+            if self.tp_comm_buffer_name is None:
+                warnings.warn(
+                    "tp_comm_buffer_name is not set, using default value 'fc1'"
+                )
+                self.tp_comm_buffer_name = "fc1"
+            kwargs["tp_comm_buffer_name"] = self.tp_comm_buffer_name
+        if op_name == "RowParallelLinearForTest":
+            if self.tp_comm_buffer_name is None:
+                warnings.warn(
+                    "tp_comm_buffer_name is not set, using default value 'fc2'"
+                )
+                self.tp_comm_buffer_name = "fc2"
+            kwargs["tp_comm_buffer_name"] = self.tp_comm_buffer_name
         op_class_instance = op_test_class(**kwargs)
         if test_case_idxs is None:
             test_case_idxs = list(range(len(self.test_cases)))

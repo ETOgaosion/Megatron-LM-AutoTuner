@@ -25,10 +25,11 @@ class LaunchTorchProfileForOps(Launcher):
         torch_profiler_config: TorchProfilerConfig,
         fix_compute_amount: bool = True,
         tp_comm_overlap_cfg: str = None,
+        tp_comm_buffer_name: str = None,
     ):
         assert (
             profile_config.profile_mode == ProfileMode.torch_profiler
-        ), "Nsys profile should enable torch profiler mode."
+        ), "Torch profile should enable torch profiler mode."
         super().__init__(
             profile_config=profile_config,
             test_cases=test_cases,
@@ -37,6 +38,7 @@ class LaunchTorchProfileForOps(Launcher):
             override_tf_config_kwargs=override_tf_config_kwargs,
             fix_compute_amount=fix_compute_amount,
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,
+            tp_comm_buffer_name=tp_comm_buffer_name,
         )
         self.torch_profiler_config = torch_profiler_config
         self.torch_profiler_config.schedule = torch.profiler.schedule(

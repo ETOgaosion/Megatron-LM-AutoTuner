@@ -25,6 +25,7 @@ class TestColumnParallelLinear(TestWithHiddenInputs):
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
         tp_comm_overlap_cfg: str = None,
+        tp_comm_buffer_name: str = "fc1",
     ):
         super().__init__(
             hf_config=hf_config,
@@ -55,7 +56,7 @@ class TestColumnParallelLinear(TestWithHiddenInputs):
                     bias=tf_config.add_bias_linear,
                     skip_bias_add=True,
                     is_expert=False,
-                    tp_comm_buffer_name="fc1",
+                    tp_comm_buffer_name=tp_comm_buffer_name,
                     tp_group=tp_group,
                     hook_activation=False,
                 )  # TODO: 写完理论计算之后将这里的false改为True
@@ -78,7 +79,7 @@ class TestColumnParallelLinear(TestWithHiddenInputs):
                 bias=tf_config.add_bias_linear,
                 skip_bias_add=True,
                 is_expert=False,
-                tp_comm_buffer_name="fc1",
+                tp_comm_buffer_name=tp_comm_buffer_name,
                 tp_group=tp_group,
                 hook_activation=False,
             )

@@ -14,6 +14,7 @@ class LaunchNsysProfileForOps(Launcher):
         override_tf_config_kwargs: dict,
         fix_compute_amount: bool = True,
         tp_comm_overlap_cfg: str = None,
+        tp_comm_buffer_name: str = None,
     ):
         assert (
             profile_config.profile_mode == ProfileMode.nsys_profile
@@ -26,4 +27,5 @@ class LaunchNsysProfileForOps(Launcher):
             override_tf_config_kwargs=override_tf_config_kwargs,
             fix_compute_amount=fix_compute_amount,
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,
+            tp_comm_buffer_name=tp_comm_buffer_name,
         )

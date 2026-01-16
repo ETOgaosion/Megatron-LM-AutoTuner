@@ -166,6 +166,14 @@ def parse_args():
         default="override_tf_config.json",
         help="TransformerConfig to override",
     )
+    parser.add_argument(
+        "--tp-comm-buffer-name",
+        type=str,
+        required=False,
+        default=None,
+        choices=["fc1", "fc2", "qkv", "proj"],
+        help="Name of the tensor parallel communication buffer to track.",
+    )
 
     # Profile configs
     parser.add_argument(
@@ -300,6 +308,7 @@ def call_launcher(
         "override_model_kwargs": override_model_config,
         "override_tf_config_kwargs": override_tf_config,
         "fix_compute_amount": args.fix_compute_amount,
+        "tp_comm_buffer_name": args.tp_comm_buffer_name,
     }
     launcher_kwargs["tp_comm_overlap_cfg"] = os.path.join(
         args.config_dir, "tp_comm_overlap_cfg.yaml"

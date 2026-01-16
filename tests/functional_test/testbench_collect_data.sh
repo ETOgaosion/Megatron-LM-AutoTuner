@@ -16,6 +16,7 @@ else
     TEST_OPS_LIST=None
     TEST_CASE_IDXS=None
     TP_COMM_OVERLAP=False
+    TP_COMM_BUFFER_NAME="fc1"
 
     TP_SIZE=1
     CP_SIZE=1
@@ -59,6 +60,7 @@ PROFILE_ARGS=(
     --fix-compute-amount
     # --theoretical-flops true
     --theoretical-activations True
+    --tp-comm-buffer-name $TP_COMM_BUFFER_NAME   # specify the tensor parallel communication buffer name
 )
 
 OPTIONAL_PROFILE_ARGS=()
