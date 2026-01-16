@@ -135,7 +135,7 @@ def parse_args():
         "--test-cases-dir",
         type=str,
         required=False,
-        default="AutoTuner/testbench/profile/cases/",
+        default="AutoTuner/testbench/profile/cases/local/",
         help="Base dir holds the test cases files, shall not modify this",
     )
     parser.add_argument(
