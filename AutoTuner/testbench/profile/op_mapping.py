@@ -4,41 +4,18 @@ from AutoTuner.testbench.ops_test.atten_with_cp_test import TestAttnFuncWithCPAn
 from AutoTuner.testbench.ops_test.column_parallel_linear_test import (
     TestColumnParallelLinear,
 )
-from AutoTuner.testbench.ops_test.cpu_embedding_test import (
-    TestLanguageModelCPUEmbedding,
-)
 from AutoTuner.testbench.ops_test.decoder_test_hidden import TestDecoderWithHiddenInputs
 from AutoTuner.testbench.ops_test.dot_product_attention_test import (
     TestTEDotProductAttention,
 )
 from AutoTuner.testbench.ops_test.embedding_test import TestLanguageModelEmbedding
 
-try:
-    from AutoTuner.testbench.ops_test.gpt_model_enhanced_test import (
-        TestGPTModelEnhanced,
-    )
-except ImportError:
-    warnings.warn(f"Please install Megatron-LM-Enhanced to run TestGPTModelEnhanced.")
-try:
-    from AutoTuner.testbench.ops_test.gpt_model_module_queue_test import (
-        TestGPTModelModuleQueue,
-    )
-except ImportError:
-    warnings.warn(
-        f"Please install Megatron-LM-Enhanced to run TestGPTModelModuleQueue."
-    )
 from AutoTuner.testbench.ops_test.gpt_model_test import TestGPTModel
 from AutoTuner.testbench.ops_test.layernorm_test import TestLayerNorm
 from AutoTuner.testbench.ops_test.mlpdense_test import TestMLPDense
 from AutoTuner.testbench.ops_test.moe_layer_test import TestMoELayer
 from AutoTuner.testbench.ops_test.postprocess_test import TestPostprocess
 
-try:
-    from AutoTuner.testbench.ops_test.preprocess_enhanced_test import (
-        TestPreprocessEnhanced,
-    )
-except ImportError:
-    warnings.warn(f"Please install Megatron-LM-Enhanced to run TestPreprocessEnhanced.")
 from AutoTuner.testbench.ops_test.preprocess_test import TestPreprocess
 from AutoTuner.testbench.ops_test.row_parallel_linear_test import (
     TestTERowParallelLinear,
@@ -50,16 +27,12 @@ from AutoTuner.testbench.ops_test.transformers_layer_test import TestTransformer
 
 OP_TEST_MAPPING = {
     "Embedding": TestLanguageModelEmbedding,
-    "LanguageModelCPUEmbedding": TestLanguageModelCPUEmbedding,
     "Preprocess": TestPreprocess,
-    "PreprocessEnhanced": TestPreprocessEnhanced,
     "Decoder": TestDecoderWithHiddenInputs,
     "Postprocess": TestPostprocess,
     "LayerNorm": TestLayerNorm,
     "TransformerLayer": TestTransformerLayer,
     "GPTModel": TestGPTModel,
-    "GPTModelEnhanced": TestGPTModelEnhanced,
-    "GPTModelModuleQueue": TestGPTModelModuleQueue,
     "SelfAttention": TestSelfAttention,
     "MLPDense": TestMLPDense,
     "MoELayer": TestMoELayer,
@@ -70,3 +43,25 @@ OP_TEST_MAPPING = {
     "TEAttenWithCP": TestAttnFuncWithCPAndKVP2P,
     "TEColumnParallelLinear": TestColumnParallelLinear,
 }
+
+try:
+    from AutoTuner.testbench.ops_test.cpu_embedding_test import (
+        TestLanguageModelCPUEmbedding,
+    )
+    from AutoTuner.testbench.ops_test.gpt_model_enhanced_test import (
+        TestGPTModelEnhanced,
+    )
+    from AutoTuner.testbench.ops_test.gpt_model_module_queue_test import (
+        TestGPTModelModuleQueue,
+    )
+    from AutoTuner.testbench.ops_test.preprocess_enhanced_test import (
+        TestPreprocessEnhanced,
+    )
+    OP_TEST_MAPPING["LanguageModelCPUEmbedding"] = TestLanguageModelCPUEmbedding
+    OP_TEST_MAPPING["GPTModelEnhanced"] = TestGPTModelEnhanced
+    OP_TEST_MAPPING["GPTModelModuleQueue"] = TestGPTModelModuleQueue
+    OP_TEST_MAPPING["PreprocessEnhanced"] = TestPreprocessEnhanced
+except (ImportError, ModuleNotFoundError):
+    warnings.warn(
+        f"Please install Megatron-LM-Enhanced to run Enhanced Ops."
+    )
