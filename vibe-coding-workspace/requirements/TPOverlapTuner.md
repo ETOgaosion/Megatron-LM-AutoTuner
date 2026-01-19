@@ -1,6 +1,6 @@
 # Tensor Parallel(TP) Overlap Tuner
 
-CONTEXT: This is an RLHF training engine auto-tuner, for better performance. We will implement a fully load-balanced training engine. Now you should write codes and scripts to adjust configurations to enable tp communication/computation overlap. Your codes shall mainly in [AutoTuner/Profiler/overlap](../../AutoTuner/Profiler/overlap) and [AutoTuner/utils](../../AutoTuner/utils), This needs a workflow.
+CONTEXT: This is an RLHF training engine auto-tuner, for better performance. We will implement a fully load-balanced training engine. Now you should write codes and scripts to adjust configurations to enable tp communication/computation overlap. Your codes shall mainly in [AutoTuner/Profiler/overlap](../../AutoTuner/Profiler/overlap/tp_overlap) and [AutoTuner/utils](../../AutoTuner/utils), This needs a workflow.
 WORKFLOW:
 0. [INPUT] User input a model config
 1. Use the config to generate test cases you need to test. You should use binary search to find out the overlappable TP communication/computation overlap config
