@@ -306,14 +306,9 @@ def generate_single_test_yaml(config: TPOverlapTestConfig, output_path: str) -> 
     for its specific operator/phase, and defaults for other operators.
     """
     # Start with default configs
+    # Use a real small model to fetch config for generating defaults
     generator = TPOverlapConfigGenerator(
-        TPOverlapTunerConfig(
-            model_name="",
-            hidden_size=0,
-            ffn_hidden_size=0,
-            num_attention_heads=0,
-            num_kv_heads=0,
-        )
+        TPOverlapTunerConfig(model_name="Qwen/Qwen2.5-0.5B")
     )
     yaml_config = generator.generate_default_yaml_config()
 
