@@ -9,14 +9,11 @@ the entire tuning workflow:
 4. Generate reports with optimal configurations
 """
 
-import argparse
 import glob
 import os
 import subprocess
-import sys
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional
 
 from .config_generator import (
     TPOverlapConfigGenerator,
@@ -343,86 +340,3 @@ class TPOverlapTuner:
             "proj": "TERowParallelLinear",
         }
         return mapping.get(operator, "TEColumnParallelLinear")
-
-
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="TP Overlap Tuner (Legacy CLI)")
-
-    parser.add_argument(
-        "--model-name",
-        type=str,
-        default="Qwen/Qwen3-0.6B",
-        help="Model name from HuggingFace. Model parameters are auto-fetched.",
-    )
-    parser.add_argument(
-        "--max-tp-size",
-        type=int,
-        default=8,
-        help="Maximum TP size to test",
-    )
-    parser.add_argument(
-        "--max-token-len",
-        type=int,
-        default=8192,
-        help="Maximum token length for testing",
-    )
-    parser.add_argument(
-        "--operators",
-        nargs="+",
-        default=["fc1", "fc2", "qkv", "proj"],
-        help="Operators to tune",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default=None,
-        help="Output directory for results",
-    )
-    parser.add_argument(
-        "--overlap-threshold",
-        type=float,
-        default=0.5,
-        help="Minimum overlap ratio to consider effective",
-    )
-    parser.add_argument(
-        "--skip-profiling",
-        action="store_true",
-        help="Skip profiling and analyze existing traces",
-    )
-
-    return parser.parse_args()
-
-
-def main():
-    """Main entry point for the TP Overlap Tuner."""
-    args = parse_args()
-
-    # Set default output directory
-    if args.output_dir is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        args.output_dir = f"outputs/tp_overlap_tuner/{timestamp}"
-
-    # Create tuner config (model params are auto-fetched from model_name)
-    tuner_config = TPOverlapTunerConfig(
-        model_name=args.model_name,
-        max_tp_size=args.max_tp_size,
-        max_token_len=args.max_token_len,
-        operators=args.operators,
-        output_dir=args.output_dir,
-    )
-
-    # Create and run tuner
-    tuner = TPOverlapTuner(
-        tuner_config=tuner_config,
-        overlap_threshold=args.overlap_threshold,
-    )
-
-    _report = tuner.run(skip_profiling=args.skip_profiling)
-
-    print("\nTuning completed successfully!")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
