@@ -261,6 +261,8 @@ class TPOverlapTuner:
                     "OUTPUT_DIR": config_output_dir,
                     "YAML_CONFIG": yaml_path,
                     "MODEL_NAME": self.config.model_name,
+                    "TEST_CASES_DIR": os.path.dirname(self.test_cases_file),
+                    "TEST_CASES_FILE": os.path.basename(self.test_cases_file),
                 }
             )
 
