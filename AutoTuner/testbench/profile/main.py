@@ -149,8 +149,7 @@ def parse_args():
         "--test-cases-file",
         type=str,
         required=True,
-        default="qwen3_0_6b.json",
-        help="file in cases folder contains",
+        help="Test cases JSON file name in test-cases-dir",
     )
     parser.add_argument(
         "--override-model-config-file",

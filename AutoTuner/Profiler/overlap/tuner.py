@@ -117,6 +117,18 @@ class TPOverlapTuner:
         print(f"Max TP Size: {self.config.max_tp_size}")
         print("")
 
+        # Validate required config files exist
+        config_dir = "AutoTuner/testbench/profile/configs/local"
+        required_files = ["override_model_config.json", "override_tf_config.json"]
+
+        missing = [f for f in required_files if not os.path.exists(os.path.join(config_dir, f))]
+        if missing:
+            raise FileNotFoundError(
+                f"Required config files missing in {config_dir}: {missing}\n"
+                f"Copy sample files from AutoTuner/testbench/profile/configs/\n"
+                f"See README at {config_dir}/README.md for details"
+            )
+
         # Step 0: Generate test cases file
         print("Step 0: Generating test cases file...")
         self.test_cases_file = self._generate_test_cases_file()
