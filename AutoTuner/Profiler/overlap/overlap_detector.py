@@ -64,6 +64,11 @@ class OverlapAnalysis:
     # Raw event counts
     num_gemm_events: int = 0
     num_comm_events: int = 0
+    # End-to-end execution time for the Linear operator
+    # This is the wall clock time from first event to last event
+    forward_e2e_time: float = 0.0  # Forward pass end-to-end time
+    backward_e2e_time: float = 0.0  # Backward pass end-to-end time
+    operator_e2e_time: float = 0.0  # Total operator end-to-end time
 
     @property
     def forward_overlap_ratio(self) -> float:
@@ -105,20 +110,28 @@ class OverlapAnalysis:
             "phase": self.config.phase,
             "tp_size": self.config.tp_size,
             "overlap_method": self.config.overlap_method.value,
+            # Forward pass metrics
             "forward_gemm_time_us": self.forward_gemm_time,
             "forward_comm_time_us": self.forward_comm_time,
             "forward_overlap_time_us": self.forward_overlap_time,
             "forward_overlap_ratio": self.forward_overlap_ratio,
+            "forward_e2e_time_us": self.forward_e2e_time,
+            # Backward pass metrics
             "backward_gemm_time_us": self.backward_gemm_time,
             "backward_comm_time_us": self.backward_comm_time,
             "backward_overlap_time_us": self.backward_overlap_time,
             "backward_overlap_ratio": self.backward_overlap_ratio,
+            "backward_e2e_time_us": self.backward_e2e_time,
+            # Total metrics
             "total_time_us": self.total_time,
             "total_gemm_time_us": self.total_gemm_time,
             "total_comm_time_us": self.total_comm_time,
             "total_overlap_time_us": self.total_overlap_time,
             "total_overlap_ratio": self.total_overlap_ratio,
             "overlap_efficiency": self.overlap_efficiency,
+            # End-to-end execution time
+            "operator_e2e_time_us": self.operator_e2e_time,
+            # Event counts
             "num_gemm_events": self.num_gemm_events,
             "num_comm_events": self.num_comm_events,
         }
@@ -190,7 +203,33 @@ class OverlapDetector:
         time_range = analyzer.get_time_range()
         analysis.total_time = time_range[1] - time_range[0]
 
+        # Calculate end-to-end execution time for the Linear operator
+        # E2E time = wall clock from first event to last event (GEMM + comm combined)
+        all_operator_events = gemm_kernels + comm_kernels
+        analysis.operator_e2e_time = self._calculate_e2e_time(all_operator_events)
+
+        # Forward e2e time
+        forward_events = forward_gemm + forward_comm
+        analysis.forward_e2e_time = self._calculate_e2e_time(forward_events)
+
+        # Backward e2e time
+        backward_events = backward_gemm + backward_comm
+        analysis.backward_e2e_time = self._calculate_e2e_time(backward_events)
+
         return analysis
+
+    def _calculate_e2e_time(self, events: List[TraceEvent]) -> float:
+        """Calculate end-to-end execution time from a list of events.
+
+        This is the wall clock time from the start of the first event
+        to the end of the last event.
+        """
+        if not events:
+            return 0.0
+
+        min_start = min(e.timestamp for e in events)
+        max_end = max(e.end_timestamp for e in events)
+        return max_end - min_start
 
     def _calculate_overlap_time(
         self, events1: List[TraceEvent], events2: List[TraceEvent]

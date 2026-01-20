@@ -167,7 +167,9 @@ class TPOverlapConfigGenerator:
     def __init__(self, tuner_config: TPOverlapTunerConfig):
         """Initialize the config generator."""
         self.config = tuner_config
-        self.tp_sizes = [2, 4, 8]  # TP sizes to test
+        # TP sizes to test: 1 (no TP, baseline), 2, 4, 8
+        # TP=1 is used as baseline to compare if TP is beneficial at all
+        self.tp_sizes = [1, 2, 4, 8]
         # Filter to max_tp_size
         self.tp_sizes = [s for s in self.tp_sizes if s <= tuner_config.max_tp_size]
 
@@ -241,14 +243,20 @@ class TPOverlapConfigGenerator:
 
         for tp_size in self.tp_sizes:
             for operator in self.config.operators:
-                # Generate baseline configs
-                all_configs.extend(self.generate_baseline_configs(tp_size, operator))
-                # Generate ring_exchange configs
-                all_configs.extend(
-                    self.generate_ring_exchange_configs(tp_size, operator)
-                )
-                # Generate bulk configs
-                all_configs.extend(self.generate_bulk_configs(tp_size, operator))
+                if tp_size == 1:
+                    # TP=1: No tensor parallelism, only baseline (no communication)
+                    # This is used as the reference for comparing TP efficiency
+                    all_configs.extend(self.generate_baseline_configs(tp_size, operator))
+                else:
+                    # TP>=2: Test baseline and various overlap configurations
+                    # Generate baseline configs
+                    all_configs.extend(self.generate_baseline_configs(tp_size, operator))
+                    # Generate ring_exchange configs
+                    all_configs.extend(
+                        self.generate_ring_exchange_configs(tp_size, operator)
+                    )
+                    # Generate bulk configs
+                    all_configs.extend(self.generate_bulk_configs(tp_size, operator))
 
         return all_configs
 

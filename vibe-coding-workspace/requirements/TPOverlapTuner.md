@@ -17,7 +17,8 @@ WORKFLOW:
             - first is forward: ProfilerStep#2 with GEMM like `void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x3_tn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x3_tn_align8::Params)`, ProfilerStep#2 with comm stream `Memcpy PtoP (Device -> Device)` and `kuserbuffers_pushsend(int*, int*, int4*, int4*, int)`
             - backward: GEMM: `void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8::Params)`, all-gather: `void userbuffers_fp16_sum_inplace_gpu_rw_ag<2>(int, int, int, int, int, int, int, void**, int, unsigned long)`, reduce-scatter: `void userbuffers_fp16_sum_inplace_gpu_rr_rs<2>(int, int, int, int, int, int, int, void**, int, unsigned long)`
     - According to each comm and computation overlapable or not, generate report
-4. For each operator, generate report of tp usage and 
+        - if $tp\_new$ is n times of $tp$, the $Time(tp\_new)$ shall be 1/n time of $tp$, or else just use tp as the final config
+4. For each operator, generate report of tp usage and execution time of a Linear op
 TASK:
 0. TP devides all linear operators, so you need to test ColumnParallelLinear and RowParallelLinear with different inputs x outputs (attention/MLP), `["fc1", "fc2", "qkv", "proj"]`
     - For attention, weights: [hidden_size, query_proj_size + 2 * kv_proj_size]

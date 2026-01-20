@@ -174,6 +174,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     all_configs = generator.generate_all_configs()
 
     print(f"  TP sizes to test: {generator.tp_sizes}")
+    print(f"    - TP=1: Baseline (no tensor parallelism, pure computation)")
+    print(f"    - TP>=2: Test with overlap configurations")
     print(f"  Operators: {tuner_config.operators}")
     print(f"  Phases: fprop, dgrad, wgrad")
     print(f"  Methods: baseline, ring_exchange (agg 0/1), bulk (num_sm 1,2,4,8,16)")

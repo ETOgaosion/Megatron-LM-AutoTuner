@@ -142,6 +142,59 @@ cp outputs/tp_overlap_tuner/<timestamp>/optimal_tp_comm_overlap_cfg.yaml \
    AutoTuner/testbench/profile/configs/local/tp_comm_overlap_cfg.yaml
 ```
 
+### JSON Report Format
+
+The `tuning_report.json` includes detailed metrics for each configuration:
+
+```json
+{
+  "config_id": "tp2_fc1_fprop_ring_agg0",
+  "operator": "fc1",
+  "phase": "fprop",
+  "tp_size": 2,
+  "overlap_method": "ring_exchange",
+  "forward_gemm_time_us": 1234.5,
+  "forward_comm_time_us": 567.8,
+  "forward_overlap_time_us": 400.0,
+  "forward_overlap_ratio": 0.70,
+  "forward_e2e_time_us": 1402.3,
+  "backward_gemm_time_us": 2345.6,
+  "backward_comm_time_us": 890.1,
+  "backward_overlap_time_us": 700.0,
+  "backward_overlap_ratio": 0.78,
+  "backward_e2e_time_us": 2535.7,
+  "operator_e2e_time_us": 3938.0,
+  "total_overlap_ratio": 0.75,
+  "num_gemm_events": 4,
+  "num_comm_events": 2
+}
+```
+
+Key metrics:
+- `*_e2e_time_us`: End-to-end execution time (wall clock from first to last event)
+- `operator_e2e_time_us`: Total Linear operator execution time
+- `*_overlap_ratio`: Ratio of overlap time to min(GEMM, comm) time
+
+The JSON report also includes TP scaling efficiency analysis with TP=1 as baseline:
+
+```json
+{
+  "tp_scaling": {
+    "optimal_tp_size": 4,
+    "tolerance": 0.2,
+    "results": {
+      "fc1": {
+        "optimal_tp_size": 4,
+        "scaling_efficient": {"1": true, "2": true, "4": true, "8": false},
+        "scaling_ratios": {"1": 1.0, "2": 1.1, "4": 1.2, "8": 1.6},
+        "e2e_times": {"1": 2000.0, "2": 1100.0, "4": 600.0, "8": 400.0},
+        "reason": "Baseline: TP=1 (no TP) @ 2000.0us. TP=2: EFFICIENT; TP=4: EFFICIENT; TP=8: NOT efficient"
+      }
+    }
+  }
+}
+```
+
 ## Workflow Details
 
 ### Step 0: [INPUT] Model Configuration
@@ -177,11 +230,27 @@ Parses torch profiler JSON to detect:
 
 Calculates overlap ratio: `overlap_time / min(gemm_time, comm_time)`
 
+**TP Scaling Efficiency Check:**
+
+The tuner uses TP=1 (no tensor parallelism) as the baseline for comparison:
+- TP=1 represents pure computation without communication overhead
+- Rule: If using TP=n, then `Time(TP=n)` should be ≈ `Time(TP=1) / n`
+- Tolerance: 20% (configurable)
+- If scaling is not efficient, the smaller TP size (or no TP) is recommended
+
+Example:
+- TP=1 (baseline): 2000us (pure computation, no comm)
+- TP=2: Expected 1000us (1/2 of TP=1), Actual 1100us → ratio=1.1 → EFFICIENT
+- TP=4: Expected 500us (1/4 of TP=1), Actual 600us → ratio=1.2 → EFFICIENT (within 20%)
+- TP=8: Expected 250us (1/8 of TP=1), Actual 400us → ratio=1.6 → NOT efficient (>20%)
+- Result: Use TP=4 as optimal (TP=8 has too much communication overhead)
+
 ### Step 4: Generate Report
 
 Produces:
 - Best config per operator/phase (highest overlap ratio)
 - Recommendations for effective overlap (>50% ratio)
+- **Optimal TP size based on scaling efficiency analysis**
 - Optimal YAML configs per TP size
 
 ## Architecture

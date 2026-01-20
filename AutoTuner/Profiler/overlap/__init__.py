@@ -14,19 +14,26 @@ Main components:
 Example usage:
     from AutoTuner.Profiler.overlap import TPOverlapTuner, TPOverlapTunerConfig
 
+    # Model parameters (hidden_size, ffn_hidden_size, etc.) are auto-fetched
+    # from HuggingFace based on model_name
     config = TPOverlapTunerConfig(
-        model_name="Qwen/Qwen3-0.6B",
-        hidden_size=1024,
-        ffn_hidden_size=3072,
-        num_attention_heads=16,
-        num_kv_heads=8,
+        model_name="Qwen/Qwen3-0.6B",  # Model params auto-fetched
         max_tp_size=8,
         operators=["fc1", "fc2", "qkv", "proj"],
         output_dir="outputs/tp_overlap_tuner",
     )
 
+    # Access auto-fetched model parameters
+    print(f"Hidden Size: {config.hidden_size}")
+    print(f"FFN Hidden Size: {config.ffn_hidden_size}")
+
     tuner = TPOverlapTuner(config)
     report = tuner.run()
+
+    # Check TP scaling efficiency results
+    print(f"Optimal TP Size: {report.optimal_tp_size}")
+    for op, result in report.tp_scaling_results.items():
+        print(f"{op}: {result.reason}")
 """
 
 from .config_generator import (
@@ -50,6 +57,7 @@ from .overlap_detector import (
 from .report_generator import (
     OperatorAnalysisSummary,
     ReportGenerator,
+    TPScalingResult,
     TuningReport,
 )
 from .trace_analyzer import (
@@ -86,6 +94,7 @@ __all__ = [
     "ReportGenerator",
     "TuningReport",
     "OperatorAnalysisSummary",
+    "TPScalingResult",
     # Config utilities
     "OverlapMethod",
     "LinearType",
