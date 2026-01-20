@@ -10,6 +10,7 @@ the entire tuning workflow:
 """
 
 import glob
+import json
 import os
 import subprocess
 from dataclasses import dataclass
@@ -66,6 +67,38 @@ class TPOverlapTuner:
         # Track profiling results
         self.profiling_results: List[ProfilingResult] = []
 
+    def _generate_test_cases_file(self) -> str:
+        """Generate test cases JSON file for profiling.
+
+        Returns:
+            Path to the generated test cases JSON file.
+        """
+        # Create test cases directory
+        test_cases_dir = os.path.join(self.config.output_dir, "test_cases")
+        os.makedirs(test_cases_dir, exist_ok=True)
+
+        # Generate test case JSON
+        test_cases_data = {
+            "model": self.config.model_name,
+            "cases": [
+                {
+                    "batch_size": 128,
+                    "micro_batch_size": 2,
+                    "seqlen": 1024,
+                    "max_token_len": self.config.max_token_len,
+                    "shape": "bshd",
+                    "system": "megatron",
+                }
+            ],
+        }
+
+        # Save to file
+        test_cases_file = os.path.join(test_cases_dir, "test_cases.json")
+        with open(test_cases_file, "w") as f:
+            json.dump(test_cases_data, f, indent=2)
+
+        return test_cases_file
+
     def run(self, skip_profiling: bool = False) -> TuningReport:
         """Run the complete tuning workflow.
 
@@ -84,8 +117,13 @@ class TPOverlapTuner:
         print(f"Max TP Size: {self.config.max_tp_size}")
         print("")
 
+        # Step 0: Generate test cases file
+        print("Step 0: Generating test cases file...")
+        self.test_cases_file = self._generate_test_cases_file()
+        print(f"  Generated test cases file: {self.test_cases_file}")
+
         # Step 1: Generate test configurations
-        print("Step 1: Generating test configurations...")
+        print("\nStep 1: Generating test configurations...")
         test_configs = self.config_generator.generate_all_configs()
         print(f"  Generated {len(test_configs)} test configurations")
 
@@ -164,7 +202,15 @@ class TPOverlapTuner:
             if result.success:
                 print(f"    Success: {result.trace_path}")
             else:
-                print(f"    Failed: {result.error_message}")
+                print(f"    ERROR: {result.error_message}")
+                print(f"\n{'=' * 60}")
+                print("STOPPING: Test case failed!")
+                print(f"{'=' * 60}")
+                print(f"Failed test: {config.get_test_id()}")
+                print(f"Error: {result.error_message}")
+                raise RuntimeError(
+                    f"Profiling failed for {config.get_test_id()}: {result.error_message}"
+                )
 
         return results
 
@@ -255,6 +301,10 @@ class TPOverlapTuner:
             "AutoTuner.testbench.profile.main",
             "--model-name",
             self.config.model_name,
+            "--test-cases-dir",
+            os.path.dirname(self.test_cases_file),
+            "--test-cases-file",
+            os.path.basename(self.test_cases_file),
             "--profile-mode",
             "2",  # torch profiler mode
             "--test-ops-list",
