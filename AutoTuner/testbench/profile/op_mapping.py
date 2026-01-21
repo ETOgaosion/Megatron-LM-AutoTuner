@@ -65,3 +65,13 @@ except (ImportError, ModuleNotFoundError):
     warnings.warn(
         f"Please install Megatron-LM-Enhanced to run Enhanced Ops."
     )
+
+try:
+    from AutoTuner.testbench.ops_test.atten_with_cp_enhanced_test import (
+        TestAttnFuncWithCPAndKVP2PNVSHMEM,
+    )
+    OP_TEST_MAPPING["TEAttenWithCPEnhanced"] = TestAttnFuncWithCPAndKVP2PNVSHMEM
+except (ImportError, ModuleNotFoundError):
+    warnings.warn(
+        f"Please install TransformerEngine-Enhanced with NVSHMEM support to run TEAttenWithCPEnhanced."
+    )
