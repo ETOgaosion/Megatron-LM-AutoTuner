@@ -6,7 +6,9 @@ Remenber that you are currently work on an Linux Host Server with 8 5090 GPUs. Y
 
 Actually there are 2 machines 5090-1, 5090-2, read .secrets for IP and username, our project in each machine is in the same location.
 
-## About remote server machine
+## About Conda
+
+We use `conda` in server machine, execute `conda activate megatron-lm-autotuner` to activate virtual environment, execute in it. If there are any environment issue, please make sure the packages is the same with `requirements_dev.txt`.
 
 If you need to test your codes or I ask you to test, try below way to access the test environment.
 
@@ -20,12 +22,26 @@ These packages are always fixed for this project:
 - TransformerEngine: 2.7.0
 - Megatron Core: core_v0.15.1
 
-We use `conda` in target remote machine, execute `conda activate megatron-lm-autotuner` to activate virtual environment, execute in it. If there are any environment issue, please make sure the packages is the same with `requirements_dev.txt`.
+## About docker
 
-## In remote server
+In some case, we use `docker` to run our codes.
 
-In some case, we use `docker` to run our codes, the container has been ready: name is `megatron_autotuner_new`, simply run `docker exec -it megatron_autotuner_new bash` to enter it. If there is error with `nvidia-smi`, you should restart it or recreate docker container:
+There are 2 kinds of docker: for baseline and for enhanced implementations
+
+### Baseline docker
+
+The container has been ready: name is `megatron_autotuner`, simply run `docker exec -it megatron_autotuner bash` to enter it. If there is error with `nvidia-smi`, you should restart it or recreate docker container:
 
 ```sh
-docker create --rm -it --gpus all --shm-size=25GB --name megatron_autotuner_new -v $(pwd):/workspace/Megatron-LM-AutoTuner -v /data:/data --network=host --cap-add SYS_ADMIN whatcanyousee/megatron-autotuner-env:mcore0.15.1_te2.7
+docker create --rm -it --gpus all --shm-size=25GB --name megatron_autotuner -v $(pwd):/workspace/Megatron-LM-AutoTuner -v /data:/data --network=host --cap-add SYS_ADMIN whatcanyousee/megatron-autotuner-env:mcore0.15.1_te2.7
 ```
+
+### Enhanced docker
+
+The container has been ready: name is `megatron_autotuner_enhanced`, simply run `docker exec -it megatron_autotuner_enhanced bash` to enter it. If there is error with `nvidia-smi`, you should restart it or recreate docker container:
+
+```sh
+docker create --rm -it --gpus all --shm-size=25GB --name megatron_autotuner_enhanced -v $(pwd):/workspace/Megatron-LM-AutoTuner -v /data:/data --network=host --cap-add SYS_ADMIN whatcanyousee/megatron-autotuner-env:mcore0.15.1_te2.7
+```
+
+In this docker, you shall manually install [Megatron-Enhanced](../../../Megatron-Enhanced) and [TransformerEngine-Enhanced](../../../TransformerEngine-Enhanced) in this repo

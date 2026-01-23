@@ -8,6 +8,10 @@ Before everything start, chat with me to understand all your jobs to do.
 
 When you encounter choices/bugs, stop your work and chat with me.
 
+### Start Planning
+
+Write your plans in [plans directory](../plans/)
+
 ### Start Coding
 
 **!!! After Understanding All of what I told you !!!**
