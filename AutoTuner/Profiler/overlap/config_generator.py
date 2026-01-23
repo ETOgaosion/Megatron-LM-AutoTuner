@@ -246,11 +246,15 @@ class TPOverlapConfigGenerator:
                 if tp_size == 1:
                     # TP=1: No tensor parallelism, only baseline (no communication)
                     # This is used as the reference for comparing TP efficiency
-                    all_configs.extend(self.generate_baseline_configs(tp_size, operator))
+                    all_configs.extend(
+                        self.generate_baseline_configs(tp_size, operator)
+                    )
                 else:
                     # TP>=2: Test baseline and various overlap configurations
                     # Generate baseline configs
-                    all_configs.extend(self.generate_baseline_configs(tp_size, operator))
+                    all_configs.extend(
+                        self.generate_baseline_configs(tp_size, operator)
+                    )
                     # Generate ring_exchange configs
                     all_configs.extend(
                         self.generate_ring_exchange_configs(tp_size, operator)
@@ -272,7 +276,10 @@ class TPOverlapConfigGenerator:
 
     def generate_default_yaml_config(self) -> Dict[str, Dict[str, Any]]:
         """Generate a default YAML configuration based on best practices."""
-        return {key: self._default_config_to_yaml(val) for key, val in DEFAULT_CONFIGS.items()}
+        return {
+            key: self._default_config_to_yaml(val)
+            for key, val in DEFAULT_CONFIGS.items()
+        }
 
     def _default_config_to_yaml(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Convert default config to YAML format."""

@@ -12,10 +12,15 @@ import sys
 
 def test_trace_analyzer():
     """Test the TraceAnalyzer with the sample trace file."""
-    from AutoTuner.Profiler.overlap.trace_analyzer import TraceAnalyzer, analyze_trace_file
+    from AutoTuner.Profiler.overlap.trace_analyzer import (
+        TraceAnalyzer,
+        analyze_trace_file,
+    )
 
     # Sample trace path
-    sample_trace = "outputs/sample/jss-Rack-Server_951.1768541469734146129.pt.trace.json"
+    sample_trace = (
+        "outputs/sample/jss-Rack-Server_951.1768541469734146129.pt.trace.json"
+    )
 
     if not os.path.exists(sample_trace):
         print(f"Error: Sample trace file not found: {sample_trace}")
@@ -133,7 +138,9 @@ def test_overlap_detector():
     )
     from AutoTuner.Profiler.overlap.overlap_detector import OverlapDetector
 
-    sample_trace = "outputs/sample/jss-Rack-Server_951.1768541469734146129.pt.trace.json"
+    sample_trace = (
+        "outputs/sample/jss-Rack-Server_951.1768541469734146129.pt.trace.json"
+    )
 
     if not os.path.exists(sample_trace):
         print("Skipping OverlapDetector test (sample trace not found)")

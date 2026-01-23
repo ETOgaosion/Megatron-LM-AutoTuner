@@ -6,7 +6,6 @@ from megatron.core.utils import (
     nvtx_decorator,
 )
 from torch import Tensor
-
 from transformer_engine.pytorch.attention.dot_product_attention.context_parallel_nvshmem import (
     AttnFuncWithCPAndKVP2P as AttnFuncWithCPAndKVP2PNVSHMEM,
 )
@@ -84,7 +83,9 @@ class AttnFuncWithCPAndKVP2PNVSHMEMWrapper:
     __call__ = forward
 
 
-class AttnFuncWithCPAndKVP2PNVSHMEMForTest(AttnFuncWithCPAndKVP2PNVSHMEMWrapper, CommonOpsForTest):
+class AttnFuncWithCPAndKVP2PNVSHMEMForTest(
+    AttnFuncWithCPAndKVP2PNVSHMEMWrapper, CommonOpsForTest
+):
     def __init__(
         self,
         config: TransformerConfig,

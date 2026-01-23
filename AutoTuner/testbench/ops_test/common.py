@@ -251,7 +251,12 @@ class TestCommon(TheoreticalCalculation):
         gc.collect()
         torch.cuda.empty_cache()
 
-    def run_test(self, test_case: InputTestCase, batch_data_generator: Iterator, run_one_data: bool = False):
+    def run_test(
+        self,
+        test_case: InputTestCase,
+        batch_data_generator: Iterator,
+        run_one_data: bool = False,
+    ):
         for batch_data in batch_data_generator:
             with torch.no_grad():
                 inputs = self.prepare_input(test_case, batch_data)

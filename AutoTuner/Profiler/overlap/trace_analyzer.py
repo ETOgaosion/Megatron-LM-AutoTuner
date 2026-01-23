@@ -267,7 +267,9 @@ class TraceAnalyzer:
             "time_range_us": time_range,
             "duration_us": time_range[1] - time_range[0],
             "num_streams": len(self.get_events_by_stream()),
-            "device_properties": self.metadata.device_properties if self.metadata else [],
+            "device_properties": (
+                self.metadata.device_properties if self.metadata else []
+            ),
             "distributed_info": self.metadata.distributed_info if self.metadata else {},
         }
 

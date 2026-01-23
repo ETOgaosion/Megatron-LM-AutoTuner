@@ -10,7 +10,10 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
-from AutoTuner.Profiler.overlap.config_generator import OverlapMethod, TPOverlapTestConfig
+from AutoTuner.Profiler.overlap.config_generator import (
+    OverlapMethod,
+    TPOverlapTestConfig,
+)
 from AutoTuner.Profiler.overlap.overlap_detector import (
     OverlapAnalysis,
     OverlapDetector,
@@ -235,6 +238,7 @@ class TestOverlapDetector(unittest.TestCase):
     def tearDown(self):
         """Clean up temporary files."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_analyze_overlap_with_full_overlap(self):
@@ -264,7 +268,12 @@ class TestOverlapDetector(unittest.TestCase):
         # GEMM: 0-1000us, Comm: 800-1500us (200us overlap)
         events = [
             {"name": "cutlass_gemm_kernel", "cat": "kernel", "ts": 0, "dur": 1000},
-            {"name": "userbuffers_reduce_scatter", "cat": "kernel", "ts": 800, "dur": 700},
+            {
+                "name": "userbuffers_reduce_scatter",
+                "cat": "kernel",
+                "ts": 800,
+                "dur": 700,
+            },
         ]
         trace_path = os.path.join(self.temp_dir, "partial_overlap.json")
         create_mock_trace_json(events, trace_path)
@@ -339,8 +348,7 @@ class TestOverlapDetector(unittest.TestCase):
 
             analysis = self.detector.analyze_overlap(trace_path, self.mock_config)
             self.assertEqual(
-                analysis.num_gemm_events, 1,
-                f"Failed to detect GEMM: {gemm_name}"
+                analysis.num_gemm_events, 1, f"Failed to detect GEMM: {gemm_name}"
             )
 
     def test_analyze_overlap_comm_patterns(self):
@@ -361,8 +369,7 @@ class TestOverlapDetector(unittest.TestCase):
 
             analysis = self.detector.analyze_overlap(trace_path, self.mock_config)
             self.assertEqual(
-                analysis.num_comm_events, 1,
-                f"Failed to detect comm: {comm_name}"
+                analysis.num_comm_events, 1, f"Failed to detect comm: {comm_name}"
             )
 
     def test_analyze_multiple_traces(self):
@@ -383,18 +390,25 @@ class TestOverlapDetector(unittest.TestCase):
         create_mock_trace_json(events2, trace_path2)
 
         config1 = TPOverlapTestConfig(
-            tp_size=2, operator="fc1", phase="fprop",
+            tp_size=2,
+            operator="fc1",
+            phase="fprop",
             overlap_method=OverlapMethod.RING_EXCHANGE,
         )
         config2 = TPOverlapTestConfig(
-            tp_size=2, operator="fc1", phase="dgrad",
-            overlap_method=OverlapMethod.BULK, num_sm=4,
+            tp_size=2,
+            operator="fc1",
+            phase="dgrad",
+            overlap_method=OverlapMethod.BULK,
+            num_sm=4,
         )
 
-        results = self.detector.analyze_multiple_traces([
-            (trace_path1, config1),
-            (trace_path2, config2),
-        ])
+        results = self.detector.analyze_multiple_traces(
+            [
+                (trace_path1, config1),
+                (trace_path2, config2),
+            ]
+        )
 
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0].config.phase, "fprop")
@@ -406,12 +420,8 @@ class TestUtilityFunctions(unittest.TestCase):
 
     def test_calculate_overlap_ratio(self):
         """Test overlap ratio calculation."""
-        self.assertAlmostEqual(
-            calculate_overlap_ratio(1000, 500, 400), 0.8
-        )  # 400/500
-        self.assertAlmostEqual(
-            calculate_overlap_ratio(500, 1000, 400), 0.8
-        )  # 400/500
+        self.assertAlmostEqual(calculate_overlap_ratio(1000, 500, 400), 0.8)  # 400/500
+        self.assertAlmostEqual(calculate_overlap_ratio(500, 1000, 400), 0.8)  # 400/500
 
     def test_calculate_overlap_ratio_zero(self):
         """Test overlap ratio with zero values."""
@@ -422,7 +432,9 @@ class TestUtilityFunctions(unittest.TestCase):
     def test_is_overlap_effective_true(self):
         """Test overlap effectiveness check (effective)."""
         mock_config = TPOverlapTestConfig(
-            tp_size=2, operator="fc1", phase="fprop",
+            tp_size=2,
+            operator="fc1",
+            phase="fprop",
             overlap_method=OverlapMethod.RING_EXCHANGE,
         )
         analysis = OverlapAnalysis(
@@ -436,7 +448,9 @@ class TestUtilityFunctions(unittest.TestCase):
     def test_is_overlap_effective_false(self):
         """Test overlap effectiveness check (not effective)."""
         mock_config = TPOverlapTestConfig(
-            tp_size=2, operator="fc1", phase="fprop",
+            tp_size=2,
+            operator="fc1",
+            phase="fprop",
             overlap_method=OverlapMethod.RING_EXCHANGE,
         )
         analysis = OverlapAnalysis(

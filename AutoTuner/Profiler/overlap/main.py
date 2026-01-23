@@ -221,7 +221,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         for rec in report.recommendations[:10]:
             print(f"  * {rec}")
         if len(report.recommendations) > 10:
-            print(f"  ... and {len(report.recommendations) - 10} more (see summary.txt)")
+            print(
+                f"  ... and {len(report.recommendations) - 10} more (see summary.txt)"
+            )
 
     return 0
 

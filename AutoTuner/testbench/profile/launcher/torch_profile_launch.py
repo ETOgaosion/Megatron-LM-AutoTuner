@@ -81,7 +81,11 @@ class LaunchTorchProfileForOps(Launcher):
         test_cases = [self.test_cases[i] for i in test_case_idxs]
         for test_case in test_cases:
             batch_data_generator = self.datasets.get_batch_generator(test_case)
-            op_class_instance.run_test(test_case, batch_data_generator, run_one_data=self.profile_config.run_one_data)
+            op_class_instance.run_test(
+                test_case,
+                batch_data_generator,
+                run_one_data=self.profile_config.run_one_data,
+            )
         return op_class_instance
 
     def run_op(self, op_name: str, test_case_idxs: list[int], inner_prof: bool = True):
@@ -119,7 +123,11 @@ class LaunchTorchProfileForOps(Launcher):
         for i in range(self.profile_config.warmup_iters + 1):
             for test_case in test_cases:
                 batch_data_generator = self.datasets.get_batch_generator(test_case)
-                op_class_instance.run_test(test_case, batch_data_generator, run_one_data=self.profile_config.run_one_data)
+                op_class_instance.run_test(
+                    test_case,
+                    batch_data_generator,
+                    run_one_data=self.profile_config.run_one_data,
+                )
             if inner_prof:
                 self.prof.step()
         if inner_prof:

@@ -40,11 +40,20 @@ class OperatorAnalysisSummary:
     def has_effective_overlap(self) -> bool:
         """Check if any phase has effective overlap (> 50%)."""
         threshold = 0.5
-        if self.best_fprop_analysis and self.best_fprop_analysis.forward_overlap_ratio >= threshold:
+        if (
+            self.best_fprop_analysis
+            and self.best_fprop_analysis.forward_overlap_ratio >= threshold
+        ):
             return True
-        if self.best_dgrad_analysis and self.best_dgrad_analysis.backward_overlap_ratio >= threshold:
+        if (
+            self.best_dgrad_analysis
+            and self.best_dgrad_analysis.backward_overlap_ratio >= threshold
+        ):
             return True
-        if self.best_wgrad_analysis and self.best_wgrad_analysis.backward_overlap_ratio >= threshold:
+        if (
+            self.best_wgrad_analysis
+            and self.best_wgrad_analysis.backward_overlap_ratio >= threshold
+        ):
             return True
         return False
 
@@ -198,9 +207,7 @@ class ReportGenerator:
 
         return summary
 
-    def _analyze_tp_scaling(
-        self, report: TuningReport
-    ) -> Dict[str, TPScalingResult]:
+    def _analyze_tp_scaling(self, report: TuningReport) -> Dict[str, TPScalingResult]:
         """Analyze TP scaling efficiency for each operator.
 
         Uses TP=1 (no tensor parallelism) as the baseline for comparison.
@@ -269,7 +276,9 @@ class ReportGenerator:
                 # Calculate ratio: actual / expected
                 # ratio <= 1.0 means better than expected
                 # ratio > 1.0 + tolerance means worse than expected (communication overhead)
-                ratio = actual_time / expected_time if expected_time > 0 else float("inf")
+                ratio = (
+                    actual_time / expected_time if expected_time > 0 else float("inf")
+                )
                 scaling_ratios[tp_size] = ratio
 
                 # Check if scaling is efficient (within tolerance)
@@ -340,9 +349,7 @@ class ReportGenerator:
 
         # Add TP scaling efficiency recommendations first
         if report.tp_scaling_results:
-            recommendations.append(
-                f"=== TP SCALING ANALYSIS ==="
-            )
+            recommendations.append(f"=== TP SCALING ANALYSIS ===")
             recommendations.append(
                 f"Overall optimal TP size: {report.optimal_tp_size} "
                 f"(based on scaling efficiency)"
@@ -520,7 +527,9 @@ class ReportGenerator:
                 # Add header comment explaining why this TP size was chosen
                 f.write(f"# Optimal TP size: {optimal_tp}\n")
                 f.write("# Selected based on TP scaling efficiency analysis\n")
-                f.write("# Rule: If TP_new = n × TP, Time(TP_new) should be ≈ 1/n × Time(TP)\n")
+                f.write(
+                    "# Rule: If TP_new = n × TP, Time(TP_new) should be ≈ 1/n × Time(TP)\n"
+                )
                 f.write("#\n")
                 yaml.dump(yaml_config, f, default_flow_style=False, sort_keys=False)
 
@@ -600,9 +609,7 @@ class ReportGenerator:
         lines.append("-" * 60)
         lines.append("TP SCALING EFFICIENCY")
         lines.append("-" * 60)
-        lines.append(
-            f"Overall Optimal TP Size: {report.optimal_tp_size}"
-        )
+        lines.append(f"Overall Optimal TP Size: {report.optimal_tp_size}")
         lines.append(
             "Rule: If TP_new = n × TP, Time(TP_new) should be ≈ 1/n × Time(TP)"
         )
@@ -643,9 +650,7 @@ class ReportGenerator:
                         f"Overlap={a.forward_overlap_time:.1f}us "
                         f"({a.forward_overlap_ratio:.1%})"
                     )
-                    lines.append(
-                        f"           E2E={a.forward_e2e_time:.1f}us"
-                    )
+                    lines.append(f"           E2E={a.forward_e2e_time:.1f}us")
 
                 if summary.best_dgrad_analysis:
                     a = summary.best_dgrad_analysis
@@ -655,9 +660,7 @@ class ReportGenerator:
                         f"Overlap={a.backward_overlap_time:.1f}us "
                         f"({a.backward_overlap_ratio:.1%})"
                     )
-                    lines.append(
-                        f"           E2E={a.backward_e2e_time:.1f}us"
-                    )
+                    lines.append(f"           E2E={a.backward_e2e_time:.1f}us")
 
                 if summary.best_wgrad_analysis:
                     a = summary.best_wgrad_analysis
@@ -667,9 +670,7 @@ class ReportGenerator:
                         f"Overlap={a.backward_overlap_time:.1f}us "
                         f"({a.backward_overlap_ratio:.1%})"
                     )
-                    lines.append(
-                        f"           E2E={a.backward_e2e_time:.1f}us"
-                    )
+                    lines.append(f"           E2E={a.backward_e2e_time:.1f}us")
 
                 # Show total operator e2e time if we have any analysis
                 best_analysis = (

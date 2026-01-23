@@ -97,7 +97,9 @@ class OverlapAnalysis:
     @property
     def overlap_efficiency(self) -> float:
         """Calculate overlap efficiency: overlap_time / (gemm + comm - overlap)."""
-        denominator = self.total_gemm_time + self.total_comm_time - self.total_overlap_time
+        denominator = (
+            self.total_gemm_time + self.total_comm_time - self.total_overlap_time
+        )
         if denominator <= 0:
             return 0.0
         return self.total_overlap_time / denominator
@@ -319,7 +321,9 @@ class OverlapDetector:
             if not events:
                 return [], []
             sorted_events = sorted(events, key=lambda e: e.timestamp)
-            mid_time = (sorted_events[0].timestamp + sorted_events[-1].end_timestamp) / 2
+            mid_time = (
+                sorted_events[0].timestamp + sorted_events[-1].end_timestamp
+            ) / 2
             forward = [e for e in events if e.end_timestamp <= mid_time]
             backward = [e for e in events if e.timestamp >= mid_time]
             return forward, backward

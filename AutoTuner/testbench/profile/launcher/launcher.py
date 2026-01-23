@@ -1,9 +1,9 @@
 import subprocess
+import warnings
 from collections import defaultdict
 
 import torch
 from megatron.core import parallel_state as mpu
-import warnings
 
 from AutoTuner.utils.config import (
     get_hf_model_config,
@@ -112,7 +112,11 @@ class Launcher:
         for test_case in test_cases:
             print(f"Running operator: {op_name}, test case: {test_case}")
             batch_data_generator = self.datasets.get_batch_generator(test_case)
-            op_class_instance.run_test(test_case, batch_data_generator, run_one_data=self.profile_config.run_one_data)
+            op_class_instance.run_test(
+                test_case,
+                batch_data_generator,
+                run_one_data=self.profile_config.run_one_data,
+            )
         aggressive_empty_cache(force_sync=True)
         return op_class_instance
 

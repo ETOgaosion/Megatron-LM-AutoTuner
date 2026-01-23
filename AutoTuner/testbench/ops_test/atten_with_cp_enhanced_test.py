@@ -16,7 +16,9 @@ from transformer_engine.pytorch.tensor.float8_tensor import Float8Tensor
 from transformers import PretrainedConfig
 from typing_extensions import override
 
-from AutoTuner.testbench.ops.atten_with_cp_enhanced import AttnFuncWithCPAndKVP2PNVSHMEMForTest
+from AutoTuner.testbench.ops.atten_with_cp_enhanced import (
+    AttnFuncWithCPAndKVP2PNVSHMEMForTest,
+)
 from AutoTuner.testbench.ops_test.test_with_hiddens import TestWithHiddenInputs
 from AutoTuner.testbench.profile.configs.config_struct import ProfileMode
 from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str

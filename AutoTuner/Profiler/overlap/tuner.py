@@ -121,7 +121,9 @@ class TPOverlapTuner:
         config_dir = "AutoTuner/testbench/profile/configs/local"
         required_files = ["override_model_config.json", "override_tf_config.json"]
 
-        missing = [f for f in required_files if not os.path.exists(os.path.join(config_dir, f))]
+        missing = [
+            f for f in required_files if not os.path.exists(os.path.join(config_dir, f))
+        ]
         if missing:
             raise FileNotFoundError(
                 f"Required config files missing in {config_dir}: {missing}\n"
@@ -144,7 +146,9 @@ class TPOverlapTuner:
             print("\nStep 2: Running profiling...")
             self.profiling_results = self._run_profiling(test_configs)
             successful = sum(1 for r in self.profiling_results if r.success)
-            print(f"  Profiling completed: {successful}/{len(self.profiling_results)} successful")
+            print(
+                f"  Profiling completed: {successful}/{len(self.profiling_results)} successful"
+            )
         else:
             print("\nStep 2: Skipping profiling (using existing traces)")
             self.profiling_results = self._load_existing_traces(test_configs)
@@ -177,7 +181,9 @@ class TPOverlapTuner:
         print(f"\nFull report saved to: {self.config.output_dir}")
         return report
 
-    def run_single_config(self, config: TPOverlapTestConfig) -> Optional[OverlapAnalysis]:
+    def run_single_config(
+        self, config: TPOverlapTestConfig
+    ) -> Optional[OverlapAnalysis]:
         """Run profiling and analysis for a single configuration.
 
         Args:
@@ -277,7 +283,9 @@ class TPOverlapTuner:
                 )
             else:
                 # Use Python-based profiling
-                result = self._run_python_profiling(config, config_output_dir, yaml_path)
+                result = self._run_python_profiling(
+                    config, config_output_dir, yaml_path
+                )
                 return result
 
             # Find the generated trace file

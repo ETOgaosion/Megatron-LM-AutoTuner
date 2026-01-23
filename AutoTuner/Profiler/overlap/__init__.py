@@ -47,6 +47,7 @@ from .config_generator import (
     generate_yaml_config_file,
     load_yaml_config,
 )
+from .main import main as run_tuner
 from .overlap_detector import (
     OverlapAnalysis,
     OverlapDetector,
@@ -68,7 +69,6 @@ from .trace_analyzer import (
     TraceMetadata,
     analyze_trace_file,
 )
-from .main import main as run_tuner
 from .tuner import TPOverlapTuner
 
 __all__ = [

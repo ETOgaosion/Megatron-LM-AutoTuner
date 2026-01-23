@@ -348,9 +348,16 @@ class TestConstants(unittest.TestCase):
     def test_default_configs_keys(self):
         """Test default config keys exist."""
         expected_keys = [
-            "qkv_fprop", "proj_fprop", "fc1_fprop", "fc2_fprop",
-            "fc2_dgrad", "fc1_dgrad", "fc1_wgrad",
-            "proj_dgrad", "qkv_dgrad", "qkv_wgrad",
+            "qkv_fprop",
+            "proj_fprop",
+            "fc1_fprop",
+            "fc2_fprop",
+            "fc2_dgrad",
+            "fc1_dgrad",
+            "fc1_wgrad",
+            "proj_dgrad",
+            "qkv_dgrad",
+            "qkv_wgrad",
         ]
         for key in expected_keys:
             self.assertIn(key, DEFAULT_CONFIGS)
