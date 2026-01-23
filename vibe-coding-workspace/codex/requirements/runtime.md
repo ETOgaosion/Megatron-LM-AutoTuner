@@ -8,8 +8,4 @@ TASK: Your task is to implement a runtime in [AutoTuner/runtime](../../AutoTuner
     - You need to write a runtime use this operator and support all parallelism
     - In [verl/verl/models/mcore](../../verl/verl/models/mcore), there are examples of using GPTModel, you may need to follow the `get_model` function in [verl/verl/utils/megatron_utils.py](../../verl/verl/utils/megatron_utils.py)
     - Create functional test in [tests/functional_test/runtime] using a script
-CONSTRAINTS: Only for last pipeline stage (post process), consider share embedding output layer
-EXAMPLES: View the image in [here](../requirements/photos/module_queue.png)
-OUTPUT: Should be transparent, Same as not enable this
-
-I've checkout correct branch in [Megatron-LM-Enhanced](../../Megatron-LM-Enhanced).
+CONSTRAINTS: Remember your guidance in [guidance](../guidance/), in plan mode first and write your plans

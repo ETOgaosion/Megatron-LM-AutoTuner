@@ -39,6 +39,7 @@ class GPTModelModuleQueueForTest(GPTModelModuleQueue, CommonOpsForTest):
         tf_config: TransformerConfig,
         hf_config: PretrainedConfig,
         transformer_layer_spec: ModuleSpec,
+        share_embeddings_and_output_weights: bool = False,
         hook_activation: bool = False,
         scatter_to_sequence_parallel: bool = True,
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
@@ -55,7 +56,7 @@ class GPTModelModuleQueueForTest(GPTModelModuleQueue, CommonOpsForTest):
             post_process=True,  # Last pipeline stage: has output layer
             fp16_lm_cross_entropy=False,
             parallel_output=True,
-            share_embeddings_and_output_weights=False,
+            share_embeddings_and_output_weights=share_embeddings_and_output_weights,
             position_embedding_type="rope",
             scatter_embedding_sequence_parallel=scatter_to_sequence_parallel,
             seq_len_interpolation_factor=None,
