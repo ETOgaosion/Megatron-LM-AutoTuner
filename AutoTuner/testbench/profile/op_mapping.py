@@ -71,7 +71,8 @@ try:
         TestAttnFuncWithCPAndKVP2PNVSHMEM,
     )
     OP_TEST_MAPPING["TEAttenWithCPEnhanced"] = TestAttnFuncWithCPAndKVP2PNVSHMEM
-except (ImportError, ModuleNotFoundError):
+except (ImportError, ModuleNotFoundError) as e:
+    print(e)
     warnings.warn(
         f"Please install TransformerEngine-Enhanced with NVSHMEM support to run TEAttenWithCPEnhanced."
     )

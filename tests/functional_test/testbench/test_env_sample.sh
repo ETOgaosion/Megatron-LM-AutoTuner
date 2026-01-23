@@ -1,9 +1,14 @@
-TEST_OPS_LIST=("Decoder")
-TEST_CASE_IDXES=None
+MODEL_NAME="Qwen/Qwen3-0.6B"
+TEST_CASES_FILE="qwen3_0_6b.json"
+
+# Test CPU embedding op only
+TEST_OPS_LIST=("TEAttenWithCPEnhanced")
+TEST_CASE_IDXS=None
+TP_COMM_BUFFER_NAME=None
 
 TP_COMM_OVERLAP=True
 
-TP_SIZE=1
+TP_SIZE=2
 CP_SIZE=1
 EP_SIZE=1
 ETP_SIZE=1

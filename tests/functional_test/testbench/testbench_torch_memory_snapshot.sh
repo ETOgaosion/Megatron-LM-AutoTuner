@@ -7,12 +7,12 @@ TRANSFORMER_ENGINE_HASH=$(git -C "TransformerEngine" rev-parse --short=6 HEAD)
 VERL_HASH=$(git -C "verl" rev-parse --short=6 HEAD)
 
 # Use the test environment settings if available
-if [ -f tests/functional_test/test_env.sh ]; then
-    source tests/functional_test/test_env.sh
+if [ -f tests/functional_test/testbench/test_env.sh ]; then
+    source tests/functional_test/testbench/test_env.sh
 else
-    echo "Warning: tests/functional_test/test_env.sh not found. Using default settings."
+    echo "Warning: tests/functional_test/testbench/test_env.sh not found. Using default settings."
     MODEL_NAME="Qwen/Qwen3-0.6B"
-    TEST_CASES_FILE="local/qwen3_0_6b.json"
+    TEST_CASES_FILE="qwen3_0_6b.json"
 
     TEST_OPS_LIST=None
     TEST_CASE_IDXS=None
@@ -60,8 +60,11 @@ PROFILE_ARGS=(
     --output-dir $OUTPUT_DIR
     --profile-mode 3    # torch memory snapshot mode
     --fix-compute-amount
-    --tp-comm-buffer-name $TP_COMM_BUFFER_NAME   # specify the tensor parallel communication buffer name
 )
+
+if [[ "${TP_COMM_BUFFER_NAME}" != "None" ]]; then
+    PROFILE_ARGS+=(--tp-comm-buffer-name ${TP_COMM_BUFFER_NAME})
+fi
 
 if [[ "${RUN_ONE_DATA}" == "True" ]]; then
     PROFILE_ARGS+=(--run-one-data)

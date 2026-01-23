@@ -7,16 +7,9 @@ from megatron.core.utils import (
 )
 from torch import Tensor
 
-try:
-    from transformer_engine.pytorch.attention.dot_product_attention.context_parallel_nvshmem import (
-        AttnFuncWithCPAndKVP2P as AttnFuncWithCPAndKVP2PNVSHMEM,
-    )
-
-    from TransformerEngine.transformer_engine.pytorch.attention.dot_product_attention.context_parallel_nvshmem import *
-except ImportError:
-    from TransformerEngine.transformer_engine.pytorch.attention.dot_product_attention.context_parallel_nvshmem import (
-        AttnFuncWithCPAndKVP2P as AttnFuncWithCPAndKVP2PNVSHMEM,
-    )
+from transformer_engine.pytorch.attention.dot_product_attention.context_parallel_nvshmem import (
+    AttnFuncWithCPAndKVP2P as AttnFuncWithCPAndKVP2PNVSHMEM,
+)
 
 from .common import CommonOpsForTest
 
