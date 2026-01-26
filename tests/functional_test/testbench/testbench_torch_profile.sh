@@ -80,6 +80,7 @@ fi
 if [[ "${TP_COMM_OVERLAP}" == "True" ]]; then
     export UB_SKIPMC=1
     echo "Notice that the overlap can only be enabled if you enable the config field in AutoTuner/testbench/profile/configs/override_tf_config.json"
+fi
 
 export NVTE_FLASH_ATTN=1
 export NVTE_FUSED_ATTN=0

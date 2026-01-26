@@ -1,4 +1,5 @@
 import itertools
+import time
 from typing import Iterable, Optional
 
 import torch
@@ -14,8 +15,10 @@ from AutoTuner.utils.config import (
     get_hf_model_config,
     get_mcore_model_config_from_hf_config,
 )
+from AutoTuner.utils.gpu_info import GPU_PEAK_FLOPS
 from AutoTuner.utils.model_inputs import DataSets, get_thd_model_input_from_bshd
 from AutoTuner.utils.structs import InputTestCase
+from verl.utils.flops_counter import FlopsCounter
 from verl.utils.megatron_utils import get_model, unwrap_model
 
 
@@ -65,6 +68,8 @@ class RuntimeLauncher:
             use_dynamic_bsz_balance=True,
             vpp_size=mpu.get_virtual_pipeline_model_parallel_world_size(),
         )
+
+        self.flops_counter = FlopsCounter(self.hf_config)
 
         self.model = self._build_model(
             wrap_with_ddp=wrap_with_ddp,
@@ -145,27 +150,179 @@ class RuntimeLauncher:
 
         return forward_step
 
-    def run_pipeline(self, test_case_idxs: Optional[list[int]] = None, run_one_data: bool = False):
-        if test_case_idxs is None:
+    def _collect_batch_seqlens(
+        self, test_case: InputTestCase, num_microbatches: int
+    ) -> list[int]:
+        micro_batches = self.datasets.data[test_case][:num_microbatches]
+        batch_seqlens: list[int] = []
+        for micro_batch in micro_batches:
+            attention_mask = micro_batch["attention_mask"]
+            if attention_mask.is_floating_point():
+                attention_mask = attention_mask > 0
+            seqlens = attention_mask.to(torch.int64).sum(dim=1).tolist()
+            batch_seqlens.extend(seqlens)
+        return batch_seqlens
+
+    def _compute_perf_metrics(
+        self, batch_seqlens: list[int], delta_time: float, world_size: int
+    ) -> dict:
+        total_tokens = sum(batch_seqlens)
+        total_sequences = len(batch_seqlens)
+        throughput_tokens_s = total_tokens / delta_time if delta_time > 0 else float("inf")
+        throughput_tokens_s_per_gpu = throughput_tokens_s / world_size
+        throughput_seqs_s = total_sequences / delta_time if delta_time > 0 else float("inf")
+        throughput_seqs_s_per_gpu = throughput_seqs_s / world_size
+
+        estimated_flops, promised_flops = self.flops_counter.estimate_flops(
+            batch_seqlens, delta_time
+        )
+        if estimated_flops == 0.0:
+            estimated_flops = self._estimate_generic_flops(batch_seqlens, delta_time)
+        if promised_flops in (0, float("inf")):
+            promised_flops = GPU_PEAK_FLOPS / 1e12
+        if promised_flops == 0:
+            mfu = 0.0
+        else:
+            mfu = estimated_flops / promised_flops / world_size
+
+        return {
+            "total_tokens": total_tokens,
+            "total_sequences": total_sequences,
+            "time_s": delta_time,
+            "throughput_tokens_s": throughput_tokens_s,
+            "throughput_tokens_s_per_gpu": throughput_tokens_s_per_gpu,
+            "throughput_sequences_s": throughput_seqs_s,
+            "throughput_sequences_s_per_gpu": throughput_seqs_s_per_gpu,
+            "mfu": mfu,
+        }
+
+    def _estimate_generic_flops(
+        self, batch_seqlens: list[int], delta_time: float
+    ) -> float:
+        if delta_time <= 0:
+            return float("inf")
+        config = getattr(self.hf_config, "text_config", self.hf_config)
+        hidden_size = config.hidden_size
+        vocab_size = config.vocab_size
+        num_hidden_layers = config.num_hidden_layers
+        num_attention_heads = config.num_attention_heads
+        num_key_value_heads = getattr(config, "num_key_value_heads", num_attention_heads)
+        intermediate_size = getattr(config, "intermediate_size", hidden_size * 4)
+
+        head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
+        q_size = num_attention_heads * head_dim
+        k_size = num_key_value_heads * head_dim
+        v_size = num_key_value_heads * head_dim
+
+        tokens_sum = sum(batch_seqlens)
+        seqlen_square_sum = sum(seqlen * seqlen for seqlen in batch_seqlens)
+
+        mlp_N = hidden_size * intermediate_size * 3
+        attn_linear_N = hidden_size * (q_size + k_size + v_size + num_attention_heads * head_dim)
+        emd_and_lm_head_N = vocab_size * hidden_size * 2
+        dense_N = (mlp_N + attn_linear_N) * num_hidden_layers + emd_and_lm_head_N
+        dense_N_flops = 6 * dense_N * tokens_sum
+        attn_qkv_flops = 12 * seqlen_square_sum * head_dim * num_attention_heads * num_hidden_layers
+        flops_all_token = dense_N_flops + attn_qkv_flops
+        return flops_all_token * (1.0 / delta_time) / 1e12
+
+    def run_pipeline(
+        self,
+        num_test_cases: Optional[int] = None,
+        run_one_data: bool = False,
+        max_iterations: int = 10,
+        warmup_iterations: int = 3,
+    ):
+        if num_test_cases is None:
             test_case_idxs = list(range(len(self.test_cases)))
+        else:
+            test_case_idxs = list(range(min(num_test_cases, len(self.test_cases))))
 
         forward_backward_func = get_forward_backward_func()
+        metrics_by_test_case = []
+        world_size = torch.distributed.get_world_size()
 
         for idx in test_case_idxs:
             test_case = self.test_cases[idx]
-            data_iterator = self.datasets.get_batch_generator(test_case)
             num_microbatches = len(self.datasets.data[test_case])
             if run_one_data:
                 num_microbatches = 1
-                data_iterator = self._limit_iterator(data_iterator, num_microbatches)
 
-            forward_backward_func(
-                forward_step_func=self._build_forward_step(test_case),
-                data_iterator=data_iterator,
-                model=self.model,
-                num_microbatches=num_microbatches,
-                seq_length=test_case.seqlen,
-                micro_batch_size=test_case.micro_batch_size,
-                decoder_seq_length=test_case.seqlen,
-                forward_only=False,
-            )
+            batch_seqlens = self._collect_batch_seqlens(test_case, num_microbatches)
+            iteration_metrics = []
+            for iteration in range(max_iterations):
+                data_iterator = self.datasets.get_batch_generator(test_case)
+                if run_one_data:
+                    data_iterator = self._limit_iterator(data_iterator, num_microbatches)
+
+                torch.distributed.barrier()
+                torch.cuda.synchronize()
+                start_time = time.perf_counter()
+                forward_backward_func(
+                    forward_step_func=self._build_forward_step(test_case),
+                    data_iterator=data_iterator,
+                    model=self.model,
+                    num_microbatches=num_microbatches,
+                    seq_length=test_case.seqlen,
+                    micro_batch_size=test_case.micro_batch_size,
+                    decoder_seq_length=test_case.seqlen,
+                    forward_only=False,
+                )
+                torch.cuda.synchronize()
+                torch.distributed.barrier()
+                delta_time = time.perf_counter() - start_time
+
+                metrics = self._compute_perf_metrics(
+                    batch_seqlens, delta_time, world_size
+                )
+                metrics["iteration"] = iteration
+                iteration_metrics.append(metrics)
+
+            warmup_count = min(warmup_iterations, max_iterations)
+            valid_metrics = iteration_metrics[warmup_count:]
+            if not valid_metrics:
+                valid_metrics = iteration_metrics
+
+            def _avg(key: str) -> float:
+                return sum(m[key] for m in valid_metrics) / len(valid_metrics)
+
+            summary = {
+                "test_case_idx": idx,
+                "num_microbatches": num_microbatches,
+                "max_iterations": max_iterations,
+                "warmup_iterations": warmup_count,
+                "total_tokens": iteration_metrics[-1]["total_tokens"],
+                "total_sequences": iteration_metrics[-1]["total_sequences"],
+                "time_s": _avg("time_s"),
+                "throughput_tokens_s": _avg("throughput_tokens_s"),
+                "throughput_tokens_s_per_gpu": _avg("throughput_tokens_s_per_gpu"),
+                "throughput_sequences_s": _avg("throughput_sequences_s"),
+                "throughput_sequences_s_per_gpu": _avg(
+                    "throughput_sequences_s_per_gpu"
+                ),
+                "mfu": _avg("mfu"),
+            }
+            metrics_by_test_case.append(summary)
+            if torch.distributed.get_rank() == 0:
+                print(
+                    "[runtime] test_case_idx={idx} microbatches={num_microbatches} "
+                    "iters={max_iterations} warmup={warmup} "
+                    "tokens={tokens} seqs={seqs} time_s={time_s:.4f} "
+                    "tokens_per_s={tps:.2f} tokens_per_s_per_gpu={tps_pg:.2f} "
+                    "seqs_per_s={sps:.2f} seqs_per_s_per_gpu={sps_pg:.2f} mfu={mfu:.4f}".format(
+                        idx=idx,
+                        num_microbatches=num_microbatches,
+                        max_iterations=max_iterations,
+                        warmup=warmup_count,
+                        tokens=summary["total_tokens"],
+                        seqs=summary["total_sequences"],
+                        time_s=summary["time_s"],
+                        tps=summary["throughput_tokens_s"],
+                        tps_pg=summary["throughput_tokens_s_per_gpu"],
+                        sps=summary["throughput_sequences_s"],
+                        sps_pg=summary["throughput_sequences_s_per_gpu"],
+                        mfu=summary["mfu"],
+                    )
+                )
+
+        return metrics_by_test_case

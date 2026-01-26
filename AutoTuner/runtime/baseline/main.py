@@ -5,7 +5,7 @@ from typing import List, Optional
 
 import torch
 
-from AutoTuner.runtime.launcher import RuntimeLauncher
+from AutoTuner.runtime.baseline.launcher import RuntimeLauncher
 from AutoTuner.utils.distributed import destroy_distributed, init_distributed_multi_nodes
 from AutoTuner.utils.structs import InputTestCase
 
@@ -137,16 +137,27 @@ def parse_args():
         help="TransformerConfig to override",
     )
     parser.add_argument(
-        "--test-case-idxs",
+        "--num-test-cases",
         type=int,
-        nargs="+",
         default=None,
-        help="Optional subset of test case indices to run",
+        help="Optional number of test cases to run from the start of the list",
     )
     parser.add_argument(
         "--run-one-data",
         action="store_true",
         help="Only run one microbatch for each test case",
+    )
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=10,
+        help="Maximum iterations to run per test case",
+    )
+    parser.add_argument(
+        "--warmup-iterations",
+        type=int,
+        default=3,
+        help="Warmup iterations to exclude from MFU/throughput averages",
     )
     parser.add_argument(
         "--share-embeddings-and-output-weights",
@@ -220,8 +231,10 @@ def main():
             fix_compute_amount=True,
         )
         launcher.run_pipeline(
-            test_case_idxs=args.test_case_idxs,
+            num_test_cases=args.num_test_cases,
             run_one_data=args.run_one_data,
+            max_iterations=args.max_iterations,
+            warmup_iterations=args.warmup_iterations,
         )
     finally:
         if torch.distributed.is_initialized():

@@ -10,7 +10,9 @@ else
     echo "Warning: tests/functional_test/runtime/test_env.sh not found. Using defaults."
     MODEL_NAME="Qwen/Qwen3-0.6B"
     TEST_CASES_FILE="qwen3_0_6b.json"
-    TEST_CASE_IDXS=(0)
+    NUM_TEST_CASES=1
+    MAX_ITERATIONS=10
+    WARMUP_ITERATIONS=3
 
     SHARE_EMB=None
 
@@ -58,8 +60,16 @@ if [[ "${SHARE_EMB}" != "None" ]]; then
     RUNTIME_ARGS+=(--share-embeddings-and-output-weights $SHARE_EMB)
 fi
 
-if [[ "${TEST_CASE_IDXS}" != "None" ]]; then
-    RUNTIME_ARGS+=(--test-case-idxs ${TEST_CASE_IDXS[@]})
+if [[ -n "${NUM_TEST_CASES:-}" ]]; then
+    RUNTIME_ARGS+=(--num-test-cases $NUM_TEST_CASES)
+fi
+
+if [[ -n "${MAX_ITERATIONS:-}" ]]; then
+    RUNTIME_ARGS+=(--max-iterations $MAX_ITERATIONS)
+fi
+
+if [[ -n "${WARMUP_ITERATIONS:-}" ]]; then
+    RUNTIME_ARGS+=(--warmup-iterations $WARMUP_ITERATIONS)
 fi
 
 export CUDA_DEVICE_MAX_CONNECTIONS=1
