@@ -52,6 +52,18 @@ class GPTModelEnhancedForTest(GPTModel, CommonOpsForTest):
     keeping embedding weights on CPU to reduce GPU memory usage.
     """
 
+    def __new__(
+        cls,
+        tf_config: TransformerConfig,
+        hf_config: PretrainedConfig,
+        transformer_layer_spec: ModuleSpec,
+        hook_activation: bool = False,
+        scatter_to_sequence_parallel: bool = True,
+        tp_group: Optional[torch.distributed.ProcessGroup] = None,
+        **kwargs,
+    ):
+        return object.__new__(cls)
+
     def __init__(
         self,
         tf_config: TransformerConfig,
