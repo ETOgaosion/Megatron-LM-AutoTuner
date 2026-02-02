@@ -28,7 +28,7 @@ class LaunchDataCollectionForOps(Launcher):
             override_tf_config_kwargs=override_tf_config_kwargs,
             fix_compute_amount=fix_compute_amount,
             tp_comm_overlap_cfg=tp_comm_overlap_cfg,
-            tp_comm_buffer_name=tp_comm_buffer_name
+            tp_comm_buffer_name=tp_comm_buffer_name,
         )
 
         self.total_timing_db = NestedDict()
