@@ -77,7 +77,7 @@ class Launcher:
             "theoretical_flops": self.profile_config.theoretical_flops,
             "theoretical_activations": self.profile_config.theoretical_activations,
         }
-        if op_name == "GPTModel":
+        if op_name in {"GPTModel", "GPTModelEnhanced", "GPTModelModuleQueue"}:
             from megatron.core.models.gpt.gpt_layer_specs import (
                 get_gpt_layer_with_transformer_engine_spec,
             )
