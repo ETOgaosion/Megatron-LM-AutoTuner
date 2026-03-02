@@ -73,6 +73,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
         **kwargs,
     ):
+        vp_stage = kwargs.get("vp_stage", None)
         GPTModel.__init__(
             self,
             config=tf_config,
@@ -101,7 +102,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             pre_process=self.pre_process,
             post_process=self.post_process,
             pg_collection=self.pg_collection,
-            # vp_stage=vp_stage,
+            vp_stage=vp_stage,
         )
 
     @nvtx_decorator(message="GPTModel forward")
