@@ -12,38 +12,38 @@ python -m tests.custom.${KERNEL_NAME}.${KERNEL_NAME} --iterations 20 --draw > ou
 
 # 2. Run with nsys profiling
 # Check if output contains "Insufficient privilege"
-if echo "$NSYS_OUTPUT" | grep -q "Insufficient privilege"; then
-    GPU_METRICS_USABLE=0
-else
-    GPU_METRICS_USABLE=1
-fi
+# if echo "$NSYS_OUTPUT" | grep -q "Insufficient privilege"; then
+#     GPU_METRICS_USABLE=0
+# else
+#     GPU_METRICS_USABLE=1
+# fi
 
-NSYS_ARGS=(
-    # --run-as root
-    -w true
-    -o "outputs/test/custom/${KERNEL_NAME}/nsight_report"
-    -f true
-    -x true
-    -t nvtx,cudnn,cublas,python-gil
-    # --capture-range=cudaProfilerApi
-    # --cudabacktrace=all
-    # --cuda-memory-usage=true
-    --python-backtrace=cuda
-    --enable network_interface
-    --python-sampling=true
-    --nic-metrics=true
-)
+# NSYS_ARGS=(
+#     # --run-as root
+#     -w true
+#     -o "outputs/test/custom/${KERNEL_NAME}/nsight_report"
+#     -f true
+#     -x true
+#     -t nvtx,cudnn,cublas,python-gil
+#     # --capture-range=cudaProfilerApi
+#     # --cudabacktrace=all
+#     # --cuda-memory-usage=true
+#     --python-backtrace=cuda
+#     --enable network_interface
+#     --python-sampling=true
+#     --nic-metrics=true
+# )
 
-if [ $GPU_METRICS_USABLE -eq 1 ]; then
-    NSYS_ARGS=("${NSYS_ARGS[@]}"
-                --gpu-metrics-devices=all
-                --cuda-event-trace=false
-              )
-else
-    echo "Warning: GPU metrics are not usable due to insufficient privileges. Proceeding without GPU metrics."
-fi
+# if [ $GPU_METRICS_USABLE -eq 1 ]; then
+#     NSYS_ARGS=("${NSYS_ARGS[@]}"
+#                 --gpu-metrics-devices=all
+#                 --cuda-event-trace=false
+#               )
+# else
+#     echo "Warning: GPU metrics are not usable due to insufficient privileges. Proceeding without GPU metrics."
+# fi
 
-nsys profile "${NSYS_ARGS[@]}" python tests/custom/${KERNEL_NAME}/${KERNEL_NAME}.py --iterations 2
+# nsys profile "${NSYS_ARGS[@]}" python tests/custom/${KERNEL_NAME}/${KERNEL_NAME}.py --iterations 2
 
 
 # 3. Run with ncu again to capture more accurate metrics
