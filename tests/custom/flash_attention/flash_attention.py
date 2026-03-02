@@ -119,24 +119,25 @@ def plot_results(args, results):
     batch_sizes = sorted(list(set([r["batch_size"] for r in results])))
     seq_lens = sorted(list(set([r["seq_len"] for r in results])))
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+    fig, (ax2) = plt.subplots(1, 1, figsize=(7, 5))
+    # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
 
     # Plot 1: Time vs Batch Size (for different sequence lengths)
-    for seqlen in seq_lens:
-        data = [r for r in results if r["seq_len"] == seqlen]
-        data = sorted(data, key=lambda x: x["batch_size"])
-        bsz = [r["batch_size"] for r in data]
-        fwd = [r["forward_ms"] for r in data]
-        bwd = [r["backward_ms"] for r in data]
+    # for seqlen in seq_lens:
+    #     data = [r for r in results if r["seq_len"] == seqlen]
+    #     data = sorted(data, key=lambda x: x["batch_size"])
+    #     bsz = [r["batch_size"] for r in data]
+    #     fwd = [r["forward_ms"] for r in data]
+    #     bwd = [r["backward_ms"] for r in data]
 
-        ax1.plot(bsz, fwd, marker="o", label=f"FWD (seqlen={seqlen})")
-        ax1.plot(bsz, bwd, marker="s", linestyle="--", label=f"BWD (seqlen={seqlen})")
+    #     ax1.plot(bsz, fwd, marker="o", label=f"FWD (seqlen={seqlen})")
+    #     ax1.plot(bsz, bwd, marker="s", linestyle="--", label=f"BWD (seqlen={seqlen})")
 
-    ax1.set_xlabel("Batch Size")
-    ax1.set_ylabel("Time (ms)")
-    ax1.set_title("Forward/Backward Time vs Batch Size")
-    ax1.legend(loc="upper left", bbox_to_anchor=(1, 1))
-    ax1.grid(True, alpha=0.3)
+    # ax1.set_xlabel("Batch Size")
+    # ax1.set_ylabel("Time (ms)")
+    # ax1.set_title("Forward/Backward Time vs Batch Size")
+    # ax1.legend(loc="upper left", bbox_to_anchor=(1, 1))
+    # ax1.grid(True, alpha=0.3)
 
     # Plot 2: Time vs Sequence Length (for different batch sizes)
     for bsz in batch_sizes:
@@ -218,8 +219,6 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if device == "cpu":
         raise RuntimeError("FlashAttention requires CUDA")
-    with open("tmp.txt", "w") as f:
-        f.write(f"device: {device}\n")
 
     dtype = torch.bfloat16 if args.bf16 else torch.float16
 
