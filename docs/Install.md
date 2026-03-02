@@ -51,6 +51,13 @@ You should use `Ctrl-C` to activate stop-then-continue download
 - Install Megatron in current repo
 - Install verl in current repo
 
+### NVSHMEM
+
+```sh
+mkdir build && cd build && \
+cmake -DNVSHMEM_PREFIX=/usr/local/nvshmem -DCUDA_HOME=/usr/local/cuda -DNVSHMEM_USE_GDRCOPY=0 -DCUDA_ARCHITECTURES="120" -DNVSHMEM_MPI_SUPPORT=0 -DNVSHMEM_BUILD_PYTHON_LIB=OFF -S ..
+```
+
 ## Environment Migration
 
 If you have an existing environment archive (e.g., megatron-lm-autotuner.tar.gz), you can quickly reuse it with the following steps:

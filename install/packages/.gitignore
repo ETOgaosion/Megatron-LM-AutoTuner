@@ -1,1 +1,4 @@
-*.whl
+*
+!.gitignore
+!README.md
+!build_flash_attn_wheel.sh
