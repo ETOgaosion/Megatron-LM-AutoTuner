@@ -1,5 +1,5 @@
 {
-  "model": "Qwen/Qwen3-1.7B",
+  "model": "Qwen/Qwen3-14B",
   "cases":
   [
     {

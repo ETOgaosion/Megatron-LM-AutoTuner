@@ -8,11 +8,18 @@ TO_DOWNLOAD=(
     "Qwen/Qwen2.5-0.5B"
     "Qwen/Qwen2.5-7B"
     "Qwen/Qwen2.5-72B"
+    "Qwen/Qwen3-0.6B"
     "Qwen/Qwen3-0.6B-Base"
+    "Qwen/Qwen3-1.7B"
     "Qwen/Qwen3-1.7B-Base"
+    "Qwen/Qwen3-4B"
     "Qwen/Qwen3-4B-Base"
+    "Qwen/Qwen3-8B"
     "Qwen/Qwen3-8B-Base"
+    "Qwen/Qwen3-14B"
     "Qwen/Qwen3-14B-Base"
+    "Qwen/Qwen3-32B"
+    "Qwen/Qwen3-30B-A3B"
     "Qwen/Qwen3-30B-A3B-Base"
     "Qwen/Qwen3-235B-A22B"
     "deepseek-ai/DeepSeek-V3-Base"
@@ -29,6 +36,13 @@ fi
 for MODEL_NAME in "${TO_DOWNLOAD[@]}"; do
     DEST_DIR=${MODEL_BASE_DIR}/${MODEL_NAME}
     # mkdir -p ${DEST_DIR}
+
+    # Check if model config has already been downloaded
+    if [[ -f "${DEST_DIR}/config.json" ]]; then
+        echo "Model config already exists for ${MODEL_NAME}, skipping download"
+        continue
+    fi
+    
     echo "Downloading model config for ${MODEL_NAME} to ${DEST_DIR}"
     bash ${HFD_LOCATION} ${MODEL_NAME} --include config.json --local-dir ${DEST_DIR}
 done
