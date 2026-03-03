@@ -17,6 +17,7 @@ def initialize_tp_communicators(
     num_layers_at_start_in_bf16: int = 0,
     num_layers_at_end_in_bf16: int = 0,
     tp_comm_bootstrap_backend: str = "nccl",
+    inputs_are_cp_sharded: bool = True,
 ):
     # Copy from Megatron-LM/megatron/training/initialize.py: _initialize_tp_communicators
 
@@ -47,26 +48,28 @@ def initialize_tp_communicators(
     else:
         ub_cfgs = {}
 
+    cp_divisor = mpu.get_context_parallel_world_size() if inputs_are_cp_sharded else 1
+
     if seq_length is not None:
         if "Column" in op_name:
             input_shape = [
-                seq_length * micro_batch_size // mpu.get_context_parallel_world_size(),
+                seq_length * micro_batch_size // cp_divisor,
                 hidden_size,
             ]
         else:
             input_shape = [
-                seq_length * micro_batch_size // mpu.get_context_parallel_world_size() // mpu.get_tensor_model_parallel_world_size(),
+                seq_length * micro_batch_size // cp_divisor // mpu.get_tensor_model_parallel_world_size(),
                 hidden_size,
             ]
     else:
         if "Column" in op_name:
             input_shape = [
-                tokens // mpu.get_context_parallel_world_size(),
+                tokens // cp_divisor,
                 hidden_size,
             ]
         else:
             input_shape = [
-                tokens // mpu.get_context_parallel_world_size() // mpu.get_tensor_model_parallel_world_size(),
+                tokens // cp_divisor // mpu.get_tensor_model_parallel_world_size(),
                 hidden_size,
             ]
     print(f"Initializing TP Communicators with User Buffers for shape {input_shape}...")

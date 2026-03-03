@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 from typing import List, Optional
 
@@ -7,6 +8,7 @@ import torch
 
 from AutoTuner.runtime.baseline.launcher import RuntimeLauncher
 from AutoTuner.utils.distributed import destroy_distributed, init_distributed_multi_nodes
+from AutoTuner.utils.logging import log_rank0, log_with_rank, set_logging_level
 from AutoTuner.utils.structs import InputTestCase
 
 
@@ -43,6 +45,15 @@ def validate_args(args):
     assert os.path.exists(
         args.real_override_tf_config_file
     ), f"{args.real_override_tf_config_file} not found"
+
+    if args.tp_comm_overlap_cfg is not None:
+        candidate = os.path.join(args.config_dir, args.tp_comm_overlap_cfg)
+        if os.path.exists(candidate):
+            args.real_tp_comm_overlap_cfg = candidate
+        else:
+            args.real_tp_comm_overlap_cfg = None
+    else:
+        args.real_tp_comm_overlap_cfg = None
 
     return args
 
@@ -137,6 +148,13 @@ def parse_args():
         help="TransformerConfig to override",
     )
     parser.add_argument(
+        "--tp-comm-overlap-cfg",
+        type=str,
+        required=False,
+        default="tp_comm_overlap_cfg.yaml",
+        help="TP overlap config file name in config-dir (optional)",
+    )
+    parser.add_argument(
         "--num-test-cases",
         type=int,
         default=None,
@@ -171,6 +189,12 @@ def parse_args():
         action="store_true",
         help="Disable wrapping model with DDP",
     )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default=os.getenv("AUTOTUNER_LOG_LEVEL", "INFO"),
+        help="Logging level (DEBUG, INFO, WARNING, ERROR)",
+    )
 
     parser = parse_distributed_args(parser)
     args = parser.parse_args()
@@ -203,6 +227,32 @@ def load_override_config(path: str) -> dict:
 
 def main():
     args = parse_args()
+    level_name = args.log_level.strip().upper()
+    level = getattr(logging, level_name, None)
+    if not isinstance(level, int):
+        raise ValueError(
+            f"Invalid log level: {args.log_level}. Use DEBUG, INFO, WARNING, or ERROR."
+        )
+    set_logging_level(level)
+    log_rank0(
+        "runtime baseline start: "
+        f"model={args.model_name} "
+        f"test_cases={args.real_test_cases_file} "
+        f"override_model_cfg={args.real_override_model_config_file} "
+        f"override_tf_cfg={args.real_override_tf_config_file} "
+        f"tp_comm_overlap_cfg={args.real_tp_comm_overlap_cfg} "
+        f"tp={args.tensor_model_parallel_size} "
+        f"cp={args.context_parallel_size} "
+        f"ep={args.expert_parallel_size} "
+        f"etp={args.expert_tensor_parallel_size} "
+        f"pp={args.pipeline_model_parallel_size} "
+        f"vpp={args.virtual_pipeline_model_parallel_size} "
+        f"num_test_cases={args.num_test_cases} "
+        f"max_iterations={args.max_iterations} "
+        f"warmup_iterations={args.warmup_iterations} "
+        f"share_emb={args.share_embeddings_and_output_weights} "
+        f"no_ddp={args.no_ddp}"
+    )
 
     init_distributed_multi_nodes(
         tp=args.tensor_model_parallel_size,
@@ -212,6 +262,15 @@ def main():
         pp=args.pipeline_model_parallel_size,
         vpp=args.virtual_pipeline_model_parallel_size,
     )
+    if torch.distributed.is_initialized():
+        log_with_rank(
+            "distributed initialized: "
+            f"rank={torch.distributed.get_rank()} "
+            f"world_size={torch.distributed.get_world_size()} "
+            f"local_rank={os.getenv('LOCAL_RANK', 'n/a')} "
+            f"cuda_device={torch.cuda.current_device()} "
+            f"cuda_name={torch.cuda.get_device_name(torch.cuda.current_device())}"
+        )
 
     try:
         test_cases = load_test_cases(args)
@@ -225,6 +284,7 @@ def main():
             test_cases=test_cases,
             override_model_kwargs=override_model_config,
             override_tf_config_kwargs=override_tf_config,
+            tp_comm_overlap_cfg=args.real_tp_comm_overlap_cfg,
             share_embeddings_and_output_weights=args.share_embeddings_and_output_weights,
             wrap_with_ddp=not args.no_ddp,
             use_distributed_optimizer=False,

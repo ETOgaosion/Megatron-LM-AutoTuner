@@ -121,6 +121,7 @@ class TestCommon(TheoreticalCalculation):
                 op_name=self.module_name,
                 tokens=tokens,
                 hidden_size=self.hf_config.hidden_size,
+                inputs_are_cp_sharded=False,
             )
         torch.cuda.synchronize()
         torch.distributed.barrier()
