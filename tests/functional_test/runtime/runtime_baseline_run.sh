@@ -76,6 +76,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 export NVTE_FLASH_ATTN=1
 export NVTE_FUSED_ATTN=0
+export UB_SKIPMC=1
 
 torchrun ${DISTRIBUTED_ARGS[@]} -m AutoTuner.runtime.baseline.main \
     ${RUNTIME_ARGS[@]} \

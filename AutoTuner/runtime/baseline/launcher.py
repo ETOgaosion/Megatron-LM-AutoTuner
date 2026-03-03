@@ -1,4 +1,6 @@
 import itertools
+import logging
+import os
 import time
 from typing import Iterable, Optional
 
@@ -16,8 +18,10 @@ from AutoTuner.utils.config import (
     get_mcore_model_config_from_hf_config,
 )
 from AutoTuner.utils.gpu_info import GPU_PEAK_FLOPS
+from AutoTuner.utils.logging import log_rank0, log_with_rank
 from AutoTuner.utils.model_inputs import DataSets, get_thd_model_input_from_bshd
 from AutoTuner.utils.structs import InputTestCase
+from AutoTuner.utils.tp_overlap import destroy_ub, initialize_tp_communicators
 from verl.utils.flops_counter import FlopsCounter
 from verl.utils.megatron_utils import get_model, unwrap_model
 
@@ -29,13 +33,27 @@ class RuntimeLauncher:
         test_cases: list[InputTestCase],
         override_model_kwargs: dict,
         override_tf_config_kwargs: dict,
+        tp_comm_overlap_cfg: str | None = None,
         share_embeddings_and_output_weights: Optional[bool] = None,
         wrap_with_ddp: bool = True,
         use_distributed_optimizer: bool = False,
         fix_compute_amount: bool = True,
     ) -> None:
         self.model_name = model_name
+        self._log_all_ranks = os.getenv("AUTOTUNER_LOG_ALL_RANKS", "0").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        self._log_microbatch_every = 1
+        self._log_microbatch_io = True
+        self._current_iteration = None
+        self._microbatch_counter = 0
+        self._tp_overlap_tokens = None
+        self._tp_overlap_disabled_logged = False
         self.test_cases = test_cases
+        self.tp_comm_overlap_cfg = tp_comm_overlap_cfg
 
         self.hf_config: PretrainedConfig = get_hf_model_config(
             model_name, **override_model_kwargs
@@ -68,6 +86,12 @@ class RuntimeLauncher:
             use_dynamic_bsz_balance=True,
             vpp_size=mpu.get_virtual_pipeline_model_parallel_world_size(),
         )
+        log_rank0(
+            "runtime dataset ready: "
+            f"test_cases={len(self.test_cases)} "
+            f"vpp={mpu.get_virtual_pipeline_model_parallel_world_size()} "
+            f"fix_compute_amount={fix_compute_amount}"
+        )
 
         self.flops_counter = FlopsCounter(self.hf_config)
 
@@ -75,6 +99,17 @@ class RuntimeLauncher:
             wrap_with_ddp=wrap_with_ddp,
             use_distributed_optimizer=use_distributed_optimizer,
         )
+        log_rank0(
+            "runtime model built: "
+            f"wrap_with_ddp={wrap_with_ddp} "
+            f"use_distributed_optimizer={use_distributed_optimizer}"
+        )
+
+    def _log(self, message: str, level: int = logging.INFO, all_ranks: bool = False):
+        if all_ranks or self._log_all_ranks:
+            log_with_rank(message, level=level)
+        else:
+            log_rank0(message, level=level)
 
     def _build_model(self, wrap_with_ddp: bool, use_distributed_optimizer: bool):
         transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
@@ -112,23 +147,67 @@ class RuntimeLauncher:
 
     def _build_forward_step(self, test_case: InputTestCase):
         def forward_step(data_iterator, model, checkpoint_activations_microbatch=None):
+            self._microbatch_counter += 1
+            log_this = self._microbatch_counter == 1 or (
+                self._log_microbatch_every > 0
+                and self._microbatch_counter % self._log_microbatch_every == 0
+            )
             data_iter = data_iterator
             unwrapped = unwrap_model(model)
             if isinstance(data_iterator, list):
                 vp_stage = getattr(unwrapped, "vp_stage", 0)
                 data_iter = data_iterator[vp_stage]
 
+            if log_this:
+                self._log(
+                    f"iter {self._current_iteration} microbatch {self._microbatch_counter}: "
+                    "fetching batch"
+                )
             micro_batch = next(data_iter)
             micro_batch = micro_batch.to(torch.cuda.current_device())
             micro_batch = micro_batch.contiguous()
 
-            (
-                input_ids_rmpad,
-                attention_mask,
-                position_ids_rmpad,
-                packed_seq_params,
-            ) = get_thd_model_input_from_bshd(micro_batch)
+            if test_case.shape == "bshd":
+                input_ids_rmpad = micro_batch["input_ids"]
+                attention_mask = micro_batch["attention_mask"].to(bool)
+                position_ids_rmpad = micro_batch["position_ids"]
+                packed_seq_params = None
+            else:
+                (
+                    input_ids_rmpad,
+                    attention_mask,
+                    position_ids_rmpad,
+                    packed_seq_params,
+                ) = get_thd_model_input_from_bshd(micro_batch)
 
+            if packed_seq_params is None and test_case.shape == "bshd":
+                self._maybe_init_tp_overlap(tokens=input_ids_rmpad.numel())
+            elif (
+                not self._tp_overlap_disabled_logged
+                and getattr(self.tf_config, "tp_comm_overlap", False)
+            ):
+                self._log(
+                    "tp overlap disabled for this run: THD/variable sequence lengths "
+                    "are not supported by TransformerEngine user buffers"
+                )
+                self._tp_overlap_disabled_logged = True
+            if log_this and self._log_microbatch_io:
+                self._log(
+                    "iter {iteration} microbatch {mb}: "
+                    "input_ids={input_shape} attn_mask={mask_shape} pos_ids={pos_shape}".format(
+                        iteration=self._current_iteration,
+                        mb=self._microbatch_counter,
+                        input_shape=tuple(input_ids_rmpad.shape),
+                        mask_shape=tuple(attention_mask.shape),
+                        pos_shape=tuple(position_ids_rmpad.shape),
+                    )
+                )
+
+            if log_this:
+                self._log(
+                    f"iter {self._current_iteration} microbatch {self._microbatch_counter}: "
+                    "model forward start"
+                )
             output = model(
                 input_ids_rmpad,
                 position_ids_rmpad,
@@ -139,6 +218,11 @@ class RuntimeLauncher:
                 None,
                 None,
             )
+            if log_this:
+                self._log(
+                    f"iter {self._current_iteration} microbatch {self._microbatch_counter}: "
+                    "model forward done"
+                )
 
             def loss_func(output_tensor, non_loss_data=False):
                 if non_loss_data:
@@ -226,6 +310,45 @@ class RuntimeLauncher:
         flops_all_token = dense_N_flops + attn_qkv_flops
         return flops_all_token * (1.0 / delta_time) / 1e12
 
+    def _maybe_init_tp_overlap(self, tokens: int):
+        if (
+            mpu.get_tensor_model_parallel_world_size() <= 1
+            or not getattr(self.tf_config, "tp_comm_overlap", False)
+        ):
+            return
+        if tokens <= 0:
+            return
+        if self._tp_overlap_tokens == tokens:
+            return
+        if self._tp_overlap_tokens is not None:
+            destroy_ub()
+        initialize_tp_communicators(
+            tp_comm_overlap_cfg=self.tp_comm_overlap_cfg,
+            op_name="ColumnParallelLinear",
+            tokens=tokens,
+            hidden_size=self.hf_config.hidden_size,
+            inputs_are_cp_sharded=False,
+        )
+        self._tp_overlap_tokens = tokens
+        self._log(
+            "tp overlap initialized: "
+            f"tokens={tokens} "
+            f"tp={mpu.get_tensor_model_parallel_world_size()} "
+            f"cp={mpu.get_context_parallel_world_size()} "
+            f"cfg={self.tp_comm_overlap_cfg}"
+        )
+
+    def _maybe_destroy_tp_overlap(self):
+        if (
+            mpu.get_tensor_model_parallel_world_size() <= 1
+            or not getattr(self.tf_config, "tp_comm_overlap", False)
+        ):
+            return
+        if self._tp_overlap_tokens is not None:
+            destroy_ub()
+            self._tp_overlap_tokens = None
+            self._log("tp overlap user buffers destroyed")
+
     def run_pipeline(
         self,
         num_test_cases: Optional[int] = None,
@@ -241,6 +364,14 @@ class RuntimeLauncher:
         forward_backward_func = get_forward_backward_func()
         metrics_by_test_case = []
         world_size = torch.distributed.get_world_size()
+        self._log(
+            "runtime pipeline start: "
+            f"world_size={world_size} "
+            f"num_test_cases={len(test_case_idxs)} "
+            f"run_one_data={run_one_data} "
+            f"max_iterations={max_iterations} "
+            f"warmup_iterations={warmup_iterations}"
+        )
 
         for idx in test_case_idxs:
             test_case = self.test_cases[idx]
@@ -249,14 +380,38 @@ class RuntimeLauncher:
                 num_microbatches = 1
 
             batch_seqlens = self._collect_batch_seqlens(test_case, num_microbatches)
+            if batch_seqlens:
+                min_seqlen = min(batch_seqlens)
+                max_seqlen = max(batch_seqlens)
+                avg_seqlen = sum(batch_seqlens) / len(batch_seqlens)
+            else:
+                min_seqlen = max_seqlen = avg_seqlen = 0
+            self._log(
+                "test case start: "
+                f"idx={idx} "
+                f"{test_case} "
+                f"microbatches={num_microbatches} "
+                f"batch_seqlens(min/avg/max)={min_seqlen}/{avg_seqlen:.1f}/{max_seqlen}"
+            )
             iteration_metrics = []
             for iteration in range(max_iterations):
                 data_iterator = self.datasets.get_batch_generator(test_case)
                 if run_one_data:
                     data_iterator = self._limit_iterator(data_iterator, num_microbatches)
 
+                self._current_iteration = iteration
+                self._microbatch_counter = 0
+                self._log(
+                    f"iter {iteration}: entering pre-barrier"
+                )
                 torch.distributed.barrier()
+                self._log(
+                    f"iter {iteration}: exited pre-barrier"
+                )
                 torch.cuda.synchronize()
+                self._log(
+                    f"iter {iteration}: starting forward/backward"
+                )
                 start_time = time.perf_counter()
                 forward_backward_func(
                     forward_step_func=self._build_forward_step(test_case),
@@ -269,7 +424,16 @@ class RuntimeLauncher:
                     forward_only=False,
                 )
                 torch.cuda.synchronize()
+                self._log(
+                    f"iter {iteration}: finished forward/backward"
+                )
+                self._log(
+                    f"iter {iteration}: entering post-barrier"
+                )
                 torch.distributed.barrier()
+                self._log(
+                    f"iter {iteration}: exited post-barrier"
+                )
                 delta_time = time.perf_counter() - start_time
 
                 metrics = self._compute_perf_metrics(
@@ -277,6 +441,20 @@ class RuntimeLauncher:
                 )
                 metrics["iteration"] = iteration
                 iteration_metrics.append(metrics)
+                self._log(
+                    "iter {iteration} metrics: time_s={time_s:.4f} "
+                    "tokens_per_s={tps:.2f} tokens_per_s_per_gpu={tps_pg:.2f} "
+                    "seqs_per_s={sps:.2f} seqs_per_s_per_gpu={sps_pg:.2f} mfu={mfu:.4f}".format(
+                        iteration=iteration,
+                        time_s=metrics["time_s"],
+                        tps=metrics["throughput_tokens_s"],
+                        tps_pg=metrics["throughput_tokens_s_per_gpu"],
+                        sps=metrics["throughput_sequences_s"],
+                        sps_pg=metrics["throughput_sequences_s_per_gpu"],
+                        mfu=metrics["mfu"],
+                    )
+                )
+            self._maybe_destroy_tp_overlap()
 
             warmup_count = min(warmup_iterations, max_iterations)
             valid_metrics = iteration_metrics[warmup_count:]
@@ -303,26 +481,25 @@ class RuntimeLauncher:
                 "mfu": _avg("mfu"),
             }
             metrics_by_test_case.append(summary)
-            if torch.distributed.get_rank() == 0:
-                print(
-                    "[runtime] test_case_idx={idx} microbatches={num_microbatches} "
-                    "iters={max_iterations} warmup={warmup} "
-                    "tokens={tokens} seqs={seqs} time_s={time_s:.4f} "
-                    "tokens_per_s={tps:.2f} tokens_per_s_per_gpu={tps_pg:.2f} "
-                    "seqs_per_s={sps:.2f} seqs_per_s_per_gpu={sps_pg:.2f} mfu={mfu:.4f}".format(
-                        idx=idx,
-                        num_microbatches=num_microbatches,
-                        max_iterations=max_iterations,
-                        warmup=warmup_count,
-                        tokens=summary["total_tokens"],
-                        seqs=summary["total_sequences"],
-                        time_s=summary["time_s"],
-                        tps=summary["throughput_tokens_s"],
-                        tps_pg=summary["throughput_tokens_s_per_gpu"],
-                        sps=summary["throughput_sequences_s"],
-                        sps_pg=summary["throughput_sequences_s_per_gpu"],
-                        mfu=summary["mfu"],
-                    )
+            log_rank0(
+                "[runtime] test_case_idx={idx} microbatches={num_microbatches} "
+                "iters={max_iterations} warmup={warmup} "
+                "tokens={tokens} seqs={seqs} time_s={time_s:.4f} "
+                "tokens_per_s={tps:.2f} tokens_per_s_per_gpu={tps_pg:.2f} "
+                "seqs_per_s={sps:.2f} seqs_per_s_per_gpu={sps_pg:.2f} mfu={mfu:.4f}".format(
+                    idx=idx,
+                    num_microbatches=num_microbatches,
+                    max_iterations=max_iterations,
+                    warmup=warmup_count,
+                    tokens=summary["total_tokens"],
+                    seqs=summary["total_sequences"],
+                    time_s=summary["time_s"],
+                    tps=summary["throughput_tokens_s"],
+                    tps_pg=summary["throughput_tokens_s_per_gpu"],
+                    sps=summary["throughput_sequences_s"],
+                    sps_pg=summary["throughput_sequences_s_per_gpu"],
+                    mfu=summary["mfu"],
                 )
+            )
 
         return metrics_by_test_case
