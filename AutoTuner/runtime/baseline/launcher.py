@@ -69,6 +69,13 @@ class RuntimeLauncher:
         self.tf_config = get_mcore_model_config_from_hf_config(
             self.hf_config, **override_tf_config_kwargs
         )
+        vpp_size = mpu.get_virtual_pipeline_model_parallel_world_size()
+        # Ensure TF config matches actual VPP setup; avoid asserting on missing vp_stage.
+        self.tf_config.virtual_pipeline_model_parallel_size = vpp_size
+        if vpp_size is None:
+            self._log(
+                "vpp disabled: forcing tf_config.virtual_pipeline_model_parallel_size=None"
+            )
 
         if share_embeddings_and_output_weights is None:
             share_embeddings_and_output_weights = bool(
