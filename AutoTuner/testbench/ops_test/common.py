@@ -118,6 +118,7 @@ class TestCommon(TheoreticalCalculation):
         ):
             initialize_tp_communicators(
                 tp_comm_overlap_cfg=self.tp_comm_overlap_cfg,
+                op_name=self.module_name,
                 tokens=tokens,
                 hidden_size=self.hf_config.hidden_size,
             )

@@ -7,6 +7,7 @@ from megatron.core.utils import get_te_version, is_te_min_version
 
 def initialize_tp_communicators(
     tp_comm_overlap_cfg: str = None,
+    op_name: str = None,
     tokens: int = None,
     seq_length: int = None,
     micro_batch_size: int = None,
@@ -47,15 +48,27 @@ def initialize_tp_communicators(
         ub_cfgs = {}
 
     if seq_length is not None:
-        input_shape = [
-            seq_length * micro_batch_size // mpu.get_context_parallel_world_size(),
-            hidden_size,
-        ]
+        if "Column" in op_name:
+            input_shape = [
+                seq_length * micro_batch_size // mpu.get_context_parallel_world_size(),
+                hidden_size,
+            ]
+        else:
+            input_shape = [
+                seq_length * micro_batch_size // mpu.get_context_parallel_world_size() // mpu.get_tensor_model_parallel_world_size(),
+                hidden_size,
+            ]
     else:
-        input_shape = [
-            tokens // mpu.get_context_parallel_world_size(),
-            hidden_size,
-        ]
+        if "Column" in op_name:
+            input_shape = [
+                tokens // mpu.get_context_parallel_world_size(),
+                hidden_size,
+            ]
+        else:
+            input_shape = [
+                tokens // mpu.get_context_parallel_world_size() // mpu.get_tensor_model_parallel_world_size(),
+                hidden_size,
+            ]
     print(f"Initializing TP Communicators with User Buffers for shape {input_shape}...")
 
     # The process group with the target bootstrap backend is created in Transformer Engine.
