@@ -95,13 +95,14 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             module_name="GPTModel",
             logging_level=logging.INFO,
         )
+        vp_stage = kwargs.get("vp_stage", None)
         self.decoder = NVTXDecoder(
             config=self.config,
             spec=transformer_layer_spec,
             pre_process=self.pre_process,
             post_process=self.post_process,
             pg_collection=self.pg_collection,
-            # vp_stage=vp_stage,
+            vp_stage=vp_stage,
         )
 
     @nvtx_decorator(message="GPTModel forward")
