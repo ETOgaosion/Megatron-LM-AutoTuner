@@ -253,6 +253,57 @@ Produces:
 - **Optimal TP size based on scaling efficiency analysis**
 - Optimal YAML configs per TP size
 
+## TP Overlap Trace Analyzer (Single Range)
+
+Use this tool to inspect a single `run_micro_batch` NVTX range in a torch profiler
+JSON trace and compute overlap ratio as:
+
+```
+overlap_ratio = overlapped_comm_time / total_compute_time
+```
+
+### What it does
+
+- Finds `run_micro_batch` ranges and selects one (random by seed or by index).
+- Detects compute and communication streams inside that range.
+- Computes compute/comm durations and the overlapped communication time.
+- Emits a human-readable summary and a JSON report.
+
+### Usage
+
+```bash
+python -m AutoTuner.Profiler.overlap.tp_overlap_trace_analyzer \
+  --trace outputs/<timestamp>/<model>/torch_profiler/*.pt.trace.json \
+  --linear-type ColumnParallelLinear
+```
+
+Pick an explicit `run_micro_batch` range (0-based):
+
+```bash
+python -m AutoTuner.Profiler.overlap.tp_overlap_trace_analyzer \
+  --trace outputs/<timestamp>/<model>/torch_profiler/*.pt.trace.json \
+  --linear-type RowParallelLinear \
+  --range-index 0
+```
+
+Write JSON output to a file:
+
+```bash
+python -m AutoTuner.Profiler.overlap.tp_overlap_trace_analyzer \
+  --trace outputs/<timestamp>/<model>/torch_profiler/*.pt.trace.json \
+  --linear-type ColumnParallelLinear \
+  --output-json outputs/overlap_summary.json
+```
+
+### Output fields (JSON)
+
+- `compute_time_us`: Sum of compute intervals on the compute stream.
+- `comm_time_us`: Sum of comm intervals on the comm stream.
+- `overlapped_comm_time_us`: Communication time that overlaps compute.
+- `overlap_ratio`: `overlapped_comm_time_us / compute_time_us`.
+- `compute_stream_tid` / `comm_stream_tid`: Stream IDs selected.
+- `range_*`: Selected `run_micro_batch` window metadata.
+
 ## Architecture
 
 ```
@@ -262,6 +313,7 @@ AutoTuner/Profiler/overlap/
 ├── tuner.py              # Main orchestrator (TPOverlapTuner)
 ├── config_generator.py   # Test configuration generation
 ├── trace_analyzer.py     # Torch profiler JSON parsing
+├── tp_overlap_trace_analyzer.py # Single-range overlap analyzer
 ├── overlap_detector.py   # Overlap calculation
 ├── report_generator.py   # Report & YAML generation
 └── test_trace_analyzer.py # Unit tests
