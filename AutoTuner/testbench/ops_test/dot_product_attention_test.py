@@ -32,6 +32,8 @@ class TestTEDotProductAttention(TestWithHiddenInputs):
         warmup_iters: int = 2,
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
+        tp_comm_overlap_cfg: str = None,
+        pg_collection=None,
     ):
         super().__init__(
             hf_config=hf_config,
@@ -41,6 +43,8 @@ class TestTEDotProductAttention(TestWithHiddenInputs):
             tp_group=tp_group,
             theoretical_flops=theoretical_flops,
             theoretical_activations=theoretical_activations,
+            tp_comm_overlap_cfg=tp_comm_overlap_cfg,
+            pg_collection=pg_collection,
         )
         self.module_name = "TEDotProductAttention"
 

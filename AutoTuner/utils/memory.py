@@ -2,6 +2,7 @@ import logging
 import os
 import statistics
 import subprocess as sp
+from typing import Optional
 
 from ..utils.logging import log_rank0
 
@@ -27,6 +28,103 @@ def get_memory_str(mem: int, human_readable: bool = True) -> str:
             return f"{mem / (1024 ** 3):.2f} GB"
     else:
         return str(mem)
+
+
+def reset_peak_memory_stats(
+    device: Optional[int] = None, synchronize: bool = True
+) -> None:
+    import torch
+
+    if device is None:
+        device = torch.cuda.current_device()
+    if synchronize:
+        torch.cuda.synchronize(device)
+    torch.cuda.reset_peak_memory_stats(device)
+
+
+def get_rank_peak_memory_stats(
+    device: Optional[int] = None, synchronize: bool = True
+) -> dict:
+    import torch
+
+    if device is None:
+        device = torch.cuda.current_device()
+    if synchronize:
+        torch.cuda.synchronize(device)
+
+    peak_allocated_bytes = int(torch.cuda.max_memory_allocated(device))
+    peak_reserved_bytes = int(torch.cuda.max_memory_reserved(device))
+    free_bytes, total_bytes = torch.cuda.mem_get_info(device)
+    real_detected_bytes = int(total_bytes - free_bytes)
+
+    if torch.distributed.is_initialized():
+        rank = torch.distributed.get_rank()
+        world_size = torch.distributed.get_world_size()
+    else:
+        rank = int(os.getenv("RANK", "0"))
+        world_size = int(os.getenv("WORLD_SIZE", "1"))
+
+    return {
+        "rank": rank,
+        "world_size": world_size,
+        "device_index": int(device),
+        "peak_allocated_bytes": peak_allocated_bytes,
+        "peak_allocated": get_memory_str(peak_allocated_bytes),
+        "peak_reserved_bytes": peak_reserved_bytes,
+        "peak_reserved": get_memory_str(peak_reserved_bytes),
+        "real_detected_bytes": real_detected_bytes,
+        "real_detected": get_memory_str(real_detected_bytes),
+        "total_device_bytes": int(total_bytes),
+        "total_device_memory": get_memory_str(int(total_bytes)),
+    }
+
+
+def get_all_rank_peak_memory_stats(
+    device: Optional[int] = None, synchronize: bool = True
+) -> list[dict]:
+    import torch
+
+    local_stats = get_rank_peak_memory_stats(device=device, synchronize=synchronize)
+    if not torch.distributed.is_initialized():
+        return [local_stats]
+
+    local_tensor = torch.tensor(
+        [
+            local_stats["device_index"],
+            local_stats["peak_allocated_bytes"],
+            local_stats["peak_reserved_bytes"],
+            local_stats["real_detected_bytes"],
+            local_stats["total_device_bytes"],
+        ],
+        dtype=torch.int64,
+        device=torch.cuda.current_device(),
+    )
+    gathered = [torch.empty_like(local_tensor) for _ in range(local_stats["world_size"])]
+    torch.distributed.all_gather(gathered, local_tensor)
+
+    all_rank_stats = []
+    for rank, rank_tensor in enumerate(gathered):
+        device_index = int(rank_tensor[0].item())
+        peak_allocated_bytes = int(rank_tensor[1].item())
+        peak_reserved_bytes = int(rank_tensor[2].item())
+        real_detected_bytes = int(rank_tensor[3].item())
+        total_device_bytes = int(rank_tensor[4].item())
+        all_rank_stats.append(
+            {
+                "rank": rank,
+                "world_size": local_stats["world_size"],
+                "device_index": device_index,
+                "peak_allocated_bytes": peak_allocated_bytes,
+                "peak_allocated": get_memory_str(peak_allocated_bytes),
+                "peak_reserved_bytes": peak_reserved_bytes,
+                "peak_reserved": get_memory_str(peak_reserved_bytes),
+                "real_detected_bytes": real_detected_bytes,
+                "real_detected": get_memory_str(real_detected_bytes),
+                "total_device_bytes": total_device_bytes,
+                "total_device_memory": get_memory_str(total_device_bytes),
+            }
+        )
+    return all_rank_stats
 
 
 class MemoryTrackerContext:

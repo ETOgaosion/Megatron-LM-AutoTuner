@@ -1,7 +1,9 @@
 import itertools
+import json
 import logging
 import os
 import time
+from dataclasses import asdict
 from typing import Iterable, Optional
 
 import torch
@@ -19,6 +21,11 @@ from AutoTuner.utils.config import (
 )
 from AutoTuner.utils.gpu_info import GPU_PEAK_FLOPS
 from AutoTuner.utils.logging import log_rank0, log_with_rank
+from AutoTuner.utils.memory import (
+    get_all_rank_peak_memory_stats,
+    get_memory_str,
+    reset_peak_memory_stats,
+)
 from AutoTuner.utils.model_inputs import DataSets, get_thd_model_input_from_bshd
 from AutoTuner.utils.structs import InputTestCase
 from AutoTuner.utils.tp_overlap import destroy_ub, initialize_tp_communicators
@@ -106,6 +113,7 @@ class RuntimeLauncher:
             wrap_with_ddp=wrap_with_ddp,
             use_distributed_optimizer=use_distributed_optimizer,
         )
+        self.latest_run_report = None
         log_rank0(
             "runtime model built: "
             f"wrap_with_ddp={wrap_with_ddp} "
@@ -356,12 +364,52 @@ class RuntimeLauncher:
             self._tp_overlap_tokens = None
             self._log("tp overlap user buffers destroyed")
 
+    def _summarize_rank_memory(self, valid_metrics: list[dict]) -> list[dict]:
+        summary_by_rank: dict[int, dict] = {}
+        for metrics in valid_metrics:
+            for rank_stats in metrics.get("memory_by_rank", []):
+                rank = rank_stats["rank"]
+                if rank not in summary_by_rank:
+                    summary_by_rank[rank] = {
+                        "rank": rank,
+                        "world_size": rank_stats["world_size"],
+                        "device_index": rank_stats["device_index"],
+                        "peak_allocated_bytes": rank_stats["peak_allocated_bytes"],
+                        "peak_reserved_bytes": rank_stats["peak_reserved_bytes"],
+                        "real_detected_bytes": rank_stats["real_detected_bytes"],
+                        "total_device_bytes": rank_stats["total_device_bytes"],
+                    }
+                else:
+                    summary_by_rank[rank]["peak_allocated_bytes"] = max(
+                        summary_by_rank[rank]["peak_allocated_bytes"],
+                        rank_stats["peak_allocated_bytes"],
+                    )
+                    summary_by_rank[rank]["peak_reserved_bytes"] = max(
+                        summary_by_rank[rank]["peak_reserved_bytes"],
+                        rank_stats["peak_reserved_bytes"],
+                    )
+                    summary_by_rank[rank]["real_detected_bytes"] = max(
+                        summary_by_rank[rank]["real_detected_bytes"],
+                        rank_stats["real_detected_bytes"],
+                    )
+
+        summary_list = []
+        for rank in sorted(summary_by_rank.keys()):
+            item = summary_by_rank[rank]
+            item["peak_allocated"] = get_memory_str(item["peak_allocated_bytes"])
+            item["peak_reserved"] = get_memory_str(item["peak_reserved_bytes"])
+            item["real_detected"] = get_memory_str(item["real_detected_bytes"])
+            item["total_device_memory"] = get_memory_str(item["total_device_bytes"])
+            summary_list.append(item)
+        return summary_list
+
     def run_pipeline(
         self,
         num_test_cases: Optional[int] = None,
         run_one_data: bool = False,
         max_iterations: int = 10,
         warmup_iterations: int = 3,
+        output_dir: Optional[str] = None,
     ):
         if num_test_cases is None:
             test_case_idxs = list(range(len(self.test_cases)))
@@ -371,6 +419,15 @@ class RuntimeLauncher:
         forward_backward_func = get_forward_backward_func()
         metrics_by_test_case = []
         world_size = torch.distributed.get_world_size()
+        run_report = {
+            "model_name": self.model_name,
+            "world_size": world_size,
+            "num_test_cases": len(test_case_idxs),
+            "run_one_data": run_one_data,
+            "max_iterations": max_iterations,
+            "warmup_iterations": warmup_iterations,
+            "test_cases": [],
+        }
         self._log(
             "runtime pipeline start: "
             f"world_size={world_size} "
@@ -385,6 +442,12 @@ class RuntimeLauncher:
             num_microbatches = len(self.datasets.data[test_case])
             if run_one_data:
                 num_microbatches = 1
+            test_case_report = {
+                "test_case_idx": idx,
+                "test_case": asdict(test_case),
+                "num_microbatches": num_microbatches,
+                "iterations": [],
+            }
 
             batch_seqlens = self._collect_batch_seqlens(test_case, num_microbatches)
             if batch_seqlens:
@@ -416,6 +479,7 @@ class RuntimeLauncher:
                     f"iter {iteration}: exited pre-barrier"
                 )
                 torch.cuda.synchronize()
+                reset_peak_memory_stats(synchronize=False)
                 self._log(
                     f"iter {iteration}: starting forward/backward"
                 )
@@ -442,16 +506,29 @@ class RuntimeLauncher:
                     f"iter {iteration}: exited post-barrier"
                 )
                 delta_time = time.perf_counter() - start_time
+                memory_by_rank = get_all_rank_peak_memory_stats(synchronize=False)
 
                 metrics = self._compute_perf_metrics(
                     batch_seqlens, delta_time, world_size
                 )
                 metrics["iteration"] = iteration
+                metrics["memory_by_rank"] = memory_by_rank
                 iteration_metrics.append(metrics)
+                test_case_report["iterations"].append(metrics)
+                max_peak_allocated = max(
+                    rank_stats["peak_allocated_bytes"] for rank_stats in memory_by_rank
+                )
+                max_peak_reserved = max(
+                    rank_stats["peak_reserved_bytes"] for rank_stats in memory_by_rank
+                )
+                max_real_detected = max(
+                    rank_stats["real_detected_bytes"] for rank_stats in memory_by_rank
+                )
                 self._log(
                     "iter {iteration} metrics: time_s={time_s:.4f} "
                     "tokens_per_s={tps:.2f} tokens_per_s_per_gpu={tps_pg:.2f} "
-                    "seqs_per_s={sps:.2f} seqs_per_s_per_gpu={sps_pg:.2f} mfu={mfu:.4f}".format(
+                    "seqs_per_s={sps:.2f} seqs_per_s_per_gpu={sps_pg:.2f} mfu={mfu:.4f} "
+                    "peak_alloc={peak_alloc} peak_reserved={peak_reserved} real_detected={real_detected}".format(
                         iteration=iteration,
                         time_s=metrics["time_s"],
                         tps=metrics["throughput_tokens_s"],
@@ -459,6 +536,9 @@ class RuntimeLauncher:
                         sps=metrics["throughput_sequences_s"],
                         sps_pg=metrics["throughput_sequences_s_per_gpu"],
                         mfu=metrics["mfu"],
+                        peak_alloc=get_memory_str(max_peak_allocated),
+                        peak_reserved=get_memory_str(max_peak_reserved),
+                        real_detected=get_memory_str(max_real_detected),
                     )
                 )
             self._maybe_destroy_tp_overlap()
@@ -486,14 +566,27 @@ class RuntimeLauncher:
                     "throughput_sequences_s_per_gpu"
                 ),
                 "mfu": _avg("mfu"),
+                "memory_by_rank": self._summarize_rank_memory(valid_metrics),
             }
             metrics_by_test_case.append(summary)
+            test_case_report["summary"] = summary
+            run_report["test_cases"].append(test_case_report)
+            max_case_peak_allocated = max(
+                rank_stats["peak_allocated_bytes"] for rank_stats in summary["memory_by_rank"]
+            )
+            max_case_peak_reserved = max(
+                rank_stats["peak_reserved_bytes"] for rank_stats in summary["memory_by_rank"]
+            )
+            max_case_real_detected = max(
+                rank_stats["real_detected_bytes"] for rank_stats in summary["memory_by_rank"]
+            )
             log_rank0(
                 "[runtime] test_case_idx={idx} microbatches={num_microbatches} "
                 "iters={max_iterations} warmup={warmup} "
                 "tokens={tokens} seqs={seqs} time_s={time_s:.4f} "
                 "tokens_per_s={tps:.2f} tokens_per_s_per_gpu={tps_pg:.2f} "
-                "seqs_per_s={sps:.2f} seqs_per_s_per_gpu={sps_pg:.2f} mfu={mfu:.4f}".format(
+                "seqs_per_s={sps:.2f} seqs_per_s_per_gpu={sps_pg:.2f} mfu={mfu:.4f} "
+                "peak_alloc={peak_alloc} peak_reserved={peak_reserved} real_detected={real_detected}".format(
                     idx=idx,
                     num_microbatches=num_microbatches,
                     max_iterations=max_iterations,
@@ -506,7 +599,21 @@ class RuntimeLauncher:
                     sps=summary["throughput_sequences_s"],
                     sps_pg=summary["throughput_sequences_s_per_gpu"],
                     mfu=summary["mfu"],
+                    peak_alloc=get_memory_str(max_case_peak_allocated),
+                    peak_reserved=get_memory_str(max_case_peak_reserved),
+                    real_detected=get_memory_str(max_case_real_detected),
                 )
             )
+
+        self.latest_run_report = run_report
+        if (
+            output_dir is not None
+            and (not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0)
+        ):
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, "runtime_baseline.json")
+            with open(output_path, "w") as fp:
+                json.dump(run_report, fp, indent=2)
+            log_rank0(f"runtime baseline report saved to {output_path}")
 
         return metrics_by_test_case

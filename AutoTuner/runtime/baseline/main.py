@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+from datetime import datetime
 from typing import List, Optional
 
 import torch
@@ -195,6 +196,13 @@ def parse_args():
         default=os.getenv("AUTOTUNER_LOG_LEVEL", "INFO"),
         help="Logging level (DEBUG, INFO, WARNING, ERROR)",
     )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        required=False,
+        default="outputs",
+        help="Base output directory. Results are saved to outputs/<timestamp>/<model>/runtime_baseline",
+    )
 
     parser = parse_distributed_args(parser)
     args = parser.parse_args()
@@ -223,6 +231,21 @@ def load_test_cases(args) -> List[InputTestCase]:
 def load_override_config(path: str) -> dict:
     with open(path, "r") as fp:
         return json.load(fp)
+
+
+def build_runtime_output_dir(base_output_dir: str, model_name: str) -> str:
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    if torch.distributed.is_initialized():
+        timestamp_holder = [timestamp if torch.distributed.get_rank() == 0 else None]
+        torch.distributed.broadcast_object_list(timestamp_holder, src=0)
+        timestamp = timestamp_holder[0]
+
+    output_dir = os.path.join(base_output_dir, timestamp, model_name, "runtime_baseline")
+    if (not torch.distributed.is_initialized()) or torch.distributed.get_rank() == 0:
+        os.makedirs(output_dir, exist_ok=True)
+    if torch.distributed.is_initialized():
+        torch.distributed.barrier()
+    return output_dir
 
 
 def main():
@@ -271,6 +294,8 @@ def main():
             f"cuda_device={torch.cuda.current_device()} "
             f"cuda_name={torch.cuda.get_device_name(torch.cuda.current_device())}"
         )
+    runtime_output_dir = build_runtime_output_dir(args.output_dir, args.model_name)
+    log_rank0(f"runtime baseline output_dir={runtime_output_dir}")
 
     try:
         test_cases = load_test_cases(args)
@@ -290,12 +315,22 @@ def main():
             use_distributed_optimizer=False,
             fix_compute_amount=True,
         )
-        launcher.run_pipeline(
+        metrics_by_test_case = launcher.run_pipeline(
             num_test_cases=args.num_test_cases,
             run_one_data=args.run_one_data,
             max_iterations=args.max_iterations,
             warmup_iterations=args.warmup_iterations,
+            output_dir=runtime_output_dir,
         )
+        if (not torch.distributed.is_initialized()) or torch.distributed.get_rank() == 0:
+            with open(os.path.join(runtime_output_dir, "runtime_summary.json"), "w") as fp:
+                json.dump(metrics_by_test_case, fp, indent=2)
+            with open(os.path.join(runtime_output_dir, "args.json"), "w") as fp:
+                json.dump(vars(args), fp, indent=2)
+            log_rank0(
+                "runtime baseline summary saved to "
+                f"{os.path.join(runtime_output_dir, 'runtime_summary.json')}"
+            )
     finally:
         if torch.distributed.is_initialized():
             destroy_distributed()

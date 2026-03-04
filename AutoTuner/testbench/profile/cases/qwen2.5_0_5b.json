@@ -1,0 +1,30 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B",
+  "cases":
+  [
+    {
+      "batch_size": 128,
+      "micro_batch_size": 2,
+      "seqlen": 1024,
+      "max_token_len": 8192,
+      "shape": "bshd",
+      "system": "megatron"
+    },
+    {
+      "batch_size": 128,
+      "micro_batch_size": 2,
+      "seqlen": 1024,
+      "max_token_len": 8192,
+      "shape": "thd",
+      "system": "megatron"
+    },
+    {
+      "batch_size": 128,
+      "micro_batch_size": 2,
+      "seqlen": 1024,
+      "max_token_len": 8192,
+      "shape": "bshd",
+      "system": "megatron"
+    }
+  ]
+}
