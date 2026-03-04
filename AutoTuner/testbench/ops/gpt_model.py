@@ -73,7 +73,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
         tp_group: Optional[torch.distributed.ProcessGroup] = None,
         **kwargs,
     ):
-        vp_stage = kwargs.get("vp_stage", None)
+        vp_stage = kwargs.pop("vp_stage", None)
         GPTModel.__init__(
             self,
             config=tf_config,
@@ -88,6 +88,7 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             position_embedding_type="rope",
             scatter_embedding_sequence_parallel=scatter_to_sequence_parallel,
             seq_len_interpolation_factor=None,
+            vp_stage=vp_stage,
             **kwargs,
         )
         CommonOpsForTest.__init__(

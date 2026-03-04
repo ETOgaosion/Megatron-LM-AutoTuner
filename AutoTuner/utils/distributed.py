@@ -5,20 +5,11 @@ from megatron.core import parallel_state as mpu
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 
 
-def _get_local_device_index() -> int:
-    return int(os.environ.get("LOCAL_RANK", "0"))
-
-
 def _init_nccl_process_group() -> None:
     """Initialize NCCL process group with explicit device binding when supported."""
-    local_rank = _get_local_device_index()
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     torch.cuda.set_device(torch.device(local_rank))
-
-    try:
-        torch.distributed.init_process_group("nccl", device_id=torch.device(local_rank))
-    except TypeError:
-        torch.distributed.init_process_group("nccl")
-
+    torch.distributed.init_process_group("nccl", device_id=torch.device(local_rank))
 
 def init_distributed_single_node():
     """Initialize distributed environment"""
