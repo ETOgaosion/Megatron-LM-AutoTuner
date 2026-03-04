@@ -37,7 +37,6 @@ class TestAttnFuncWithCPAndKVP2P(TestWithHiddenInputs):
         theoretical_flops: bool = False,
         theoretical_activations: bool = False,
         tp_comm_overlap_cfg: str = None,
-        #
         pg_collection=None,
     ):
         super().__init__(
