@@ -5,13 +5,19 @@ from megatron.core import parallel_state as mpu
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 
 
+def _init_nccl_process_group() -> None:
+    """Initialize NCCL process group with explicit device binding when supported."""
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    torch.cuda.set_device(torch.device(local_rank))
+    torch.distributed.init_process_group("nccl", device_id=torch.device(local_rank))
+
 def init_distributed_single_node():
     """Initialize distributed environment"""
     os.environ["RANK"] = "0"
     os.environ["WORLD_SIZE"] = "1"
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
-    torch.distributed.init_process_group("nccl")
+    _init_nccl_process_group()
     mpu.initialize_model_parallel(
         tensor_model_parallel_size=1,
         virtual_pipeline_model_parallel_size=None,
@@ -30,8 +36,7 @@ def init_distributed_multi_nodes(
     vpp: int | None = None,
 ) -> None:
     """Initialize distributed environment"""
-    torch.distributed.init_process_group("nccl")
-    torch.cuda.set_device(torch.device(int(os.environ["LOCAL_RANK"])))
+    _init_nccl_process_group()
     if pp <= 1:
         # check megatron arguments.py
         assert vpp is None, "vpp must be None when pp <= 1"
