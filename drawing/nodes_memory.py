@@ -196,6 +196,7 @@ def plot_stage_memory(
     model_name: str,
     output_path: Path,
     dpi: int,
+    font_size: float,
 ) -> None:
     stages = [f"PP{i}" for i in range(len(stage_bytes))]
     measured_gib = [
@@ -214,6 +215,7 @@ def plot_stage_memory(
     fig, ax = plt.subplots(figsize=(fig_width, 5.0))
     x = list(range(len(stages)))
     width = 0.38
+    value_font_size = max(8.0, font_size - 1.0)
     measured_bars = ax.bar(
         [idx - width / 2 for idx in x],
         measured_gib,
@@ -237,7 +239,7 @@ def plot_stage_memory(
                 "N/A",
                 ha="center",
                 va="bottom",
-                fontsize=9,
+                fontsize=value_font_size,
             )
             continue
         ax.text(
@@ -246,7 +248,7 @@ def plot_stage_memory(
             f"{raw_value / BYTES_PER_GIB:.2f}",
             ha="center",
             va="bottom",
-            fontsize=9,
+            fontsize=value_font_size,
         )
     for bar, raw_value in zip(synthetic_bars, synthetic_stage_bytes):
         if raw_value is None:
@@ -256,7 +258,7 @@ def plot_stage_memory(
                 "N/A",
                 ha="center",
                 va="bottom",
-                fontsize=9,
+                fontsize=value_font_size,
             )
             continue
         ax.text(
@@ -265,19 +267,21 @@ def plot_stage_memory(
             f"{raw_value / BYTES_PER_GIB:.2f}",
             ha="center",
             va="bottom",
-            fontsize=9,
+            fontsize=value_font_size,
         )
 
     metric_name = MEMORY_METRICS[metric]
     ax.set_title(
         f"Pipeline Stage Memory ({metric_name})\n"
-        f"{model_name} | {source_name} | reduce={reducer}"
+        f"{model_name} | {source_name} | reduce={reducer}",
+        fontsize=font_size + 2,
     )
-    ax.set_xlabel("Pipeline Stage")
-    ax.set_ylabel("Memory (GiB)")
-    ax.set_xticks(x, stages)
+    ax.set_xlabel("Pipeline Stage", fontsize=font_size)
+    ax.set_ylabel("Memory (GiB)", fontsize=font_size)
+    ax.set_xticks(x, stages, fontsize=font_size)
+    ax.tick_params(axis="y", labelsize=font_size)
     ax.grid(axis="y", linestyle="--", alpha=0.3)
-    ax.legend()
+    ax.legend(fontsize=font_size)
     fig.tight_layout()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -351,12 +355,20 @@ def _build_args() -> argparse.Namespace:
         default=1.08,
         help="Max multiplicative ratio for synthetic values over PP[-2] reference.",
     )
+    parser.add_argument(
+        "--font-size",
+        type=float,
+        default=12.0,
+        help="Base font size for title/axes/ticks/legend/value labels.",
+    )
     parser.add_argument("--dpi", type=int, default=160, help="Image DPI.")
     args = parser.parse_args()
     if args.random_ratio_min <= 0 or args.random_ratio_max <= 0:
         raise ValueError("--random-ratio-min and --random-ratio-max must be > 0.")
     if args.random_ratio_max < args.random_ratio_min:
         raise ValueError("--random-ratio-max must be >= --random-ratio-min.")
+    if args.font_size <= 0:
+        raise ValueError("--font-size must be > 0.")
     return args
 
 
@@ -393,6 +405,7 @@ def main() -> None:
         model_name=model_name,
         output_path=output_path,
         dpi=args.dpi,
+        font_size=args.font_size,
     )
 
     print(f"Saved figure: {output_path}")

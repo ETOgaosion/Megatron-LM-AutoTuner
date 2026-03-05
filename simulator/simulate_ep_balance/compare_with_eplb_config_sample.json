@@ -1,0 +1,32 @@
+{
+  "data_path": "simulator/simulate_ep_balance/data/routed_experts_stats.json",
+  "model_config": "/data/common/models/Qwen/Qwen1.5-MoE-A2.7B/config.json",
+  "activation_multiplier": 1.0,
+  "no_plot": false,
+  "ep_defaults": {
+    "eplb_redundant_ratio": 0.2,
+    "eplb_min_redundant": 0,
+    "num_groups": "same_as_ep",
+    "num_nodes": "same_as_ep"
+  },
+  "ep_settings": [
+    {
+      "ep_size": 4,
+      "num_replicas": 72,
+      "num_groups": 4,
+      "num_nodes": 4
+    },
+    {
+      "ep_size": 5,
+      "num_replicas": 80,
+      "num_groups": 5,
+      "num_nodes": 5
+    },
+    {
+      "ep_size": 6,
+      "num_replicas": 84,
+      "num_groups": 6,
+      "num_nodes": 6
+    }
+  ]
+}

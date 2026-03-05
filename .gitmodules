@@ -19,3 +19,6 @@
 [submodule "verl-enhanced"]
 	path = verl-enhanced
 	url = git@github.com:ETOgaosion/verl.git
+[submodule "EPLB"]
+	path = EPLB
+	url = https://github.com/deepseek-ai/EPLB.git
