@@ -1,0 +1,94 @@
+[
+  {
+    "model_name": "Qwen/Qwen2.5-0.5B",
+    "configs": {
+      "case": {
+        "seqlen": 20480,
+        "max_token_len": 40960,
+        "batch_size": 1,
+        "micro_batch_size": 1,
+        "shapes": [
+          "bshd",
+          "thd"
+        ],
+        "system": "megatron"
+      },
+      "parallel": {
+        "tp_size": 1,
+        "cp_size": 4,
+        "ep_size": 1,
+        "etp_size": 1,
+        "pp_size": 2,
+        "vpp_size": 2
+      },
+      "runtime": {
+        "num_test_cases": 1,
+        "max_iterations": 10,
+        "warmup_iterations": 3,
+        "share_emb": null
+      },
+      "paths": {
+        "test_cases_dir": "tests/functional_test/runtime/generated_cases/qwen_longctx",
+        "output_dir": "outputs"
+      },
+      "env": {
+        "CUDA_DEVICE_MAX_CONNECTIONS": "1",
+        "NVTE_FLASH_ATTN": "1",
+        "NVTE_FUSED_ATTN": "0",
+        "UB_SKIPMC": "1"
+      }
+    }
+  },
+  {
+    "model_name": "Qwen/Qwen2.5-7B",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen2.5-72B",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen3-0.6B",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen3-0.6B-Base",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen3-1.7B",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen3-1.7B-Base",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen3-4B",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen3-4B-Base",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen3-8B",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen3-8B-Base",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen3-14B",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen3-14B-Base",
+    "configs": {}
+  },
+  {
+    "model_name": "Qwen/Qwen1.5-MoE-A2.7B",
+    "configs": {}
+  }
+]
