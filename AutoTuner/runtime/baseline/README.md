@@ -19,7 +19,7 @@ It is intended for:
 3. Build HF config + TransformerConfig (with some runtime-friendly defaults enabled).
 4. Generate synthetic microbatches (rank 0) and broadcast to all ranks.
 5. For each test case, run `max_iterations` iterations of Megatron forward/backward.
-6. Record iteration metrics, exclude warmup iterations for averages, and save reports.
+6. Record measured iteration metrics, simulate full-model PP/DP runtime from the lightweight launcher result, exclude warmup iterations for averages, and save reports.
 
 Notes:
 - Execution uses `forward_only=False`, so this is a train-step style baseline (no optimizer step).
@@ -48,6 +48,44 @@ torchrun \
 Or use the provided scripts:
 - `tests/functional_test/runtime/runtime_baseline_run.sh`
 - `tests/functional_test/runtime/runtime_baseline_run_qwen_longctx.sh`
+- `tests/functional_test/runtime/runtime_baseline_run_simulation.sh`
+- `tests/functional_test/runtime/runtime_baseline_run_simulation_example.sh`
+
+## Run And Simulate
+
+Recommended environment:
+
+```bash
+conda activate megatron-lm-autotuner
+export PYTHONPATH=verl:Megatron-LM
+```
+
+Run one baseline job and emit both measured runtime and simulated full-model runtime:
+
+```bash
+bash tests/functional_test/runtime/runtime_baseline_run_simulation.sh
+```
+
+The example script:
+- launches `torchrun -m AutoTuner.runtime.baseline.main`
+- keeps fused-kernel post-process enabled by default with `AUTOTUNER_RUNTIME_USE_FUSED_KERNELS=1`
+- sets simulator DP knobs with `AUTOTUNER_BASELINE_DP_ALLREDUCE_BANDWIDTH_GBPS` and `AUTOTUNER_BASELINE_DP_ALLREDUCE_LATENCY_US`
+- prints the latest measured vs simulated summary after the run
+
+If you want to tune the simulator only, keep the model/test case fixed and change these env vars before running:
+
+```bash
+export AUTOTUNER_BASELINE_DP_ALLREDUCE_BANDWIDTH_GBPS=900
+export AUTOTUNER_BASELINE_DP_ALLREDUCE_LATENCY_US=8
+bash tests/functional_test/runtime/runtime_baseline_run_simulation.sh
+```
+
+If you want to disable the actor-style fused forward path:
+
+```bash
+export AUTOTUNER_RUNTIME_USE_FUSED_KERNELS=0
+bash tests/functional_test/runtime/runtime_baseline_run_simulation.sh
+```
 
 ## Required Inputs
 
@@ -125,19 +163,51 @@ Files:
 - `runtime_summary.json`: compact per-test-case summary (warmup-filtered averages)
 - `args.json`: resolved CLI args and resolved file paths
 
+To inspect the latest summary quickly:
+
+```bash
+python - <<'PY'
+import json
+from pathlib import Path
+
+paths = sorted(Path("outputs").glob("*/**/runtime_baseline/runtime_summary.json"))
+summary_path = paths[-1]
+print(summary_path)
+data = json.loads(summary_path.read_text())
+for item in data:
+    print(
+        item["test_case_idx"],
+        item["time_s"],
+        item["simulated_time_s"],
+        item["simulated_pp_compute_time_s"],
+        item["simulated_dp_allreduce_time_s"],
+    )
+PY
+```
+
 ## Metrics
 
 Per iteration:
 - `time_s`
+- `simulated_time_s`
 - `total_tokens`, `total_sequences`
 - `throughput_tokens_s`, `throughput_tokens_s_per_gpu`
+- `simulated_throughput_tokens_s`, `simulated_throughput_tokens_s_per_gpu`
 - `throughput_sequences_s`, `throughput_sequences_s_per_gpu`
-- `mfu`
+- `simulated_throughput_sequences_s`, `simulated_throughput_sequences_s_per_gpu`
+- `mfu`, `simulated_mfu`
 - `memory_by_rank` (peak allocated/reserved/real-detected + device totals)
+- `simulation`:
+  - PP stage layer counts for lightweight/full model
+  - measured per-rank PP stage forward/backward time from the lightweight run
+  - simulated PP compute time from step-wise bottleneck scheduling
+  - simulated DP all-reduce time from full stage parameter bytes
 
 Summary per test case:
 - Averages computed after dropping `warmup_iterations` (or all iterations if none remain)
 - Memory summary keeps max peak values across valid iterations per rank
+- `time_s` is the measured lightweight runtime
+- `simulated_time_s = simulated_pp_compute_time_s + simulated_dp_allreduce_time_s`
 
 ## Important Behavior and Caveats
 
@@ -146,6 +216,14 @@ Summary per test case:
   - This means each PP rank builds `vpp` decoder layers, instead of all original model layers on that rank.
   - Each built layer is remapped to the first layer index of its theoretical chunk from the full model.
   - Embedding and post-process/output behavior is unchanged: only first PP stage has embedding (`pre_process=True`), only last PP stage has post-process/output (`post_process=True`).
+- Full-model simulator:
+  - PP compute is reconstructed from measured per-rank PP stage forward/backward time in the lightweight run.
+  - Each PP rank time is scaled by its theoretical full-model layer count.
+  - PP step bottlenecks are simulated from a training-style 1F1B pipeline schedule, using the slowest active PP stage at each scheduled step.
+  - DP time is simulated as a per-stage gradient all-reduce over the full-model parameter bytes on that stage, and the slowest stage all-reduce is added to the iteration time.
+- Loss/post-process path:
+  - Baseline uses actor-style next-token log-prob post-processing instead of a raw logits mean reduction.
+  - When enabled, baseline patches the same fused MCore forward path used by `verl` Megatron actor code.
 - `vpp` constraint: when `pipeline-model-parallel-size <= 1`, `virtual-pipeline-model-parallel-size` must be `None`.
 - TP overlap user buffers are initialized only when:
   - tensor parallel world size > 1
@@ -158,3 +236,6 @@ Summary per test case:
 
 - `AUTOTUNER_LOG_LEVEL`: default log level when `--log-level` is not passed.
 - `AUTOTUNER_LOG_ALL_RANKS`: if truthy (`1/true/yes/on`), microbatch logs are emitted from all ranks.
+- `AUTOTUNER_RUNTIME_USE_FUSED_KERNELS`: enables actor-style fused MCore forward patching in baseline (default: `1`).
+- `AUTOTUNER_BASELINE_DP_ALLREDUCE_BANDWIDTH_GBPS`: simulator DP all-reduce bandwidth override (default: `50`).
+- `AUTOTUNER_BASELINE_DP_ALLREDUCE_LATENCY_US`: simulator DP all-reduce per-hop latency override in microseconds (default: `30`).

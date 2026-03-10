@@ -404,9 +404,12 @@ def build_command(spec: dict[str, Any]) -> list[str]:
     runtime = spec["runtime"]
     parallel = spec["parallel"]
     dist = spec["distributed"]
+    python_bin = os.environ.get("PYTHON_BIN", sys.executable)
 
     cmd = [
-        "torchrun",
+        python_bin,
+        "-m",
+        "torch.distributed.run",
         "--nproc_per_node",
         str(spec["gpus_per_node"]),
         "--nnodes",
@@ -560,6 +563,7 @@ def run_one(spec: dict[str, Any], dry_run: bool, repo_root: Path) -> None:
 
     run_env = os.environ.copy()
     run_env.update(spec["env"])
+    run_env["PYTHON_BIN"] = run_env.get("PYTHON_BIN", sys.executable)
     subprocess.run(cmd, check=True, cwd=repo_root, env=run_env)
 
 

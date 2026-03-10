@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+PYTHON_BIN="${PYTHON_BIN:-$(command -v python)}"
+
 source .secrets/env.sh
 
 if [ -f tests/functional_test/runtime/test_env.sh ]; then
@@ -78,6 +80,8 @@ export NVTE_FLASH_ATTN=1
 export NVTE_FUSED_ATTN=0
 export UB_SKIPMC=1
 
-torchrun ${DISTRIBUTED_ARGS[@]} -m AutoTuner.runtime.baseline.main \
+echo "Using python: $PYTHON_BIN"
+
+"$PYTHON_BIN" -m torch.distributed.run "${DISTRIBUTED_ARGS[@]}" -m AutoTuner.runtime.baseline.main \
     ${RUNTIME_ARGS[@]} \
     ${PARALLEL_ARGS[@]}
