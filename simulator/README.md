@@ -53,6 +53,20 @@ Main files:
 - `memory_compare_all_ep_sizes.png` (stacked bars: weights + activation)
 - `variance_summary_compare.png`
 
+### 3) Test EPLB and LPLB one-layer timing (4 MoE models)
+
+```bash
+python simulator/simulate_ep_balance/benchmark_eplb_lplb_one_layer.py
+```
+
+Output:
+- `outputs/simulate_ep_balance/test_eplb_lplb/<timestamp>/`
+
+Main files:
+- `timing_results.json`
+- `timing_summary.csv`
+- `time_compare_ours_eplb_lplb.png`
+
 ## Compare Config
 
 Template:

@@ -22,3 +22,6 @@
 [submodule "EPLB"]
 	path = EPLB
 	url = https://github.com/deepseek-ai/EPLB.git
+[submodule "LPLB"]
+	path = LPLB
+	url = https://github.com/deepseek-ai/LPLB.git

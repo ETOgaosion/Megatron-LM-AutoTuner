@@ -1,0 +1,17 @@
+{
+    "total_memory": {
+        "original": 68.44,
+        "nccl-plugin": 67.62,
+        "our": 64.23
+    },
+    "runtime_memory": {
+        "original": 30.66,
+        "nccl-plugin": 27.58,
+        "our": 26.45
+    },
+    "offload_memory": {
+        "original": 37.78,
+        "nccl-plugin": 40.04,
+        "our": 37.78
+    }
+}

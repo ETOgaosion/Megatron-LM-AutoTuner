@@ -214,7 +214,7 @@ def plot_stage_memory(
     fig_width = max(8.0, len(stages) * 1.2)
     fig, ax = plt.subplots(figsize=(fig_width, 5.0))
     x = list(range(len(stages)))
-    width = 0.38
+    width = 0.30
     value_font_size = max(8.0, font_size - 1.0)
     measured_bars = ax.bar(
         [idx - width / 2 for idx in x],
@@ -328,7 +328,7 @@ def _build_args() -> argparse.Namespace:
     parser.add_argument(
         "--metric",
         choices=list(MEMORY_METRICS.keys()),
-        default="real_detected_bytes",
+        default="peak_reserved_bytes",
         help="Memory metric to plot.",
     )
     parser.add_argument(
