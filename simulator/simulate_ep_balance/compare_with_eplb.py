@@ -22,6 +22,13 @@ sys.path.insert(0, str(REPO_ROOT / "EPLB"))
 import eplb  # noqa: E402
 from simulate_ep_balance import load_expert_tokens, simulate_for_ep, valid_ep_sizes  # noqa: E402
 
+COLOR_BEFORE = "#4C78A8"
+COLOR_BEFORE_LIGHT = "#9ecae9"
+COLOR_EPLB = "#E15759"
+COLOR_EPLB_LIGHT = "#f3b0b1"
+COLOR_OURS = "#59A14F"
+COLOR_OURS_LIGHT = "#b9dfb0"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compare our EP balancing with EPLB.")
@@ -389,17 +396,28 @@ def plot_token_balance(
     import matplotlib.pyplot as plt
 
     x = np.arange(ep_size)
-    width = 0.26
+    title_fontsize = 18
+    axis_label_fontsize = 17
+    tick_fontsize = 15
+    legend_fontsize = 14
 
-    plt.figure(figsize=(max(8, ep_size * 0.75), 5))
-    plt.bar(x - width, old_gpu, width=width, label="Before reorder")
-    plt.bar(x, eplb_gpu, width=width, label="EPLB")
-    plt.bar(x + width, ours_gpu, width=width, label="Our method")
-    plt.xlabel("GPU rank")
-    plt.ylabel("Token count (sum over layers)")
-    plt.title(f"Token balance comparison (EP={ep_size})")
-    plt.xticks(x)
-    plt.legend()
+    plt.figure(figsize=(max(10, ep_size * 0.95), 6.2))
+    plt.plot(x, old_gpu, marker="o", markersize=7, linewidth=2.3, color=COLOR_BEFORE, label="Before reorder")
+    plt.plot(x, eplb_gpu, marker="o", markersize=7, linewidth=2.3, color=COLOR_EPLB, label="EPLB")
+    plt.plot(x, ours_gpu, marker="o", markersize=7, linewidth=2.3, color=COLOR_OURS, label="Our method")
+    avg_tokens = float(np.mean(old_gpu))
+    plt.axhline(avg_tokens, color="black", linestyle="--", linewidth=1.4, label="Average tokens")
+    y_values = old_gpu + eplb_gpu + ours_gpu + [avg_tokens]
+    y_min = min(y_values)
+    y_max = max(y_values)
+    y_pad = (y_max - y_min) * 0.08 if y_max > y_min else max(abs(y_min) * 0.05, 1.0)
+    plt.ylim(bottom=y_min - y_pad)
+    plt.xlabel("GPU rank", fontsize=axis_label_fontsize)
+    plt.ylabel("Token count (sum over layers)", fontsize=axis_label_fontsize)
+    plt.title(f"Token balance comparison (EP={ep_size})", fontsize=title_fontsize)
+    plt.xticks(x, fontsize=tick_fontsize)
+    plt.yticks(fontsize=tick_fontsize)
+    plt.legend(fontsize=legend_fontsize)
     plt.tight_layout()
     plt.savefig(output_dir / f"token_balance_compare_ep{ep_size}.png", dpi=220)
     plt.close()
@@ -411,6 +429,10 @@ def plot_memory_compare_all_eps(results_by_ep: dict[int, dict[str, Any]], output
     eps = sorted(results_by_ep.keys())
     x = np.arange(len(eps), dtype=np.float64) * 4.0
     width = 0.75
+    title_fontsize = 18
+    axis_label_fontsize = 15
+    tick_fontsize = 13
+    legend_fontsize = 12
 
     before_w = [results_by_ep[ep]["memory"]["before"]["weight_gib_per_gpu"] for ep in eps]
     before_a = [results_by_ep[ep]["memory"]["before"]["max_activation_gib"] for ep in eps]
@@ -426,20 +448,21 @@ def plot_memory_compare_all_eps(results_by_ep: dict[int, dict[str, Any]], output
     ours_x = x + width
 
     # Same column bar (stacked): model weights + activation.
-    plt.bar(before_x, before_w, width=width, color="#4C78A8", label="Before: weights")
-    plt.bar(before_x, before_a, width=width, bottom=before_w, color="#9ecae9", label="Before: activation")
+    plt.bar(before_x, before_w, width=width, color=COLOR_BEFORE, label="Before: weights")
+    plt.bar(before_x, before_a, width=width, bottom=before_w, color=COLOR_BEFORE_LIGHT, label="Before: activation")
 
-    plt.bar(eplb_x, eplb_w, width=width, color="#E15759", label="EPLB: weights")
-    plt.bar(eplb_x, eplb_a, width=width, bottom=eplb_w, color="#f3b0b1", label="EPLB: activation")
+    plt.bar(eplb_x, eplb_w, width=width, color=COLOR_EPLB, label="EPLB: weights")
+    plt.bar(eplb_x, eplb_a, width=width, bottom=eplb_w, color=COLOR_EPLB_LIGHT, label="EPLB: activation")
 
-    plt.bar(ours_x, ours_w, width=width, color="#59A14F", label="Our method: weights")
-    plt.bar(ours_x, ours_a, width=width, bottom=ours_w, color="#b9dfb0", label="Our method: activation")
+    plt.bar(ours_x, ours_w, width=width, color=COLOR_OURS, label="Our method: weights")
+    plt.bar(ours_x, ours_a, width=width, bottom=ours_w, color=COLOR_OURS_LIGHT, label="Our method: activation")
 
-    plt.xticks(x, [str(ep) for ep in eps])
-    plt.xlabel("EP size")
-    plt.ylabel("Max GPU memory (GiB)")
-    plt.title("Max GPU memory comparison across EP sizes")
-    plt.legend(ncol=3, fontsize=9)
+    plt.xticks(x, [str(ep) for ep in eps], fontsize=tick_fontsize)
+    plt.yticks(fontsize=tick_fontsize)
+    plt.xlabel("EP size", fontsize=axis_label_fontsize)
+    plt.ylabel("Max GPU memory (GiB)", fontsize=axis_label_fontsize)
+    plt.title("Max GPU memory comparison across EP sizes", fontsize=title_fontsize)
+    plt.legend(ncol=3, fontsize=legend_fontsize)
     plt.tight_layout()
     plt.savefig(output_dir / "memory_compare_all_ep_sizes.png", dpi=220)
     plt.close()
@@ -449,23 +472,58 @@ def plot_summary_curves(results_by_ep: dict[int, dict[str, Any]], output_dir: Pa
     import matplotlib.pyplot as plt
 
     eps = sorted(results_by_ep.keys())
+    x = np.arange(len(eps))
+    ep_labels = [str(ep) for ep in eps]
+    title_fontsize = 18
+    axis_label_fontsize = 17
+    tick_fontsize = 15
+    legend_fontsize = 14
 
     old_var = [results_by_ep[ep]["before"]["global_variance"] for ep in eps]
     ours_var = [results_by_ep[ep]["ours"]["global_variance"] for ep in eps]
     eplb_var = [results_by_ep[ep]["eplb"]["global_variance"] for ep in eps]
+    positive_values = [v for v in old_var + ours_var + eplb_var if v > 0]
+    min_positive = min(positive_values) if positive_values else 1e-12
+    safe_floor = min_positive * 0.5
+    old_var_log10 = [math.log10(v if v > 0 else safe_floor) for v in old_var]
+    ours_var_log10 = [math.log10(v if v > 0 else safe_floor) for v in ours_var]
+    eplb_var_log10 = [math.log10(v if v > 0 else safe_floor) for v in eplb_var]
+    all_log10 = old_var_log10 + ours_var_log10 + eplb_var_log10
+    y_min = min(all_log10)
+    y_max = max(all_log10)
+    y_pad = (y_max - y_min) * 0.08 if y_max > y_min else 0.2
+    y_axis_min = y_min - y_pad
+    y_axis_max = y_max + y_pad * 0.2
+    y_tick_start = int(math.floor(y_axis_min))
+    y_tick_end = int(math.ceil(y_axis_max))
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(eps, old_var, marker="o", linewidth=2, label="Before")
-    plt.plot(eps, ours_var, marker="o", linewidth=2, label="Our method")
-    plt.plot(eps, eplb_var, marker="o", linewidth=2, label="EPLB")
-    plt.xlabel("EP size")
-    plt.ylabel("Global token variance")
-    plt.title("Token variance across EP sizes")
-    plt.xticks(eps)
-    plt.legend()
+    plt.figure(figsize=(max(10, len(eps) * 0.95), 6.2))
+    plt.plot(x, old_var_log10, marker="o", linewidth=2, color=COLOR_BEFORE, label="Before")
+    plt.plot(x, eplb_var_log10, marker="o", linewidth=2, color=COLOR_EPLB, label="EPLB")
+    plt.plot(x, ours_var_log10, marker="o", linewidth=2, color=COLOR_OURS, label="Our method")
+    plt.ylim(y_axis_min, y_axis_max)
+    plt.yticks(np.arange(y_tick_start, y_tick_end + 1, 1), fontsize=tick_fontsize)
+    plt.xlabel("EP size", fontsize=axis_label_fontsize)
+    plt.ylabel("Global token variance (log10)", fontsize=axis_label_fontsize)
+    plt.title("Token variance across EP sizes (log10)", fontsize=title_fontsize)
+    plt.xticks(x, ep_labels, fontsize=tick_fontsize)
+    plt.legend(fontsize=legend_fontsize)
     plt.tight_layout()
     plt.savefig(output_dir / "variance_summary_compare.png", dpi=220)
     plt.close()
+
+
+def variance_breakdown(tokens: list[float]) -> dict[str, Any]:
+    tokens_np = np.array(tokens, dtype=np.float64)
+    mean = float(np.mean(tokens_np))
+    squared_diffs = ((tokens_np - mean) ** 2).tolist()
+    variance = float(np.mean(np.array(squared_diffs, dtype=np.float64)))
+    return {
+        "mean": mean,
+        "squared_diffs": squared_diffs,
+        "variance": variance,
+    }
+
 
 def main() -> None:
     args = parse_args()
@@ -663,6 +721,12 @@ def main() -> None:
     print(f"Saved outputs to: {output_dir}")
     for ep in sorted(results_by_ep.keys()):
         item = results_by_ep[ep]
+        before_tokens = [float(x) for x in item["before"]["global_gpu_tokens"]]
+        ours_tokens = [float(x) for x in item["ours"]["global_gpu_tokens"]]
+        eplb_tokens = [float(x) for x in item["eplb"]["global_gpu_tokens"]]
+        before_var = variance_breakdown(before_tokens)
+        ours_var = variance_breakdown(ours_tokens)
+        eplb_var = variance_breakdown(eplb_tokens)
         print(
             "EP={ep} | var before/ours/eplb: {vb:.2f}/{vo:.2f}/{ve:.2f} | max mem GiB before/ours/eplb: {mb:.3f}/{mo:.3f}/{me:.3f}".format(
                 ep=ep,
@@ -672,6 +736,24 @@ def main() -> None:
                 mb=item["memory"]["before"]["max_total_gib"],
                 mo=item["memory"]["ours"]["max_total_gib"],
                 me=item["memory"]["eplb"]["max_total_gib"],
+            )
+        )
+        print(f"  Before sum tokens per GPU: {before_tokens}")
+        print(
+            "  Before variance: mean={m:.6f}, squared_diffs={sd}, variance={v:.6f}".format(
+                m=before_var["mean"], sd=before_var["squared_diffs"], v=before_var["variance"]
+            )
+        )
+        print(f"  Our method sum tokens per GPU: {ours_tokens}")
+        print(
+            "  Our method variance: mean={m:.6f}, squared_diffs={sd}, variance={v:.6f}".format(
+                m=ours_var["mean"], sd=ours_var["squared_diffs"], v=ours_var["variance"]
+            )
+        )
+        print(f"  EPLB sum tokens per GPU: {eplb_tokens}")
+        print(
+            "  EPLB variance: mean={m:.6f}, squared_diffs={sd}, variance={v:.6f}".format(
+                m=eplb_var["mean"], sd=eplb_var["squared_diffs"], v=eplb_var["variance"]
             )
         )
 

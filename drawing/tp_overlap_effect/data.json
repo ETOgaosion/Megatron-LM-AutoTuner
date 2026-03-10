@@ -1,0 +1,38 @@
+[
+    {
+        "model": "Qwen2.5-0.5B",
+        "data": {
+            "original": 12.34,
+            "our": 11.96,
+            "blank": 11.89
+        },
+        "unit": "ms"
+    },
+    {
+        "model": "Qwen3-0.6B",
+        "data": {
+            "original": 15.78,
+            "our": 15.43,
+            "blank": 15.37
+        },
+        "unit": "ms"
+    },
+    {
+        "model": "Qwen3-1.7B",
+        "data": {
+            "original": 32.45,
+            "our": 31.42,
+            "blank": 31.95
+        },
+        "unit": "ms"
+    },
+    {
+        "model": "Qwen3-4B",
+        "data": {
+            "original": 45.89,
+            "our": 43.78,
+            "blank": 44.78
+        },
+        "unit": "ms"
+    }
+]

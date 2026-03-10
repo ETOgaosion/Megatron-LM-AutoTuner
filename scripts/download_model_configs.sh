@@ -18,6 +18,7 @@ TO_DOWNLOAD=(
     "Qwen/Qwen3-8B-Base"
     "Qwen/Qwen3-14B"
     "Qwen/Qwen3-14B-Base"
+    "Qwen/Qwen1.5-MoE-A2.7B"
     "Qwen/Qwen3-32B"
     "Qwen/Qwen3-30B-A3B"
     "Qwen/Qwen3-30B-A3B-Base"
