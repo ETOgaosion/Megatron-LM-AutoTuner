@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../../.." && pwd)
 cd "${REPO_ROOT}"
+PYTHON_BIN="${PYTHON_BIN:-$(command -v python)}"
 
 if [ -f .secrets/env.sh ]; then
     source .secrets/env.sh
@@ -34,4 +35,4 @@ PY_ARGS+=(
     --node-rank "${NODE_RANK}"
 )
 
-python3 "${SCRIPT_DIR}/runtime_baseline_run_from_config.py" "${PY_ARGS[@]}" "$@"
+"$PYTHON_BIN" "${SCRIPT_DIR}/runtime_baseline_run_from_config.py" "${PY_ARGS[@]}" "$@"
