@@ -92,6 +92,7 @@ class RuntimeLauncher:
 
         assert torch.distributed.is_initialized(), "torch.distributed is not initialized"
         self.tp_group = mpu.get_tensor_model_parallel_group()
+        self._configure_lightweight_pipeline_layers()
 
         self.datasets = DataSets(
             self.hf_config,
@@ -103,6 +104,8 @@ class RuntimeLauncher:
         log_rank0(
             "runtime dataset ready: "
             f"test_cases={len(self.test_cases)} "
+            f"original_layers={self.original_total_layers} "
+            f"runtime_layers={self.runtime_total_layers} "
             f"vpp={mpu.get_virtual_pipeline_model_parallel_world_size()} "
             f"fix_compute_amount={fix_compute_amount}"
         )
@@ -126,6 +129,80 @@ class RuntimeLauncher:
         else:
             log_rank0(message, level=level)
 
+    def _configure_lightweight_pipeline_layers(self):
+        """Build only one transformer layer per virtual chunk to avoid OOM."""
+        pp_size = max(1, mpu.get_pipeline_model_parallel_world_size())
+        vpp_size = mpu.get_virtual_pipeline_model_parallel_world_size() or 1
+
+        cfg = getattr(self.hf_config, "text_config", self.hf_config)
+        self.original_total_layers = int(
+            getattr(cfg, "num_hidden_layers", self.tf_config.num_layers)
+        )
+        self.original_total_layers = max(1, self.original_total_layers)
+        self.runtime_total_layers = pp_size * vpp_size
+        self.runtime_layers_per_pp_rank = vpp_size
+        self.flops_layer_scale = self.runtime_total_layers / max(1, self.original_total_layers)
+
+        # Force lightweight transformer depth: one layer per virtual chunk.
+        self.tf_config.num_layers = self.runtime_total_layers
+        self._log(
+            "runtime lightweight layer mode: "
+            f"original_total_layers={self.original_total_layers} "
+            f"runtime_total_layers={self.runtime_total_layers} "
+            f"pp={pp_size} vpp={vpp_size} "
+            f"layers_per_pp_rank={self.runtime_layers_per_pp_rank}"
+        )
+
+    def _representative_layer_number(
+        self, pp_rank: int, vp_stage: int, local_layer_idx: int = 0
+    ) -> int:
+        """Pick first layer of each theoretical chunk from the full model."""
+        pp_size = max(1, mpu.get_pipeline_model_parallel_world_size())
+        vpp_size = mpu.get_virtual_pipeline_model_parallel_world_size() or 1
+        total_chunks = pp_size * vpp_size
+        chunk_id = vp_stage * pp_size + pp_rank
+        first_layer = (chunk_id * self.original_total_layers) // total_chunks + 1
+        return first_layer + local_layer_idx
+
+    @staticmethod
+    def _set_layer_number(layer, layer_number: int):
+        layer.layer_number = layer_number
+        self_attention = getattr(layer, "self_attention", None)
+        if self_attention is not None and hasattr(self_attention, "layer_number"):
+            self_attention.layer_number = layer_number
+        cross_attention = getattr(layer, "cross_attention", None)
+        if cross_attention is not None and hasattr(cross_attention, "layer_number"):
+            cross_attention.layer_number = layer_number
+        mlp = getattr(layer, "mlp", None)
+        if mlp is not None:
+            if hasattr(mlp, "set_layer_number"):
+                mlp.set_layer_number(layer_number)
+            elif hasattr(mlp, "layer_number"):
+                mlp.layer_number = layer_number
+
+    def _assign_representative_layer_numbers(self, model):
+        pp_rank = mpu.get_pipeline_model_parallel_rank()
+        for chunk_idx, model_chunk in enumerate(model):
+            unwrapped = unwrap_model(model_chunk)
+            vp_stage = getattr(unwrapped, "vp_stage", None)
+            if vp_stage is None:
+                vp_stage = chunk_idx if len(model) > 1 else 0
+            decoder = getattr(unwrapped, "decoder", None)
+            layers = [] if decoder is None else list(getattr(decoder, "layers", []))
+            for local_layer_idx, layer in enumerate(layers):
+                representative_layer = self._representative_layer_number(
+                    pp_rank=pp_rank,
+                    vp_stage=vp_stage,
+                    local_layer_idx=local_layer_idx,
+                )
+                self._set_layer_number(layer, representative_layer)
+                self._log(
+                    "layer remap: "
+                    f"pp_rank={pp_rank} vp_stage={vp_stage} chunk_idx={chunk_idx} "
+                    f"local_layer_idx={local_layer_idx} layer_number={representative_layer}",
+                    all_ranks=True,
+                )
+
     def _build_model(self, wrap_with_ddp: bool, use_distributed_optimizer: bool):
         transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(
             num_experts=self.tf_config.num_moe_experts,
@@ -148,12 +225,14 @@ class RuntimeLauncher:
                 vp_stage=vp_stage,
             )
 
-        return get_model(
+        model = get_model(
             model_provider,
             wrap_with_ddp=wrap_with_ddp,
             use_distributed_optimizer=use_distributed_optimizer,
             transformer_config=self.tf_config,
         )
+        self._assign_representative_layer_numbers(model)
+        return model
 
     def _limit_iterator(self, data_iterator: Iterable, num_items: int):
         if isinstance(data_iterator, list):
@@ -277,6 +356,8 @@ class RuntimeLauncher:
         )
         if estimated_flops == 0.0:
             estimated_flops = self._estimate_generic_flops(batch_seqlens, delta_time)
+        else:
+            estimated_flops *= self.flops_layer_scale
         if promised_flops in (0, float("inf")):
             promised_flops = GPU_PEAK_FLOPS / 1e12
         if promised_flops == 0:
@@ -303,7 +384,7 @@ class RuntimeLauncher:
         config = getattr(self.hf_config, "text_config", self.hf_config)
         hidden_size = config.hidden_size
         vocab_size = config.vocab_size
-        num_hidden_layers = config.num_hidden_layers
+        num_hidden_layers = self.runtime_total_layers
         num_attention_heads = config.num_attention_heads
         num_key_value_heads = getattr(config, "num_key_value_heads", num_attention_heads)
         intermediate_size = getattr(config, "intermediate_size", hidden_size * 4)
@@ -422,6 +503,9 @@ class RuntimeLauncher:
         run_report = {
             "model_name": self.model_name,
             "world_size": world_size,
+            "original_total_layers": self.original_total_layers,
+            "runtime_total_layers": self.runtime_total_layers,
+            "runtime_layers_per_pp_rank": self.runtime_layers_per_pp_rank,
             "num_test_cases": len(test_case_idxs),
             "run_one_data": run_one_data,
             "max_iterations": max_iterations,

@@ -141,6 +141,11 @@ Summary per test case:
 
 ## Important Behavior and Caveats
 
+- Lightweight baseline layer construction:
+  - Runtime baseline builds `pp * vpp` decoder layers in total (one decoder layer per virtual chunk).
+  - This means each PP rank builds `vpp` decoder layers, instead of all original model layers on that rank.
+  - Each built layer is remapped to the first layer index of its theoretical chunk from the full model.
+  - Embedding and post-process/output behavior is unchanged: only first PP stage has embedding (`pre_process=True`), only last PP stage has post-process/output (`post_process=True`).
 - `vpp` constraint: when `pipeline-model-parallel-size <= 1`, `virtual-pipeline-model-parallel-size` must be `None`.
 - TP overlap user buffers are initialized only when:
   - tensor parallel world size > 1
@@ -153,4 +158,3 @@ Summary per test case:
 
 - `AUTOTUNER_LOG_LEVEL`: default log level when `--log-level` is not passed.
 - `AUTOTUNER_LOG_ALL_RANKS`: if truthy (`1/true/yes/on`), microbatch logs are emitted from all ranks.
-
