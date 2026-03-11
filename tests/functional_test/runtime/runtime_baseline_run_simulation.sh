@@ -16,6 +16,30 @@ if [ -f .secrets/env.sh ]; then
     source .secrets/env.sh
 fi
 
+USE_FUSED_KERNELS="true"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --use-fused-kernels)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing value for --use-fused-kernels" >&2
+                exit 1
+            fi
+            USE_FUSED_KERNELS="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [--use-fused-kernels true|false]"
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            echo "Usage: $0 [--use-fused-kernels true|false]" >&2
+            exit 1
+            ;;
+    esac
+done
+
 if [ -f tests/functional_test/runtime/test_env.sh ]; then
     source tests/functional_test/runtime/test_env.sh
 else
@@ -36,6 +60,7 @@ fi
 GPUS_PER_NODE=$(($TP_SIZE * $CP_SIZE * $EP_SIZE * $ETP_SIZE * $PP_SIZE))
 
 OUTPUT_BASE_DIR="${OUTPUT_BASE_DIR:-outputs/runtime_simulation}"
+CONFIG_DIR="${CONFIG_DIR:-AutoTuner/testbench/profile/configs/local}"
 MASTER_ADDR="${MASTER_ADDR:-localhost}"
 MASTER_PORT="${MASTER_PORT:-6010}"
 NUM_NODES="${NUM_NODES:-1}"
@@ -44,9 +69,6 @@ export CUDA_DEVICE_MAX_CONNECTIONS="${CUDA_DEVICE_MAX_CONNECTIONS:-1}"
 export NVTE_FLASH_ATTN="${NVTE_FLASH_ATTN:-1}"
 export NVTE_FUSED_ATTN="${NVTE_FUSED_ATTN:-0}"
 export UB_SKIPMC="${UB_SKIPMC:-1}"
-export AUTOTUNER_RUNTIME_USE_FUSED_KERNELS="${AUTOTUNER_RUNTIME_USE_FUSED_KERNELS:-1}"
-export AUTOTUNER_BASELINE_DP_ALLREDUCE_BANDWIDTH_GBPS="${AUTOTUNER_BASELINE_DP_ALLREDUCE_BANDWIDTH_GBPS:-50}"
-export AUTOTUNER_BASELINE_DP_ALLREDUCE_LATENCY_US="${AUTOTUNER_BASELINE_DP_ALLREDUCE_LATENCY_US:-30}"
 
 DISTRIBUTED_ARGS=(
     --nproc_per_node "$GPUS_PER_NODE"
@@ -70,10 +92,12 @@ fi
 RUNTIME_ARGS=(
     --model-name "$MODEL_NAME"
     --test-cases-file "$TEST_CASES_FILE"
+    --config-dir "$CONFIG_DIR"
     --output-dir "$OUTPUT_BASE_DIR"
     --num-test-cases "${NUM_TEST_CASES:-1}"
     --max-iterations "${MAX_ITERATIONS:-4}"
     --warmup-iterations "${WARMUP_ITERATIONS:-1}"
+    --use-fused-kernels "${USE_FUSED_KERNELS}"
 )
 
 if [[ "${SHARE_EMB}" != "None" ]]; then
@@ -83,7 +107,8 @@ fi
 echo "Running runtime baseline with simulator enabled"
 echo "  model: $MODEL_NAME"
 echo "  parallel: tp=$TP_SIZE cp=$CP_SIZE ep=$EP_SIZE etp=$ETP_SIZE pp=$PP_SIZE vpp=$VPP_SIZE"
-echo "  simulator: dp_bw=${AUTOTUNER_BASELINE_DP_ALLREDUCE_BANDWIDTH_GBPS}GB/s dp_latency=${AUTOTUNER_BASELINE_DP_ALLREDUCE_LATENCY_US}us"
+echo "  use_fused_kernels: $USE_FUSED_KERNELS"
+echo "  simulator config: ${CONFIG_DIR}/ddp_simulate_config.json"
 echo "  python: $PYTHON_BIN"
 echo "  output_dir: $OUTPUT_BASE_DIR"
 

@@ -68,23 +68,35 @@ bash tests/functional_test/runtime/runtime_baseline_run_simulation.sh
 
 The example script:
 - launches `torchrun -m AutoTuner.runtime.baseline.main`
-- keeps fused-kernel post-process enabled by default with `AUTOTUNER_RUNTIME_USE_FUSED_KERNELS=1`
-- sets simulator DP knobs with `AUTOTUNER_BASELINE_DP_ALLREDUCE_BANDWIDTH_GBPS` and `AUTOTUNER_BASELINE_DP_ALLREDUCE_LATENCY_US`
+- keeps fused-kernel post-process enabled by default with `--use-fused-kernels true`
+- reads simulator DP knobs from `AutoTuner/testbench/profile/configs/local/ddp_simulate_config.json`
 - prints the latest measured vs simulated summary after the run
 
-If you want to tune the simulator only, keep the model/test case fixed and change these env vars before running:
+If you want to tune the simulator only, keep the model/test case fixed and update `ddp_simulate_config.json` before running:
+
+```json
+{
+  "dp_allreduce_bandwidth_gbps": 900,
+  "dp_allreduce_latency_us": 8
+}
+```
+
+Then rerun:
 
 ```bash
-export AUTOTUNER_BASELINE_DP_ALLREDUCE_BANDWIDTH_GBPS=900
-export AUTOTUNER_BASELINE_DP_ALLREDUCE_LATENCY_US=8
 bash tests/functional_test/runtime/runtime_baseline_run_simulation.sh
 ```
 
 If you want to disable the actor-style fused forward path:
 
 ```bash
-export AUTOTUNER_RUNTIME_USE_FUSED_KERNELS=0
-bash tests/functional_test/runtime/runtime_baseline_run_simulation.sh
+bash tests/functional_test/runtime/runtime_baseline_run_simulation.sh --use-fused-kernels false
+```
+
+Or pass the CLI flag directly:
+
+```bash
+torchrun ... -m AutoTuner.runtime.baseline.main ... --use-fused-kernels false
 ```
 
 ## Required Inputs
@@ -117,7 +129,15 @@ Default search path: `AutoTuner/testbench/profile/configs/local/`
 
 - `override_model_config.json` (required)
 - `override_tf_config.json` (required)
+- `ddp_simulate_config.json` (required)
 - `tp_comm_overlap_cfg.yaml` (optional; used only when `tp_comm_overlap` is enabled)
+
+```json
+{
+  "dp_allreduce_bandwidth_gbps": 50,
+  "dp_allreduce_latency_us": 30
+}
+```
 
 ## CLI Arguments
 
@@ -128,6 +148,7 @@ Core:
 - `--config-dir` (default: `AutoTuner/testbench/profile/configs/local/`)
 - `--override-model-config-file` (default: `override_model_config.json`)
 - `--override-tf-config-file` (default: `override_tf_config.json`)
+- `--ddp-simulate-config-file` (default: `ddp_simulate_config.json`)
 - `--tp-comm-overlap-cfg` (default: `tp_comm_overlap_cfg.yaml`)
 - `--output-dir` (default: `outputs`)
 
@@ -140,6 +161,7 @@ Runtime loop:
 Model behavior:
 - `--share-embeddings-and-output-weights [true|false]` (default: follow HF `tie_word_embeddings`)
 - `--no-ddp` (disable DDP wrapping)
+- `--use-fused-kernels [true|false]` (default: `true`)
 
 Distributed parallel sizes:
 - `--tensor-model-parallel-size` (default: `1`)
@@ -236,6 +258,3 @@ Summary per test case:
 
 - `AUTOTUNER_LOG_LEVEL`: default log level when `--log-level` is not passed.
 - `AUTOTUNER_LOG_ALL_RANKS`: if truthy (`1/true/yes/on`), microbatch logs are emitted from all ranks.
-- `AUTOTUNER_RUNTIME_USE_FUSED_KERNELS`: enables actor-style fused MCore forward patching in baseline (default: `1`).
-- `AUTOTUNER_BASELINE_DP_ALLREDUCE_BANDWIDTH_GBPS`: simulator DP all-reduce bandwidth override (default: `50`).
-- `AUTOTUNER_BASELINE_DP_ALLREDUCE_LATENCY_US`: simulator DP all-reduce per-hop latency override in microseconds (default: `30`).

@@ -4,6 +4,8 @@ import torch
 from megatron.core import parallel_state as mpu
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 
+from AutoTuner.utils.logging import log_with_rank
+
 
 def _init_nccl_process_group() -> None:
     """Initialize NCCL process group with explicit device binding when supported."""
@@ -53,4 +55,6 @@ def init_distributed_multi_nodes(
 
 def destroy_distributed():
     """Destroy distributed environment"""
+    log_with_rank("destroy_distributed: entering torch.distributed.destroy_process_group()")
     torch.distributed.destroy_process_group()
+    log_with_rank("destroy_distributed: finished torch.distributed.destroy_process_group()")
