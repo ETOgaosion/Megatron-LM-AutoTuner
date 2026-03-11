@@ -4,6 +4,8 @@ DIR_LIST=(
     AutoTuner
     tests
     tools
+    drawing
+    simulator
 )
 
 for dir in "${DIR_LIST[@]}"; do

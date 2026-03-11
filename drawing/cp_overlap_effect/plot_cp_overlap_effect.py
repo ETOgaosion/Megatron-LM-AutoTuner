@@ -21,7 +21,13 @@ except ModuleNotFoundError as exc:
 
 def default_output_path() -> Path:
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    return Path("outputs") / "drawing" / "cp_overlap_effect" / timestamp / "cp_overlap_effect.png"
+    return (
+        Path("outputs")
+        / "drawing"
+        / "cp_overlap_effect"
+        / timestamp
+        / "cp_overlap_effect.png"
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,13 +48,22 @@ def parse_args() -> argparse.Namespace:
         default=default_output_path(),
         help="Output image path. Default: outputs/drawing/cp_overlap_effect/<timestamp>/cp_overlap_effect.png",
     )
-    parser.add_argument("--title", type=str, default="CP Overlap Overhead", help="Figure title.")
-    parser.add_argument("--font-size", type=float, default=18.0, help="Base font size (default is large).")
+    parser.add_argument(
+        "--title", type=str, default="CP Overlap Overhead", help="Figure title."
+    )
+    parser.add_argument(
+        "--font-size",
+        type=float,
+        default=18.0,
+        help="Base font size (default is large).",
+    )
     parser.add_argument("--dpi", type=int, default=180, help="Figure DPI.")
     return parser.parse_args()
 
 
-def load_data(path: Path) -> tuple[list[str], list[float], list[float], list[float], str]:
+def load_data(
+    path: Path,
+) -> tuple[list[str], list[float], list[float], list[float], str]:
     with path.open("r", encoding="utf-8") as f:
         payload = json.load(f)
 

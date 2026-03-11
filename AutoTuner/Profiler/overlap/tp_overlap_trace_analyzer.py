@@ -17,7 +17,6 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from .trace_analyzer import TraceAnalyzer, TraceEvent
 
-
 COMPUTE_EXTRA_PATTERNS = [
     r"relu",
     r"gelu",
@@ -77,9 +76,7 @@ def _normalize_linear_type(value: str) -> str:
         return LINEAR_TYPE_COLUMN
     if lowered in {"rowparallellinear", "row", "rpl"}:
         return LINEAR_TYPE_ROW
-    raise ValueError(
-        "linear_type must be ColumnParallelLinear or RowParallelLinear"
-    )
+    raise ValueError("linear_type must be ColumnParallelLinear or RowParallelLinear")
 
 
 def _comm_focus_patterns(linear_type: str) -> List[str]:
@@ -261,9 +258,7 @@ def analyze_trace(
     compute_intervals = _merge_intervals(
         compute_intervals_by_stream.get(compute_stream, [])
     )
-    comm_intervals = _merge_intervals(
-        comm_intervals_by_stream.get(comm_stream, [])
-    )
+    comm_intervals = _merge_intervals(comm_intervals_by_stream.get(comm_stream, []))
 
     compute_time = _sum_intervals(compute_intervals)
     comm_time = _sum_intervals(comm_intervals)

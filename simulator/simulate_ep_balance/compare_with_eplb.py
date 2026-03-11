@@ -20,7 +20,11 @@ REPO_ROOT = SCRIPT_DIR.parents[1]
 sys.path.insert(0, str(REPO_ROOT / "EPLB"))
 
 import eplb  # noqa: E402
-from simulate_ep_balance import load_expert_tokens, simulate_for_ep, valid_ep_sizes  # noqa: E402
+from simulate_ep_balance import (  # noqa: E402
+    load_expert_tokens,
+    simulate_for_ep,
+    valid_ep_sizes,
+)
 
 COLOR_BEFORE = "#4C78A8"
 COLOR_BEFORE_LIGHT = "#9ecae9"
@@ -157,10 +161,14 @@ def build_ep_plan(
             requested = sorted(set(int(x) for x in args.ep_sizes))
             missing = [ep for ep in requested if ep not in ep_settings_map]
             if missing:
-                raise ValueError(f"EP sizes {missing} are not present in config `ep_settings`.")
+                raise ValueError(
+                    f"EP sizes {missing} are not present in config `ep_settings`."
+                )
             ep_sizes = requested
     else:
-        requested_eps = args.ep_sizes if args.ep_sizes is not None else cfg.get("ep_sizes")
+        requested_eps = (
+            args.ep_sizes if args.ep_sizes is not None else cfg.get("ep_sizes")
+        )
         if requested_eps is None:
             requested_eps = valid_ep_sizes(num_experts)
         ep_sizes = sorted(set(int(x) for x in requested_eps))
@@ -183,11 +191,19 @@ def build_ep_plan(
         ep_plan[ep] = {
             "num_replicas": cli_or_cfg(args.num_replicas, merged, "num_replicas", None),
             "eplb_redundant_ratio": float(
-                cli_or_cfg(args.eplb_redundant_ratio, merged, "eplb_redundant_ratio", 0.2)
+                cli_or_cfg(
+                    args.eplb_redundant_ratio, merged, "eplb_redundant_ratio", 0.2
+                )
             ),
-            "eplb_min_redundant": int(cli_or_cfg(args.eplb_min_redundant, merged, "eplb_min_redundant", 0)),
-            "num_groups": normalize_ep_param(num_groups, ep_size=ep, field_name="num_groups"),
-            "num_nodes": normalize_ep_param(num_nodes, ep_size=ep, field_name="num_nodes"),
+            "eplb_min_redundant": int(
+                cli_or_cfg(args.eplb_min_redundant, merged, "eplb_min_redundant", 0)
+            ),
+            "num_groups": normalize_ep_param(
+                num_groups, ep_size=ep, field_name="num_groups"
+            ),
+            "num_nodes": normalize_ep_param(
+                num_nodes, ep_size=ep, field_name="num_nodes"
+            ),
         }
     return ep_sizes, ep_plan
 
@@ -256,11 +272,15 @@ def resolve_num_replicas(
             f"num_replicas={num_replicas} must be >= num_experts={num_experts} for EPLB replication."
         )
     if num_replicas % ep_size != 0:
-        raise ValueError(f"num_replicas={num_replicas} must be divisible by ep_size={ep_size}.")
+        raise ValueError(
+            f"num_replicas={num_replicas} must be divisible by ep_size={ep_size}."
+        )
     return num_replicas
 
 
-def max_per_gpu_from_layers(layer_map: dict[str, Any], key: str, ep_size: int) -> list[float]:
+def max_per_gpu_from_layers(
+    layer_map: dict[str, Any], key: str, ep_size: int
+) -> list[float]:
     peak = [0.0 for _ in range(ep_size)]
     for layer in layer_map.values():
         values = layer[key]
@@ -286,18 +306,24 @@ def estimate_memory(
     bytes_per_elem = dtype_nbytes(str(model_cfg["torch_dtype"]))
     topk = int(model_cfg.get("num_experts_per_tok", 1))
     if moe_layer_expert_act_m > moe_layer_act_m:
-        raise ValueError("moe_layer_expert_act_m cannot be larger than moe_layer_act_m.")
+        raise ValueError(
+            "moe_layer_expert_act_m cannot be larger than moe_layer_act_m."
+        )
 
     # Weight memory is resident for all MoE layers.
     # Include both replicated routed experts and non-replicated shared experts.
-    weight_elems_per_layer = float(physical_experts_per_gpu * params_per_expert + params_shared_expert)
+    weight_elems_per_layer = float(
+        physical_experts_per_gpu * params_per_expert + params_shared_expert
+    )
     weight_bytes = float(num_moe_layers * weight_elems_per_layer * bytes_per_elem)
     max_activation_tokens = float(max(peak_tokens_per_gpu))
     max_input_tokens = float(max_activation_tokens / max(1, topk))
     routed_scale = float(max_activation_tokens / max(reference_peak_tokens, 1.0))
     base_const_act_m = float(moe_layer_act_m - moe_layer_expert_act_m)
     layer_activation_m = float(base_const_act_m + moe_layer_expert_act_m * routed_scale)
-    max_activation_bytes = float(num_moe_layers * layer_activation_m * 1_000_000.0 * bytes_per_elem)
+    max_activation_bytes = float(
+        num_moe_layers * layer_activation_m * 1_000_000.0 * bytes_per_elem
+    )
     max_activation_bytes *= float(act_multiplier)
     max_total_bytes = float(weight_bytes + max_activation_bytes)
 
@@ -336,7 +362,10 @@ def simulate_eplb_for_ep(
     expert_ids = sorted(layer_to_expert_tokens[first_layer].keys())
 
     weight_np = np.array(
-        [[float(layer_to_expert_tokens[layer_id][eid]) for eid in expert_ids] for layer_id in layer_ids],
+        [
+            [float(layer_to_expert_tokens[layer_id][eid]) for eid in expert_ids]
+            for layer_id in layer_ids
+        ],
         dtype=np.float64,
     )
     weight = torch.from_numpy(weight_np).float()
@@ -402,11 +431,37 @@ def plot_token_balance(
     legend_fontsize = 14
 
     plt.figure(figsize=(max(10, ep_size * 0.95), 6.2))
-    plt.plot(x, old_gpu, marker="o", markersize=7, linewidth=2.3, color=COLOR_BEFORE, label="Before reorder")
-    plt.plot(x, eplb_gpu, marker="o", markersize=7, linewidth=2.3, color=COLOR_EPLB, label="EPLB")
-    plt.plot(x, ours_gpu, marker="o", markersize=7, linewidth=2.3, color=COLOR_OURS, label="Our method")
+    plt.plot(
+        x,
+        old_gpu,
+        marker="o",
+        markersize=7,
+        linewidth=2.3,
+        color=COLOR_BEFORE,
+        label="Before reorder",
+    )
+    plt.plot(
+        x,
+        eplb_gpu,
+        marker="o",
+        markersize=7,
+        linewidth=2.3,
+        color=COLOR_EPLB,
+        label="EPLB",
+    )
+    plt.plot(
+        x,
+        ours_gpu,
+        marker="o",
+        markersize=7,
+        linewidth=2.3,
+        color=COLOR_OURS,
+        label="Our method",
+    )
     avg_tokens = float(np.mean(old_gpu))
-    plt.axhline(avg_tokens, color="black", linestyle="--", linewidth=1.4, label="Average tokens")
+    plt.axhline(
+        avg_tokens, color="black", linestyle="--", linewidth=1.4, label="Average tokens"
+    )
     y_values = old_gpu + eplb_gpu + ours_gpu + [avg_tokens]
     y_min = min(y_values)
     y_max = max(y_values)
@@ -423,7 +478,9 @@ def plot_token_balance(
     plt.close()
 
 
-def plot_memory_compare_all_eps(results_by_ep: dict[int, dict[str, Any]], output_dir: Path) -> None:
+def plot_memory_compare_all_eps(
+    results_by_ep: dict[int, dict[str, Any]], output_dir: Path
+) -> None:
     import matplotlib.pyplot as plt
 
     eps = sorted(results_by_ep.keys())
@@ -434,8 +491,12 @@ def plot_memory_compare_all_eps(results_by_ep: dict[int, dict[str, Any]], output
     tick_fontsize = 13
     legend_fontsize = 12
 
-    before_w = [results_by_ep[ep]["memory"]["before"]["weight_gib_per_gpu"] for ep in eps]
-    before_a = [results_by_ep[ep]["memory"]["before"]["max_activation_gib"] for ep in eps]
+    before_w = [
+        results_by_ep[ep]["memory"]["before"]["weight_gib_per_gpu"] for ep in eps
+    ]
+    before_a = [
+        results_by_ep[ep]["memory"]["before"]["max_activation_gib"] for ep in eps
+    ]
     eplb_w = [results_by_ep[ep]["memory"]["eplb"]["weight_gib_per_gpu"] for ep in eps]
     eplb_a = [results_by_ep[ep]["memory"]["eplb"]["max_activation_gib"] for ep in eps]
     ours_w = [results_by_ep[ep]["memory"]["ours"]["weight_gib_per_gpu"] for ep in eps]
@@ -448,14 +509,37 @@ def plot_memory_compare_all_eps(results_by_ep: dict[int, dict[str, Any]], output
     ours_x = x + width
 
     # Same column bar (stacked): model weights + activation.
-    plt.bar(before_x, before_w, width=width, color=COLOR_BEFORE, label="Before: weights")
-    plt.bar(before_x, before_a, width=width, bottom=before_w, color=COLOR_BEFORE_LIGHT, label="Before: activation")
+    plt.bar(
+        before_x, before_w, width=width, color=COLOR_BEFORE, label="Before: weights"
+    )
+    plt.bar(
+        before_x,
+        before_a,
+        width=width,
+        bottom=before_w,
+        color=COLOR_BEFORE_LIGHT,
+        label="Before: activation",
+    )
 
     plt.bar(eplb_x, eplb_w, width=width, color=COLOR_EPLB, label="EPLB: weights")
-    plt.bar(eplb_x, eplb_a, width=width, bottom=eplb_w, color=COLOR_EPLB_LIGHT, label="EPLB: activation")
+    plt.bar(
+        eplb_x,
+        eplb_a,
+        width=width,
+        bottom=eplb_w,
+        color=COLOR_EPLB_LIGHT,
+        label="EPLB: activation",
+    )
 
     plt.bar(ours_x, ours_w, width=width, color=COLOR_OURS, label="Our method: weights")
-    plt.bar(ours_x, ours_a, width=width, bottom=ours_w, color=COLOR_OURS_LIGHT, label="Our method: activation")
+    plt.bar(
+        ours_x,
+        ours_a,
+        width=width,
+        bottom=ours_w,
+        color=COLOR_OURS_LIGHT,
+        label="Our method: activation",
+    )
 
     plt.xticks(x, [str(ep) for ep in eps], fontsize=tick_fontsize)
     plt.yticks(fontsize=tick_fontsize)
@@ -468,7 +552,9 @@ def plot_memory_compare_all_eps(results_by_ep: dict[int, dict[str, Any]], output
     plt.close()
 
 
-def plot_summary_curves(results_by_ep: dict[int, dict[str, Any]], output_dir: Path) -> None:
+def plot_summary_curves(
+    results_by_ep: dict[int, dict[str, Any]], output_dir: Path
+) -> None:
     import matplotlib.pyplot as plt
 
     eps = sorted(results_by_ep.keys())
@@ -498,9 +584,13 @@ def plot_summary_curves(results_by_ep: dict[int, dict[str, Any]], output_dir: Pa
     y_tick_end = int(math.ceil(y_axis_max))
 
     plt.figure(figsize=(max(10, len(eps) * 0.95), 6.2))
-    plt.plot(x, old_var_log10, marker="o", linewidth=2, color=COLOR_BEFORE, label="Before")
+    plt.plot(
+        x, old_var_log10, marker="o", linewidth=2, color=COLOR_BEFORE, label="Before"
+    )
     plt.plot(x, eplb_var_log10, marker="o", linewidth=2, color=COLOR_EPLB, label="EPLB")
-    plt.plot(x, ours_var_log10, marker="o", linewidth=2, color=COLOR_OURS, label="Our method")
+    plt.plot(
+        x, ours_var_log10, marker="o", linewidth=2, color=COLOR_OURS, label="Our method"
+    )
     plt.ylim(y_axis_min, y_axis_max)
     plt.yticks(np.arange(y_tick_start, y_tick_end + 1, 1), fontsize=tick_fontsize)
     plt.xlabel("EP size", fontsize=axis_label_fontsize)
@@ -530,13 +620,23 @@ def main() -> None:
 
     cfg = load_json_config(args.config)
     default_data_path = SCRIPT_DIR / "data" / "routed_experts_stats.json"
-    default_model_config = Path("/data/common/models/Qwen/Qwen1.5-MoE-A2.7B/config.json")
+    default_model_config = Path(
+        "/data/common/models/Qwen/Qwen1.5-MoE-A2.7B/config.json"
+    )
 
     data_path = Path(cli_or_cfg(args.data_path, cfg, "data_path", default_data_path))
-    model_config_path = Path(cli_or_cfg(args.model_config, cfg, "model_config", default_model_config))
-    activation_multiplier = float(cli_or_cfg(args.activation_multiplier, cfg, "activation_multiplier", 1.0))
-    moe_layer_act_m = float(cli_or_cfg(args.moe_layer_act_m, cfg, "moe_layer_act_m", 180.0))
-    moe_layer_expert_act_m = float(cli_or_cfg(args.moe_layer_expert_act_m, cfg, "moe_layer_expert_act_m", 66.0))
+    model_config_path = Path(
+        cli_or_cfg(args.model_config, cfg, "model_config", default_model_config)
+    )
+    activation_multiplier = float(
+        cli_or_cfg(args.activation_multiplier, cfg, "activation_multiplier", 1.0)
+    )
+    moe_layer_act_m = float(
+        cli_or_cfg(args.moe_layer_act_m, cfg, "moe_layer_act_m", 180.0)
+    )
+    moe_layer_expert_act_m = float(
+        cli_or_cfg(args.moe_layer_expert_act_m, cfg, "moe_layer_expert_act_m", 66.0)
+    )
     no_plot = bool(cfg.get("no_plot", False)) or bool(args.no_plot)
 
     layer_to_expert_tokens = load_expert_tokens(data_path)
@@ -559,7 +659,13 @@ def main() -> None:
             output_dir = Path(config_output_dir)
         else:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_dir = REPO_ROOT / "outputs" / "simulate_ep_balance" / "compare_with_eplb" / timestamp
+            output_dir = (
+                REPO_ROOT
+                / "outputs"
+                / "simulate_ep_balance"
+                / "compare_with_eplb"
+                / timestamp
+            )
     else:
         output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -567,7 +673,9 @@ def main() -> None:
     results_by_ep: dict[int, dict[str, Any]] = {}
 
     for ep in ep_sizes:
-        ours_result = simulate_for_ep(layer_to_expert_tokens=layer_to_expert_tokens, ep_size=ep)
+        ours_result = simulate_for_ep(
+            layer_to_expert_tokens=layer_to_expert_tokens, ep_size=ep
+        )
         plan = ep_plan[ep]
 
         num_replicas = resolve_num_replicas(
@@ -716,7 +824,9 @@ def main() -> None:
                 ]
             )
         )
-    (output_dir / "compare_with_eplb_summary.csv").write_text("\n".join(csv_lines) + "\n", encoding="utf-8")
+    (output_dir / "compare_with_eplb_summary.csv").write_text(
+        "\n".join(csv_lines) + "\n", encoding="utf-8"
+    )
 
     print(f"Saved outputs to: {output_dir}")
     for ep in sorted(results_by_ep.keys()):
@@ -741,7 +851,9 @@ def main() -> None:
         print(f"  Before sum tokens per GPU: {before_tokens}")
         print(
             "  Before variance: mean={m:.6f}, squared_diffs={sd}, variance={v:.6f}".format(
-                m=before_var["mean"], sd=before_var["squared_diffs"], v=before_var["variance"]
+                m=before_var["mean"],
+                sd=before_var["squared_diffs"],
+                v=before_var["variance"],
             )
         )
         print(f"  Our method sum tokens per GPU: {ours_tokens}")

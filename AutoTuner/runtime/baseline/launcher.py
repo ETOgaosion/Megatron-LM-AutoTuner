@@ -11,8 +11,8 @@ from megatron.core import parallel_state as mpu
 from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
-from megatron.core.pipeline_parallel.p2p_communication import P2PCommunicator
 from megatron.core.pipeline_parallel import get_forward_backward_func
+from megatron.core.pipeline_parallel.p2p_communication import P2PCommunicator
 from transformers import PretrainedConfig
 
 from AutoTuner.runtime.baseline.simulator import (
@@ -44,7 +44,6 @@ from verl.models.mcore.model_forward_fused import patch_fused_forward
 from verl.utils.flops_counter import FlopsCounter
 from verl.utils.megatron.tensor_parallel import vocab_parallel_log_probs_from_logits
 from verl.utils.megatron_utils import get_model, unwrap_model
-
 
 _VARIABLE_SEQ_SHAPE_PATCHED = False
 
@@ -477,7 +476,13 @@ class RuntimeLauncher:
             forward_total_time_s += chunk_forward_time_s
             backward_total_time_s += chunk_backward_time_s
             runtime_layer_count += len(
-                list(getattr(getattr(unwrap_model(model_chunk), "decoder", None), "layers", []))
+                list(
+                    getattr(
+                        getattr(unwrap_model(model_chunk), "decoder", None),
+                        "layers",
+                        [],
+                    )
+                )
             )
 
         runtime_forward_time_s = 0.0
@@ -520,8 +525,13 @@ class RuntimeLauncher:
         stage_stats_by_pp_rank: dict[int, StageTimingStats] = {}
         for stage_stats in gathered_stats:
             existing = stage_stats_by_pp_rank.get(stage_stats.pp_rank)
-            existing_total = 0.0 if existing is None else (
-                existing.runtime_forward_total_time_s + existing.runtime_backward_total_time_s
+            existing_total = (
+                0.0
+                if existing is None
+                else (
+                    existing.runtime_forward_total_time_s
+                    + existing.runtime_backward_total_time_s
+                )
             )
             current_total = (
                 stage_stats.runtime_forward_total_time_s

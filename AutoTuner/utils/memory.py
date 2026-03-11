@@ -99,7 +99,9 @@ def get_all_rank_peak_memory_stats(
         dtype=torch.int64,
         device=torch.cuda.current_device(),
     )
-    gathered = [torch.empty_like(local_tensor) for _ in range(local_stats["world_size"])]
+    gathered = [
+        torch.empty_like(local_tensor) for _ in range(local_stats["world_size"])
+    ]
     torch.distributed.all_gather(gathered, local_tensor)
 
     all_rank_stats = []

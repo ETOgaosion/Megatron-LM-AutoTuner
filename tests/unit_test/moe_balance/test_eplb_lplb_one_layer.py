@@ -9,16 +9,23 @@ from pathlib import Path
 import pytest
 import torch
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EPLB_PATH = REPO_ROOT / "EPLB" / "eplb.py"
 LPLB_EPLB_PATH = REPO_ROOT / "LPLB" / "lplb" / "eplb.py"
 
 MODEL_CONFIG_PATHS = {
-    "Qwen/Qwen1.5-MoE-A2.7B": Path("/data/common/models/Qwen/Qwen1.5-MoE-A2.7B/config.json"),
-    "Qwen/Qwen3-30B-A3B-Base": Path("/data/common/models/Qwen/Qwen3-30B-A3B-Base/config.json"),
-    "Qwen/Qwen3-235B-A22B": Path("/data/common/models/Qwen/Qwen3-235B-A22B/config.json"),
-    "deepseek-ai/DeepSeek-V3-Base": Path("/data/common/models/deepseek-ai/DeepSeek-V3-Base/config.json"),
+    "Qwen/Qwen1.5-MoE-A2.7B": Path(
+        "/data/common/models/Qwen/Qwen1.5-MoE-A2.7B/config.json"
+    ),
+    "Qwen/Qwen3-30B-A3B-Base": Path(
+        "/data/common/models/Qwen/Qwen3-30B-A3B-Base/config.json"
+    ),
+    "Qwen/Qwen3-235B-A22B": Path(
+        "/data/common/models/Qwen/Qwen3-235B-A22B/config.json"
+    ),
+    "deepseek-ai/DeepSeek-V3-Base": Path(
+        "/data/common/models/deepseek-ai/DeepSeek-V3-Base/config.json"
+    ),
 }
 
 FALLBACK_NUM_EXPERTS = {
@@ -66,7 +73,9 @@ def _choose_num_groups(num_experts: int) -> int:
 def _mock_one_layer_weight(model_name: str, num_experts: int) -> torch.Tensor:
     seed = zlib.crc32(model_name.encode("utf-8")) & 0xFFFFFFFF
     generator = torch.Generator().manual_seed(seed)
-    base = torch.randint(50, 5000, (num_experts,), generator=generator, dtype=torch.int64)
+    base = torch.randint(
+        50, 5000, (num_experts,), generator=generator, dtype=torch.int64
+    )
     slope = torch.linspace(1.0, 2.5, steps=num_experts)
     weight = (base.float() * slope).round().to(torch.float32)
     return weight.view(1, -1)
@@ -120,7 +129,9 @@ def test_eplb_single_layer_mocked_weight(model_name: str) -> None:
         num_nodes=num_nodes,
         num_gpus=num_gpus,
     )
-    _assert_rebalance_shapes_and_maps(phy2log, log2phy, logcnt, num_experts, num_replicas)
+    _assert_rebalance_shapes_and_maps(
+        phy2log, log2phy, logcnt, num_experts, num_replicas
+    )
 
 
 @pytest.mark.parametrize("model_name", list(MODEL_CONFIG_PATHS.keys()))
@@ -136,7 +147,9 @@ def test_lplb_embedded_eplb_single_layer_mocked_weight(model_name: str) -> None:
         num_nodes=num_nodes,
         num_gpus=num_gpus,
     )
-    _assert_rebalance_shapes_and_maps(phy2log, log2phy, logcnt, num_experts, num_replicas)
+    _assert_rebalance_shapes_and_maps(
+        phy2log, log2phy, logcnt, num_experts, num_replicas
+    )
 
 
 @pytest.mark.parametrize("model_name", list(MODEL_CONFIG_PATHS.keys()))

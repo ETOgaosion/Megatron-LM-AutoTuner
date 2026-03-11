@@ -13,6 +13,7 @@ def _init_nccl_process_group() -> None:
     torch.cuda.set_device(torch.device(local_rank))
     torch.distributed.init_process_group("nccl", device_id=torch.device(local_rank))
 
+
 def init_distributed_single_node():
     """Initialize distributed environment"""
     os.environ["RANK"] = "0"
@@ -55,6 +56,10 @@ def init_distributed_multi_nodes(
 
 def destroy_distributed():
     """Destroy distributed environment"""
-    log_with_rank("destroy_distributed: entering torch.distributed.destroy_process_group()")
+    log_with_rank(
+        "destroy_distributed: entering torch.distributed.destroy_process_group()"
+    )
     torch.distributed.destroy_process_group()
-    log_with_rank("destroy_distributed: finished torch.distributed.destroy_process_group()")
+    log_with_rank(
+        "destroy_distributed: finished torch.distributed.destroy_process_group()"
+    )
