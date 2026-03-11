@@ -1,0 +1,4 @@
+{
+    "dp_allreduce_bandwidth_gbps": 50,
+    "dp_allreduce_latency_us": 30
+}

@@ -55,10 +55,17 @@ For a single, copy-pasteable baseline run that also prints simulated PP/DP time 
 bash tests/functional_test/runtime/runtime_baseline_run_simulation.sh
 ```
 
-Useful simulator env vars:
+Useful wrapper argument:
 
 ```bash
-export AUTOTUNER_RUNTIME_USE_FUSED_KERNELS=1
-export AUTOTUNER_BASELINE_DP_ALLREDUCE_BANDWIDTH_GBPS=50
-export AUTOTUNER_BASELINE_DP_ALLREDUCE_LATENCY_US=30
+bash tests/functional_test/runtime/runtime_baseline_run_simulation.sh --use-fused-kernels true
+```
+
+Set DP all-reduce simulator values in `AutoTuner/testbench/profile/configs/local/ddp_simulate_config.json`:
+
+```json
+{
+  "dp_allreduce_bandwidth_gbps": 50,
+  "dp_allreduce_latency_us": 30
+}
 ```

@@ -283,8 +283,7 @@ def handle_model_config(args) -> dict:
 
 def handle_tf_config(args) -> dict:
     with open(args.real_override_tf_config_file, "r") as fp:
-        override_tf_config = json.load(fp)
-    return override_tf_config
+        return json.load(fp)
 
 
 def call_launcher(

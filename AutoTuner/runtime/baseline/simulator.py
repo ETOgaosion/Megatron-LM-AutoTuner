@@ -1,33 +1,9 @@
-import os
 from dataclasses import asdict, dataclass
 
-
-DEFAULT_DP_ALLREDUCE_BANDWIDTH_GBPS = 50.0
-DEFAULT_DP_ALLREDUCE_LATENCY_US = 30.0
-
-
-def _read_env_float(name: str, default: float) -> float:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except ValueError:
-        return default
-
-
-def get_dp_allreduce_comm_config() -> dict[str, float]:
-    return {
-        "bandwidth_gbps": _read_env_float(
-            "AUTOTUNER_BASELINE_DP_ALLREDUCE_BANDWIDTH_GBPS",
-            DEFAULT_DP_ALLREDUCE_BANDWIDTH_GBPS,
-        ),
-        "latency_s": _read_env_float(
-            "AUTOTUNER_BASELINE_DP_ALLREDUCE_LATENCY_US",
-            DEFAULT_DP_ALLREDUCE_LATENCY_US,
-        )
-        / 1e6,
-    }
+from AutoTuner.utils.runtime_config import (
+    DEFAULT_DP_ALLREDUCE_BANDWIDTH_GBPS,
+    DEFAULT_DP_ALLREDUCE_LATENCY_US,
+)
 
 
 @dataclass(frozen=True)
@@ -297,11 +273,16 @@ def simulate_full_iteration(
     if len(stage_timing_stats) != len(full_stage_layer_counts):
         raise ValueError("stage_timing_stats must match PP stage count")
 
-    comm_cfg = get_dp_allreduce_comm_config()
     bandwidth_gbps = (
-        comm_cfg["bandwidth_gbps"] if bandwidth_gbps is None else float(bandwidth_gbps)
+        DEFAULT_DP_ALLREDUCE_BANDWIDTH_GBPS
+        if bandwidth_gbps is None
+        else float(bandwidth_gbps)
     )
-    latency_s = comm_cfg["latency_s"] if latency_s is None else float(latency_s)
+    latency_s = (
+        DEFAULT_DP_ALLREDUCE_LATENCY_US / 1e6
+        if latency_s is None
+        else float(latency_s)
+    )
 
     runtime_stage_param_bytes = [
         stats.runtime_total_param_bytes for stats in stage_param_stats

@@ -68,6 +68,12 @@ def get_gpu_peak_flops() -> float:
             )
             return GPU_SPECS_DATABASE["DEFAULT"] * 1e12
 
+    except ModuleNotFoundError as e:
+        if e.name == "GPUtil":
+            print("Warning: GPUtil not installed. Using default PEAK_FLOPS.")
+            return GPU_SPECS_DATABASE["DEFAULT"] * 1e12
+        print(f"Error detecting GPU: {e}. Using default PEAK_FLOPS.")
+        return GPU_SPECS_DATABASE["DEFAULT"] * 1e12
     except Exception as e:
         print(f"Error detecting GPU: {e}. Using default PEAK_FLOPS.")
         return GPU_SPECS_DATABASE["DEFAULT"] * 1e12

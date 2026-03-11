@@ -11,6 +11,7 @@ from megatron.core import parallel_state as mpu
 from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_layer_with_transformer_engine_spec,
 )
+from megatron.core.pipeline_parallel.p2p_communication import P2PCommunicator
 from megatron.core.pipeline_parallel import get_forward_backward_func
 from transformers import PretrainedConfig
 
@@ -18,7 +19,6 @@ from AutoTuner.runtime.baseline.simulator import (
     StageParamStats,
     StageTimingStats,
     build_pp_stage_layer_counts,
-    get_dp_allreduce_comm_config,
     simulate_full_iteration,
 )
 from AutoTuner.testbench.ops.gpt_model import GPTModelForTest
@@ -26,7 +26,6 @@ from AutoTuner.utils.config import (
     get_hf_model_config,
     get_mcore_model_config_from_hf_config,
 )
-from AutoTuner.utils.gpu_info import GPU_PEAK_FLOPS
 from AutoTuner.utils.logging import log_rank0, log_with_rank
 from AutoTuner.utils.memory import (
     get_all_rank_peak_memory_stats,
@@ -34,6 +33,10 @@ from AutoTuner.utils.memory import (
     reset_peak_memory_stats,
 )
 from AutoTuner.utils.model_inputs import DataSets
+from AutoTuner.utils.runtime_config import (
+    DEFAULT_DP_ALLREDUCE_BANDWIDTH_GBPS,
+    DEFAULT_DP_ALLREDUCE_LATENCY_US,
+)
 from AutoTuner.utils.structs import InputTestCase
 from AutoTuner.utils.tp_overlap import destroy_ub, initialize_tp_communicators
 from verl.models.mcore import get_mcore_forward_fn, get_mcore_forward_fused_fn
@@ -41,6 +44,102 @@ from verl.models.mcore.model_forward_fused import patch_fused_forward
 from verl.utils.flops_counter import FlopsCounter
 from verl.utils.megatron.tensor_parallel import vocab_parallel_log_probs_from_logits
 from verl.utils.megatron_utils import get_model, unwrap_model
+
+
+_VARIABLE_SEQ_SHAPE_PATCHED = False
+
+
+def _patch_variable_seq_lengths_shape_exchange() -> bool:
+    global _VARIABLE_SEQ_SHAPE_PATCHED
+    if _VARIABLE_SEQ_SHAPE_PATCHED:
+        return False
+
+    def _communicate_shapes_fixed(
+        self,
+        tensor_send_next: torch.Tensor | None,
+        tensor_send_prev: torch.Tensor | None,
+        recv_prev: bool,
+        recv_next: bool,
+    ) -> tuple[list[int], list[int]]:
+        config = self.config
+        recv_prev_shape_tensor = None
+        recv_next_shape_tensor = None
+        send_prev_shape_tensor = None
+        send_next_shape_tensor = None
+        if recv_prev:
+            recv_prev_shape_tensor = torch.empty(
+                (3,), device=torch.cuda.current_device(), dtype=torch.int64
+            )
+        if recv_next:
+            recv_next_shape_tensor = torch.empty(
+                (3,), device=torch.cuda.current_device(), dtype=torch.int64
+            )
+        if tensor_send_prev is not None:
+            send_prev_shape_tensor = torch.tensor(
+                tensor_send_prev.size(),
+                device=torch.cuda.current_device(),
+                dtype=torch.int64,
+            )
+        if tensor_send_next is not None:
+            send_next_shape_tensor = torch.tensor(
+                tensor_send_next.size(),
+                device=torch.cuda.current_device(),
+                dtype=torch.int64,
+            )
+
+        if config.use_ring_exchange_p2p:
+            torch.distributed.ring_exchange(
+                tensor_send_prev=send_prev_shape_tensor,
+                tensor_recv_prev=recv_prev_shape_tensor,
+                tensor_send_next=send_next_shape_tensor,
+                tensor_recv_next=recv_next_shape_tensor,
+                group=self.pp_group,
+            )
+        else:
+            ops = []
+            if send_prev_shape_tensor is not None:
+                ops.append(
+                    torch.distributed.P2POp(
+                        torch.distributed.isend, send_prev_shape_tensor, self.prev_rank
+                    )
+                )
+            if recv_prev_shape_tensor is not None:
+                ops.append(
+                    torch.distributed.P2POp(
+                        torch.distributed.irecv, recv_prev_shape_tensor, self.prev_rank
+                    )
+                )
+            if send_next_shape_tensor is not None:
+                ops.append(
+                    torch.distributed.P2POp(
+                        torch.distributed.isend, send_next_shape_tensor, self.next_rank
+                    )
+                )
+            if recv_next_shape_tensor is not None:
+                ops.append(
+                    torch.distributed.P2POp(
+                        torch.distributed.irecv, recv_next_shape_tensor, self.next_rank
+                    )
+                )
+            if ops:
+                reqs = torch.distributed.batch_isend_irecv(ops)
+                for req in reqs:
+                    req.wait()
+            torch.cuda.synchronize()
+
+        recv_prev_shape = [0, 0, 0]
+        if recv_prev_shape_tensor is not None:
+            recv_prev_shape = recv_prev_shape_tensor.tolist()
+
+        recv_next_shape = [0, 0, 0]
+        if recv_next_shape_tensor is not None:
+            recv_next_shape = recv_next_shape_tensor.tolist()
+
+        return recv_prev_shape, recv_next_shape
+
+    P2PCommunicator._communicate_shapes = _communicate_shapes_fixed
+    _VARIABLE_SEQ_SHAPE_PATCHED = True
+    return True
 
 
 class _ModuleCudaTimer:
@@ -103,9 +202,11 @@ class RuntimeLauncher:
         test_cases: list[InputTestCase],
         override_model_kwargs: dict,
         override_tf_config_kwargs: dict,
+        dp_allreduce_comm_config: dict[str, float] | None = None,
         tp_comm_overlap_cfg: str | None = None,
         share_embeddings_and_output_weights: Optional[bool] = None,
         wrap_with_ddp: bool = True,
+        use_fused_kernels: bool = True,
         use_distributed_optimizer: bool = False,
         fix_compute_amount: bool = True,
     ) -> None:
@@ -125,6 +226,15 @@ class RuntimeLauncher:
         self.test_cases = test_cases
         self.tp_comm_overlap_cfg = tp_comm_overlap_cfg
         self.wrap_with_ddp = wrap_with_ddp
+        self.use_fused_kernels = bool(use_fused_kernels)
+        self.dp_allreduce_comm_config = dict(
+            dp_allreduce_comm_config
+            or {
+                "bandwidth_gbps": DEFAULT_DP_ALLREDUCE_BANDWIDTH_GBPS,
+                "latency_s": DEFAULT_DP_ALLREDUCE_LATENCY_US / 1e6,
+                "latency_us": DEFAULT_DP_ALLREDUCE_LATENCY_US,
+            }
+        )
 
         self.hf_config: PretrainedConfig = get_hf_model_config(
             model_name, **override_model_kwargs
@@ -134,12 +244,22 @@ class RuntimeLauncher:
         override_tf_config_kwargs.setdefault("bias_activation_fusion", True)
         override_tf_config_kwargs.setdefault("apply_rope_fusion", True)
         override_tf_config_kwargs.setdefault("moe_permute_fusion", True)
-        override_tf_config_kwargs.setdefault("deallocate_pipeline_outputs", True)
         override_tf_config_kwargs.setdefault("gradients_accumulation_fusion", True)
+        if override_tf_config_kwargs.get("deallocate_pipeline_outputs", True):
+            self._log(
+                "runtime baseline forcing deallocate_pipeline_outputs=False because PP forward outputs can be tensor views"
+            )
+        override_tf_config_kwargs["deallocate_pipeline_outputs"] = False
 
         self.tf_config = get_mcore_model_config_from_hf_config(
             self.hf_config, **override_tf_config_kwargs
         )
+        if self.tf_config.variable_seq_lengths:
+            patched = _patch_variable_seq_lengths_shape_exchange()
+            self._log(
+                "runtime baseline enabling variable_seq_lengths support "
+                f"(shape_exchange_patch_applied={patched})"
+            )
         vpp_size = mpu.get_virtual_pipeline_model_parallel_world_size()
         # Ensure TF config matches actual VPP setup; avoid asserting on missing vp_stage.
         self.tf_config.virtual_pipeline_model_parallel_size = vpp_size
@@ -177,9 +297,6 @@ class RuntimeLauncher:
         )
 
         self.flops_counter = FlopsCounter(self.hf_config)
-        self.use_fused_kernels = os.getenv(
-            "AUTOTUNER_RUNTIME_USE_FUSED_KERNELS", "1"
-        ).lower() in ("1", "true", "yes", "on")
         self._forward_fn = get_mcore_forward_fn(self.hf_config)
         self._forward_fused_fn = get_mcore_forward_fused_fn(self.hf_config)
 
@@ -195,7 +312,9 @@ class RuntimeLauncher:
             "runtime model built: "
             f"wrap_with_ddp={wrap_with_ddp} "
             f"use_distributed_optimizer={use_distributed_optimizer} "
-            f"use_fused_kernels={self.use_fused_kernels}"
+            f"use_fused_kernels={self.use_fused_kernels} "
+            f"variable_seq_lengths={self.tf_config.variable_seq_lengths} "
+            f"deallocate_pipeline_outputs={self.tf_config.deallocate_pipeline_outputs}"
         )
 
     def _log(self, message: str, level: int = logging.INFO, all_ranks: bool = False):
@@ -203,6 +322,21 @@ class RuntimeLauncher:
             log_with_rank(message, level=level)
         else:
             log_rank0(message, level=level)
+
+    def _log_progress(self, location: str, details: str = ""):
+        message = (
+            f"[progress] {location} "
+            f"pp_rank={mpu.get_pipeline_model_parallel_rank()} "
+            f"pp_world={mpu.get_pipeline_model_parallel_world_size()} "
+            f"tp_rank={mpu.get_tensor_model_parallel_rank()} "
+            f"tp_world={mpu.get_tensor_model_parallel_world_size()} "
+            f"dp_rank={mpu.get_data_parallel_rank(with_context_parallel=True)} "
+            f"dp_world={mpu.get_data_parallel_world_size(with_context_parallel=True)} "
+            f"device={torch.cuda.current_device()}"
+        )
+        if details:
+            message = f"{message} {details}"
+        self._log(message, all_ranks=True)
 
     def _configure_lightweight_pipeline_layers(self):
         """Build only one transformer layer per virtual chunk to avoid OOM."""
@@ -366,8 +500,22 @@ class RuntimeLauncher:
         self, num_microbatches: int
     ) -> list[StageTimingStats]:
         local_stats = self._collect_local_stage_timing_stats(num_microbatches)
+        self._log_progress(
+            "stage_timing_local_ready",
+            (
+                "num_microbatches={num_microbatches} runtime_layers={layers} "
+                "forward_total_s={forward:.6f} backward_total_s={backward:.6f}"
+            ).format(
+                num_microbatches=num_microbatches,
+                layers=local_stats.runtime_layer_count,
+                forward=local_stats.runtime_forward_total_time_s,
+                backward=local_stats.runtime_backward_total_time_s,
+            ),
+        )
         gathered_stats = [None] * torch.distributed.get_world_size()
+        self._log_progress("stage_timing_all_gather_enter")
         torch.distributed.all_gather_object(gathered_stats, local_stats)
+        self._log_progress("stage_timing_all_gather_exit")
 
         stage_stats_by_pp_rank: dict[int, StageTimingStats] = {}
         for stage_stats in gathered_stats:
@@ -502,15 +650,16 @@ class RuntimeLauncher:
         )
         stage_param_stats = self._gather_stage_param_stats()
         dp_world_size = mpu.get_data_parallel_world_size(with_context_parallel=True)
-        dp_comm_cfg = get_dp_allreduce_comm_config()
         simulation_context = {
             "pp_size": pp_size,
             "vpp_size": vpp_size,
             "runtime_stage_layer_counts": runtime_stage_layer_counts,
             "full_stage_layer_counts": full_stage_layer_counts,
             "dp_world_size": dp_world_size,
-            "dp_allreduce_bandwidth_gbps": dp_comm_cfg["bandwidth_gbps"],
-            "dp_allreduce_latency_s": dp_comm_cfg["latency_s"],
+            "dp_allreduce_bandwidth_gbps": self.dp_allreduce_comm_config[
+                "bandwidth_gbps"
+            ],
+            "dp_allreduce_latency_s": self.dp_allreduce_comm_config["latency_s"],
             "stage_param_stats": [asdict(stats) for stats in stage_param_stats],
             "_stage_param_stats": stage_param_stats,
         }
@@ -519,8 +668,8 @@ class RuntimeLauncher:
             f"pp={pp_size} vpp={vpp_size} dp={dp_world_size} "
             f"runtime_stage_layers={runtime_stage_layer_counts} "
             f"full_stage_layers={full_stage_layer_counts} "
-            f"dp_bw_gbps={dp_comm_cfg['bandwidth_gbps']:.2f} "
-            f"dp_latency_s={dp_comm_cfg['latency_s']:.6f}"
+            f"dp_bw_gbps={self.dp_allreduce_comm_config['bandwidth_gbps']:.2f} "
+            f"dp_latency_s={self.dp_allreduce_comm_config['latency_s']:.6f}"
         )
         return simulation_context
 
@@ -545,7 +694,8 @@ class RuntimeLauncher:
             if log_this:
                 self._log(
                     f"iter {self._current_iteration} microbatch {self._microbatch_counter}: "
-                    "fetching batch"
+                    "fetching batch",
+                    all_ranks=True,
                 )
             micro_batch = next(data_iter)
             micro_batch = micro_batch.to(torch.cuda.current_device())
@@ -577,13 +727,15 @@ class RuntimeLauncher:
                         input_shape=tuple(input_ids.shape),
                         mask_shape=tuple(attention_mask.shape),
                         pos_shape=tuple(position_ids.shape),
-                    )
+                    ),
+                    all_ranks=True,
                 )
 
             if log_this:
                 self._log(
                     f"iter {self._current_iteration} microbatch {self._microbatch_counter}: "
-                    "model forward start"
+                    "model forward start",
+                    all_ranks=True,
                 )
             if self.use_fused_kernels:
                 output = self._forward_fused_fn(
@@ -618,7 +770,8 @@ class RuntimeLauncher:
             if log_this:
                 self._log(
                     f"iter {self._current_iteration} microbatch {self._microbatch_counter}: "
-                    "model forward done"
+                    "model forward done",
+                    all_ranks=True,
                 )
 
             def loss_func(output_tensor, non_loss_data=False):
@@ -680,7 +833,7 @@ class RuntimeLauncher:
         else:
             estimated_flops *= self.flops_layer_scale
         if promised_flops in (0, float("inf")):
-            promised_flops = GPU_PEAK_FLOPS / 1e12
+            promised_flops = 0.0
         if promised_flops == 0:
             mfu = 0.0
         else:
@@ -877,6 +1030,15 @@ class RuntimeLauncher:
                 f"microbatches={num_microbatches} "
                 f"batch_seqlens(min/avg/max)={min_seqlen}/{avg_seqlen:.1f}/{max_seqlen}"
             )
+            self._log_progress(
+                "test_case_enter",
+                (
+                    f"idx={idx} microbatches={num_microbatches} "
+                    f"batch_seqlens_min={min_seqlen} "
+                    f"batch_seqlens_avg={avg_seqlen:.1f} "
+                    f"batch_seqlens_max={max_seqlen}"
+                ),
+            )
             iteration_metrics = []
             for iteration in range(max_iterations):
                 data_iterator = self.datasets.get_batch_generator(test_case)
@@ -887,13 +1049,16 @@ class RuntimeLauncher:
 
                 self._current_iteration = iteration
                 self._microbatch_counter = 0
-                self._log(f"iter {iteration}: entering pre-barrier")
+                self._log_progress(f"iter_{iteration}_pre_barrier_enter")
                 torch.distributed.barrier()
-                self._log(f"iter {iteration}: exited pre-barrier")
+                self._log_progress(f"iter_{iteration}_pre_barrier_exit")
                 torch.cuda.synchronize()
                 reset_peak_memory_stats(synchronize=False)
                 self._reset_stage_timers()
-                self._log(f"iter {iteration}: starting forward/backward")
+                self._log_progress(
+                    f"iter_{iteration}_forward_backward_enter",
+                    f"num_microbatches={num_microbatches}",
+                )
                 start_time = time.perf_counter()
                 forward_backward_func(
                     forward_step_func=self._build_forward_step(test_case),
@@ -906,13 +1071,15 @@ class RuntimeLauncher:
                     forward_only=False,
                 )
                 torch.cuda.synchronize()
-                self._log(f"iter {iteration}: finished forward/backward")
-                self._log(f"iter {iteration}: entering post-barrier")
+                self._log_progress(f"iter_{iteration}_forward_backward_exit")
+                self._log_progress(f"iter_{iteration}_post_barrier_enter")
                 torch.distributed.barrier()
-                self._log(f"iter {iteration}: exited post-barrier")
+                self._log_progress(f"iter_{iteration}_post_barrier_exit")
                 delta_time = time.perf_counter() - start_time
                 memory_by_rank = get_all_rank_peak_memory_stats(synchronize=False)
+                self._log_progress(f"iter_{iteration}_stage_timing_gather_enter")
                 stage_timing_stats = self._gather_stage_timing_stats(num_microbatches)
+                self._log_progress(f"iter_{iteration}_stage_timing_gather_exit")
 
                 metrics = self._compute_perf_metrics(
                     batch_seqlens, delta_time, world_size
@@ -998,7 +1165,9 @@ class RuntimeLauncher:
                         real_detected=get_memory_str(max_real_detected),
                     )
                 )
+            self._log_progress("test_case_tp_overlap_destroy_enter", f"idx={idx}")
             self._maybe_destroy_tp_overlap()
+            self._log_progress("test_case_tp_overlap_destroy_exit", f"idx={idx}")
 
             warmup_count = min(warmup_iterations, max_iterations)
             valid_metrics = iteration_metrics[warmup_count:]

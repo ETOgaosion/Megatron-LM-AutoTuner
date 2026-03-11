@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import os
+import traceback
 from datetime import datetime
 from typing import List, Optional
 
@@ -10,6 +11,7 @@ import torch
 from AutoTuner.runtime.baseline.launcher import RuntimeLauncher
 from AutoTuner.utils.distributed import destroy_distributed, init_distributed_multi_nodes
 from AutoTuner.utils.logging import log_rank0, log_with_rank, set_logging_level
+from AutoTuner.utils.runtime_config import parse_ddp_simulate_config
 from AutoTuner.utils.structs import InputTestCase
 
 
@@ -46,6 +48,18 @@ def validate_args(args):
     assert os.path.exists(
         args.real_override_tf_config_file
     ), f"{args.real_override_tf_config_file} not found"
+    ddp_simulate_candidate = os.path.join(args.config_dir, args.ddp_simulate_config_file)
+    if os.path.exists(ddp_simulate_candidate):
+        args.real_ddp_simulate_config_file = ddp_simulate_candidate
+    else:
+        config_dir_parent = os.path.dirname(os.path.normpath(args.config_dir))
+        fallback_candidate = os.path.join(
+            config_dir_parent, args.ddp_simulate_config_file
+        )
+        assert os.path.exists(
+            fallback_candidate
+        ), f"{ddp_simulate_candidate} not found"
+        args.real_ddp_simulate_config_file = fallback_candidate
 
     if args.tp_comm_overlap_cfg is not None:
         candidate = os.path.join(args.config_dir, args.tp_comm_overlap_cfg)
@@ -156,6 +170,13 @@ def parse_args():
         help="TP overlap config file name in config-dir (optional)",
     )
     parser.add_argument(
+        "--ddp-simulate-config-file",
+        type=str,
+        required=False,
+        default="ddp_simulate_config.json",
+        help="DDP simulator config file name in config-dir",
+    )
+    parser.add_argument(
         "--num-test-cases",
         type=int,
         default=None,
@@ -189,6 +210,13 @@ def parse_args():
         "--no-ddp",
         action="store_true",
         help="Disable wrapping model with DDP",
+    )
+    parser.add_argument(
+        "--use-fused-kernels",
+        type=str_to_bool,
+        default=True,
+        metavar="[true|false]",
+        help="Enable actor-style fused MCore forward patching",
     )
     parser.add_argument(
         "--log-level",
@@ -233,6 +261,17 @@ def load_override_config(path: str) -> dict:
         return json.load(fp)
 
 
+def load_override_tf_config(path: str) -> dict:
+    with open(path, "r") as fp:
+        return json.load(fp)
+
+
+def load_ddp_simulate_config(path: str) -> dict[str, float]:
+    with open(path, "r") as fp:
+        ddp_simulate_config = json.load(fp)
+    return parse_ddp_simulate_config(ddp_simulate_config)
+
+
 def build_runtime_output_dir(base_output_dir: str, model_name: str) -> str:
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     if torch.distributed.is_initialized():
@@ -263,6 +302,7 @@ def main():
         f"test_cases={args.real_test_cases_file} "
         f"override_model_cfg={args.real_override_model_config_file} "
         f"override_tf_cfg={args.real_override_tf_config_file} "
+        f"ddp_simulate_cfg={args.real_ddp_simulate_config_file} "
         f"tp_comm_overlap_cfg={args.real_tp_comm_overlap_cfg} "
         f"tp={args.tensor_model_parallel_size} "
         f"cp={args.context_parallel_size} "
@@ -274,7 +314,8 @@ def main():
         f"max_iterations={args.max_iterations} "
         f"warmup_iterations={args.warmup_iterations} "
         f"share_emb={args.share_embeddings_and_output_weights} "
-        f"no_ddp={args.no_ddp}"
+        f"no_ddp={args.no_ddp} "
+        f"use_fused_kernels={args.use_fused_kernels}"
     )
 
     init_distributed_multi_nodes(
@@ -302,16 +343,21 @@ def main():
         override_model_config = load_override_config(
             args.real_override_model_config_file
         )
-        override_tf_config = load_override_config(args.real_override_tf_config_file)
+        override_tf_config = load_override_tf_config(args.real_override_tf_config_file)
+        dp_allreduce_comm_config = load_ddp_simulate_config(
+            args.real_ddp_simulate_config_file
+        )
 
         launcher = RuntimeLauncher(
             model_name=args.model_name,
             test_cases=test_cases,
             override_model_kwargs=override_model_config,
             override_tf_config_kwargs=override_tf_config,
+            dp_allreduce_comm_config=dp_allreduce_comm_config,
             tp_comm_overlap_cfg=args.real_tp_comm_overlap_cfg,
             share_embeddings_and_output_weights=args.share_embeddings_and_output_weights,
             wrap_with_ddp=not args.no_ddp,
+            use_fused_kernels=args.use_fused_kernels,
             use_distributed_optimizer=False,
             fix_compute_amount=True,
         )
@@ -331,9 +377,17 @@ def main():
                 "runtime baseline summary saved to "
                 f"{os.path.join(runtime_output_dir, 'runtime_summary.json')}"
             )
+    except Exception:
+        log_with_rank(
+            "runtime baseline exception:\n" + traceback.format_exc(),
+            level=logging.ERROR,
+        )
+        raise
     finally:
         if torch.distributed.is_initialized():
+            log_with_rank("runtime baseline entering destroy_distributed()")
             destroy_distributed()
+            log_with_rank("runtime baseline finished destroy_distributed()")
 
 
 if __name__ == "__main__":

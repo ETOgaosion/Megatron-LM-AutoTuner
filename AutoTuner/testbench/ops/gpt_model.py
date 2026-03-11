@@ -97,7 +97,6 @@ class GPTModelForTest(GPTModel, CommonOpsForTest):
             module_name="GPTModel",
             logging_level=logging.INFO,
         )
-        vp_stage = kwargs.get("vp_stage", None)
         self.decoder = NVTXDecoder(
             config=self.config,
             spec=transformer_layer_spec,
