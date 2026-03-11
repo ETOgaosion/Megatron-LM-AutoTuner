@@ -9,7 +9,10 @@ from typing import List, Optional
 import torch
 
 from AutoTuner.runtime.baseline.launcher import RuntimeLauncher
-from AutoTuner.utils.distributed import destroy_distributed, init_distributed_multi_nodes
+from AutoTuner.utils.distributed import (
+    destroy_distributed,
+    init_distributed_multi_nodes,
+)
 from AutoTuner.utils.logging import log_rank0, log_with_rank, set_logging_level
 from AutoTuner.utils.runtime_config import parse_ddp_simulate_config
 from AutoTuner.utils.structs import InputTestCase
@@ -35,9 +38,7 @@ def validate_args(args):
     args.real_override_model_config_file = os.path.join(
         args.config_dir, args.override_model_config_file
     )
-    assert os.path.exists(
-        args.real_override_model_config_file
-    ), (
+    assert os.path.exists(args.real_override_model_config_file), (
         f"{args.real_override_model_config_file} not found, "
         f"please place your override model config file in {args.config_dir}"
     )
@@ -48,7 +49,9 @@ def validate_args(args):
     assert os.path.exists(
         args.real_override_tf_config_file
     ), f"{args.real_override_tf_config_file} not found"
-    ddp_simulate_candidate = os.path.join(args.config_dir, args.ddp_simulate_config_file)
+    ddp_simulate_candidate = os.path.join(
+        args.config_dir, args.ddp_simulate_config_file
+    )
     if os.path.exists(ddp_simulate_candidate):
         args.real_ddp_simulate_config_file = ddp_simulate_candidate
     else:
@@ -56,9 +59,7 @@ def validate_args(args):
         fallback_candidate = os.path.join(
             config_dir_parent, args.ddp_simulate_config_file
         )
-        assert os.path.exists(
-            fallback_candidate
-        ), f"{ddp_simulate_candidate} not found"
+        assert os.path.exists(fallback_candidate), f"{ddp_simulate_candidate} not found"
         args.real_ddp_simulate_config_file = fallback_candidate
 
     if args.tp_comm_overlap_cfg is not None:
@@ -279,7 +280,9 @@ def build_runtime_output_dir(base_output_dir: str, model_name: str) -> str:
         torch.distributed.broadcast_object_list(timestamp_holder, src=0)
         timestamp = timestamp_holder[0]
 
-    output_dir = os.path.join(base_output_dir, timestamp, model_name, "runtime_baseline")
+    output_dir = os.path.join(
+        base_output_dir, timestamp, model_name, "runtime_baseline"
+    )
     if (not torch.distributed.is_initialized()) or torch.distributed.get_rank() == 0:
         os.makedirs(output_dir, exist_ok=True)
     if torch.distributed.is_initialized():
@@ -368,8 +371,12 @@ def main():
             warmup_iterations=args.warmup_iterations,
             output_dir=runtime_output_dir,
         )
-        if (not torch.distributed.is_initialized()) or torch.distributed.get_rank() == 0:
-            with open(os.path.join(runtime_output_dir, "runtime_summary.json"), "w") as fp:
+        if (
+            not torch.distributed.is_initialized()
+        ) or torch.distributed.get_rank() == 0:
+            with open(
+                os.path.join(runtime_output_dir, "runtime_summary.json"), "w"
+            ) as fp:
                 json.dump(metrics_by_test_case, fp, indent=2)
             with open(os.path.join(runtime_output_dir, "args.json"), "w") as fp:
                 json.dump(vars(args), fp, indent=2)

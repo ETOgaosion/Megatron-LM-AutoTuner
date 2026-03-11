@@ -58,7 +58,10 @@ def initialize_tp_communicators(
             ]
         else:
             input_shape = [
-                seq_length * micro_batch_size // cp_divisor // mpu.get_tensor_model_parallel_world_size(),
+                seq_length
+                * micro_batch_size
+                // cp_divisor
+                // mpu.get_tensor_model_parallel_world_size(),
                 hidden_size,
             ]
     else:

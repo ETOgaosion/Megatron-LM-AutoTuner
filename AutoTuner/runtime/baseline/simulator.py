@@ -279,9 +279,7 @@ def simulate_full_iteration(
         else float(bandwidth_gbps)
     )
     latency_s = (
-        DEFAULT_DP_ALLREDUCE_LATENCY_US / 1e6
-        if latency_s is None
-        else float(latency_s)
+        DEFAULT_DP_ALLREDUCE_LATENCY_US / 1e6 if latency_s is None else float(latency_s)
     )
 
     runtime_stage_param_bytes = [

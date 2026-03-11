@@ -47,7 +47,9 @@ def _pick_case(runtime_data: dict, test_case_idx: int) -> dict:
     return test_cases[test_case_idx]
 
 
-def _select_memory_by_rank(case_data: dict, iteration: int | None) -> Tuple[List[dict], str]:
+def _select_memory_by_rank(
+    case_data: dict, iteration: int | None
+) -> Tuple[List[dict], str]:
     summary = case_data.get("summary", {})
     iterations = case_data.get("iterations", [])
 
@@ -200,13 +202,16 @@ def plot_stage_memory(
 ) -> None:
     stages = [f"PP{i}" for i in range(len(stage_bytes))]
     measured_gib = [
-        (value / BYTES_PER_GIB) if isinstance(value, (int, float)) else 0.0 for value in stage_bytes
+        (value / BYTES_PER_GIB) if isinstance(value, (int, float)) else 0.0
+        for value in stage_bytes
     ]
     synthetic_gib = [
         (value / BYTES_PER_GIB) if isinstance(value, (int, float)) else 0.0
         for value in synthetic_stage_bytes
     ]
-    measured_colors = ["#4C78A8" if value is not None else "#C7C7C7" for value in stage_bytes]
+    measured_colors = [
+        "#4C78A8" if value is not None else "#C7C7C7" for value in stage_bytes
+    ]
     synthetic_colors = [
         "#F58518" if value is not None else "#D9D9D9" for value in synthetic_stage_bytes
     ]
@@ -390,9 +395,7 @@ def main() -> None:
     metric_short = args.metric.replace("_bytes", "")
     source_tag = re.sub(r"[^a-zA-Z0-9._-]+", "-", source_name).strip("-").lower()
     run_tag = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    default_filename = (
-        f"{args.input.stem}_tc{args.test_case_idx}_{source_tag}_{metric_short}_{args.reduce}.png"
-    )
+    default_filename = f"{args.input.stem}_tc{args.test_case_idx}_{source_tag}_{metric_short}_{args.reduce}.png"
     default_output = args.output_dir / run_tag / default_filename
     output_path = args.output if args.output is not None else default_output
 

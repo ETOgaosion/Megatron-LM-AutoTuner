@@ -62,7 +62,9 @@ def contiguous_mapping(num_experts: int, ep_size: int) -> list[int]:
     return mapping
 
 
-def mapping_to_gpu_lists(expert_ids: list[int], mapping: list[int], ep_size: int) -> dict[str, list[int]]:
+def mapping_to_gpu_lists(
+    expert_ids: list[int], mapping: list[int], ep_size: int
+) -> dict[str, list[int]]:
     gpu_to_experts: dict[str, list[int]] = {str(i): [] for i in range(ep_size)}
     for idx, gpu_id in enumerate(mapping):
         gpu_to_experts[str(gpu_id)].append(expert_ids[idx])
@@ -90,13 +92,17 @@ def kk_partition_equal_size(values: list[int], k_partitions: int) -> list[list[i
     """Equal-size multi-way partition using Karmarkar-Karp differencing heuristic."""
     n_items = len(values)
     if n_items % k_partitions != 0:
-        raise ValueError(f"{n_items} experts cannot be evenly split across EP={k_partitions}.")
+        raise ValueError(
+            f"{n_items} experts cannot be evenly split across EP={k_partitions}."
+        )
 
     indexed = sorted([(int(v), i) for i, v in enumerate(values)])
     states: list[list[dict[str, Any]]] = []
 
     for offset in range(0, n_items, k_partitions):
-        bins: list[dict[str, Any]] = [{"sum": 0, "items": []} for _ in range(k_partitions)]
+        bins: list[dict[str, Any]] = [
+            {"sum": 0, "items": []} for _ in range(k_partitions)
+        ]
         for i in range(k_partitions):
             value, idx = indexed[offset + i]
             bins[i] = {"sum": value, "items": [idx]}
@@ -200,7 +206,10 @@ def assign_partitions_to_gpus(
 
     # Place larger partitions first onto currently lightest cumulative ranks.
     for part_idx in sorted(range(ep_size), key=lambda i: part_sums[i], reverse=True):
-        target_gpu = min(range(ep_size), key=lambda g: (cumulative_gpu_tokens[g], layer_gpu_tokens[g], g))
+        target_gpu = min(
+            range(ep_size),
+            key=lambda g: (cumulative_gpu_tokens[g], layer_gpu_tokens[g], g),
+        )
         part_to_gpu[part_idx] = target_gpu
         layer_gpu_tokens[target_gpu] = part_sums[part_idx]
         cumulative_gpu_tokens[target_gpu] += part_sums[part_idx]
@@ -213,12 +222,16 @@ def assign_partitions_to_gpus(
             mapping[expert_idx] = gpu_id
 
     if any(x < 0 for x in mapping):
-        raise RuntimeError("Invalid partition-to-GPU assignment: some experts were not assigned.")
+        raise RuntimeError(
+            "Invalid partition-to-GPU assignment: some experts were not assigned."
+        )
 
     return mapping, layer_gpu_tokens
 
 
-def simulate_for_ep(layer_to_expert_tokens: dict[int, dict[int, int]], ep_size: int) -> EpBalanceResult:
+def simulate_for_ep(
+    layer_to_expert_tokens: dict[int, dict[int, int]], ep_size: int
+) -> EpBalanceResult:
     first_layer = min(layer_to_expert_tokens.keys())
     expert_ids = sorted(layer_to_expert_tokens[first_layer].keys())
     num_experts = len(expert_ids)
@@ -265,8 +278,12 @@ def simulate_for_ep(layer_to_expert_tokens: dict[int, dict[int, int]], ep_size: 
             new_gpu_tokens=new_gpu,
             old_variance=old_var,
             new_variance=new_var,
-            old_expert_to_gpu=mapping_to_expert_dict(expert_ids=expert_ids, mapping=old_mapping),
-            new_expert_to_gpu=mapping_to_expert_dict(expert_ids=expert_ids, mapping=new_mapping),
+            old_expert_to_gpu=mapping_to_expert_dict(
+                expert_ids=expert_ids, mapping=old_mapping
+            ),
+            new_expert_to_gpu=mapping_to_expert_dict(
+                expert_ids=expert_ids, mapping=new_mapping
+            ),
             old_gpu_to_experts=mapping_to_gpu_lists(
                 expert_ids=expert_ids,
                 mapping=old_mapping,
@@ -315,7 +332,9 @@ def plot_ep_gpu_tokens(ep_result: EpBalanceResult, output_dir: Path) -> None:
     plt.close()
 
 
-def plot_ep_variance_summary(ep_results: list[EpBalanceResult], output_dir: Path) -> None:
+def plot_ep_variance_summary(
+    ep_results: list[EpBalanceResult], output_dir: Path
+) -> None:
     import matplotlib.pyplot as plt
 
     eps = [r.ep_size for r in ep_results]
@@ -399,7 +418,9 @@ def main() -> None:
     first_layer = min(layer_to_expert_tokens.keys())
     num_experts = len(layer_to_expert_tokens[first_layer])
 
-    requested_eps = args.ep_sizes if args.ep_sizes is not None else valid_ep_sizes(num_experts)
+    requested_eps = (
+        args.ep_sizes if args.ep_sizes is not None else valid_ep_sizes(num_experts)
+    )
     if not requested_eps:
         raise RuntimeError("No EP sizes available to evaluate.")
 
@@ -418,7 +439,9 @@ def main() -> None:
 
     all_results: list[EpBalanceResult] = []
     for ep in ep_sizes:
-        all_results.append(simulate_for_ep(layer_to_expert_tokens=layer_to_expert_tokens, ep_size=ep))
+        all_results.append(
+            simulate_for_ep(layer_to_expert_tokens=layer_to_expert_tokens, ep_size=ep)
+        )
 
     serializable = {str(result.ep_size): asdict(result) for result in all_results}
     with (output_dir / "balance_results.json").open("w", encoding="utf-8") as f:
@@ -440,7 +463,9 @@ def main() -> None:
                 ]
             )
         )
-    (output_dir / "variance_summary.csv").write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
+    (output_dir / "variance_summary.csv").write_text(
+        "\n".join(summary_lines) + "\n", encoding="utf-8"
+    )
 
     if not args.no_plot:
         for result in all_results:

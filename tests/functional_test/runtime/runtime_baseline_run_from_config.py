@@ -11,7 +11,6 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-
 DEFAULT_TEST_CASES_DIR = "tests/functional_test/runtime/generated_cases/qwen_longctx"
 DEFAULT_OUTPUT_DIR = "outputs"
 
@@ -130,7 +129,9 @@ def resolve_path(repo_root: Path, raw: str) -> Path:
 
 
 def build_cases(case_cfg: dict[str, Any], merged_cfg: dict[str, Any]) -> dict[str, Any]:
-    seqlen = parse_int(get_first(case_cfg, ["seqlen"], merged_cfg.get("seqlen", 20480)), "seqlen")
+    seqlen = parse_int(
+        get_first(case_cfg, ["seqlen"], merged_cfg.get("seqlen", 20480)), "seqlen"
+    )
     max_token_len = parse_int(
         get_first(case_cfg, ["max_token_len"], merged_cfg.get("max_token_len", 40960)),
         "max_token_len",
@@ -180,17 +181,25 @@ def build_cases(case_cfg: dict[str, Any], merged_cfg: dict[str, Any]) -> dict[st
     }
 
 
-def build_parallel(parallel_cfg: dict[str, Any], merged_cfg: dict[str, Any]) -> dict[str, Any]:
+def build_parallel(
+    parallel_cfg: dict[str, Any], merged_cfg: dict[str, Any]
+) -> dict[str, Any]:
     tp_size = parse_int(
-        get_first(parallel_cfg, ["tp_size", "tp"], get_first(merged_cfg, ["tp_size", "tp"], 1)),
+        get_first(
+            parallel_cfg, ["tp_size", "tp"], get_first(merged_cfg, ["tp_size", "tp"], 1)
+        ),
         "tp_size",
     )
     cp_size = parse_int(
-        get_first(parallel_cfg, ["cp_size", "cp"], get_first(merged_cfg, ["cp_size", "cp"], 4)),
+        get_first(
+            parallel_cfg, ["cp_size", "cp"], get_first(merged_cfg, ["cp_size", "cp"], 4)
+        ),
         "cp_size",
     )
     ep_size = parse_int(
-        get_first(parallel_cfg, ["ep_size", "ep"], get_first(merged_cfg, ["ep_size", "ep"], 1)),
+        get_first(
+            parallel_cfg, ["ep_size", "ep"], get_first(merged_cfg, ["ep_size", "ep"], 1)
+        ),
         "ep_size",
     )
     etp_size = parse_int(
@@ -202,7 +211,9 @@ def build_parallel(parallel_cfg: dict[str, Any], merged_cfg: dict[str, Any]) -> 
         "etp_size",
     )
     pp_size = parse_int(
-        get_first(parallel_cfg, ["pp_size", "pp"], get_first(merged_cfg, ["pp_size", "pp"], 2)),
+        get_first(
+            parallel_cfg, ["pp_size", "pp"], get_first(merged_cfg, ["pp_size", "pp"], 2)
+        ),
         "pp_size",
     )
     vpp_size = parse_optional_int(
@@ -234,7 +245,9 @@ def build_parallel(parallel_cfg: dict[str, Any], merged_cfg: dict[str, Any]) -> 
     }
 
 
-def build_runtime(runtime_cfg: dict[str, Any], merged_cfg: dict[str, Any]) -> dict[str, Any]:
+def build_runtime(
+    runtime_cfg: dict[str, Any], merged_cfg: dict[str, Any]
+) -> dict[str, Any]:
     num_test_cases = parse_int(
         get_first(
             runtime_cfg,
@@ -263,7 +276,9 @@ def build_runtime(runtime_cfg: dict[str, Any], merged_cfg: dict[str, Any]) -> di
         get_first(
             runtime_cfg,
             ["share_emb", "share_embeddings_and_output_weights"],
-            get_first(merged_cfg, ["share_emb", "share_embeddings_and_output_weights"], None),
+            get_first(
+                merged_cfg, ["share_emb", "share_embeddings_and_output_weights"], None
+            ),
         ),
         "share_emb",
         allow_none=True,
@@ -361,11 +376,23 @@ def build_run_spec(
 
     test_cases_dir = resolve_path(
         repo_root,
-        str(get_first(paths_cfg, ["test_cases_dir"], merged_cfg.get("test_cases_dir", DEFAULT_TEST_CASES_DIR))),
+        str(
+            get_first(
+                paths_cfg,
+                ["test_cases_dir"],
+                merged_cfg.get("test_cases_dir", DEFAULT_TEST_CASES_DIR),
+            )
+        ),
     )
     output_dir = resolve_path(
         repo_root,
-        str(get_first(paths_cfg, ["output_dir"], merged_cfg.get("output_dir", DEFAULT_OUTPUT_DIR))),
+        str(
+            get_first(
+                paths_cfg,
+                ["output_dir"],
+                merged_cfg.get("output_dir", DEFAULT_OUTPUT_DIR),
+            )
+        ),
     )
     model_norm = normalize_model_name(model_name)
     test_cases_file = (
@@ -375,7 +402,9 @@ def build_run_spec(
 
     runtime_config_dir = runtime_info["config_dir"]
     if runtime_config_dir is not None:
-        runtime_info["config_dir"] = str(resolve_path(repo_root, str(runtime_config_dir)))
+        runtime_info["config_dir"] = str(
+            resolve_path(repo_root, str(runtime_config_dir))
+        )
 
     gpus_per_node = (
         parallel_info["tp_size"]

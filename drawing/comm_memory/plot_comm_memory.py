@@ -57,12 +57,17 @@ def load_data(path: Path) -> tuple[list[str], list[float], list[float]]:
     systems = list(runtime.keys())
     runtime_values = [float(runtime[name]) for name in systems]
     offload_values = [float(offload[name]) for name in systems]
-    total_values = [runtime_v + offload_v for runtime_v, offload_v in zip(runtime_values, offload_values)]
+    total_values = [
+        runtime_v + offload_v
+        for runtime_v, offload_v in zip(runtime_values, offload_values)
+    ]
 
     return systems, runtime_values, total_values
 
 
-def _build_axis_limits(values: list[float], lower_pad_ratio: float, upper_pad_ratio: float) -> tuple[float, float]:
+def _build_axis_limits(
+    values: list[float], lower_pad_ratio: float, upper_pad_ratio: float
+) -> tuple[float, float]:
     min_v = min(values)
     max_v = max(values)
     span = max(1.0, max_v - min_v)
@@ -132,7 +137,9 @@ def plot(
     ax.set_xticks(x)
     ax.set_xticklabels(systems, fontsize=font_size)
     ax.set_ylabel("Total Memory (GB)", fontsize=font_size + 1.0, color="#A04E09")
-    ax_runtime.set_ylabel("Runtime Memory (GB)", fontsize=font_size + 1.0, color="#2E5E8C")
+    ax_runtime.set_ylabel(
+        "Runtime Memory (GB)", fontsize=font_size + 1.0, color="#2E5E8C"
+    )
     ax.set_title(
         "Memory Saving with Memory-Efficient Communication Library",
         fontsize=font_size + 2.0,
@@ -143,7 +150,12 @@ def plot(
     ax_runtime.tick_params(axis="y", colors="#2E5E8C")
     handles, labels = ax.get_legend_handles_labels()
     runtime_handles, runtime_labels = ax_runtime.get_legend_handles_labels()
-    ax.legend(handles + runtime_handles, labels + runtime_labels, loc="upper right", fontsize=font_size)
+    ax.legend(
+        handles + runtime_handles,
+        labels + runtime_labels,
+        loc="upper right",
+        fontsize=font_size,
+    )
 
     shared_min, shared_max = _build_axis_limits(
         total_values + runtime_values, lower_pad_ratio=0.8, upper_pad_ratio=0.5

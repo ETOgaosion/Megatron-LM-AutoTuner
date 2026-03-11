@@ -1,6 +1,5 @@
 from typing import Any, Mapping
 
-
 DEFAULT_DP_ALLREDUCE_BANDWIDTH_GBPS = 50.0
 DEFAULT_DP_ALLREDUCE_LATENCY_US = 30.0
 
@@ -19,7 +18,9 @@ def parse_ddp_simulate_config(
     if not isinstance(raw_config, Mapping):
         raise ValueError("ddp_simulate_config must be a JSON object")
     bandwidth_gbps = _coerce_float(
-        raw_config.get("dp_allreduce_bandwidth_gbps", DEFAULT_DP_ALLREDUCE_BANDWIDTH_GBPS),
+        raw_config.get(
+            "dp_allreduce_bandwidth_gbps", DEFAULT_DP_ALLREDUCE_BANDWIDTH_GBPS
+        ),
         "ddp_simulate_config.dp_allreduce_bandwidth_gbps",
     )
     latency_us = _coerce_float(

@@ -17,7 +17,6 @@ from typing import Any, Callable
 import numpy as np
 import torch
 
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[1]
 EPLB_MODULE_PATH = REPO_ROOT / "EPLB" / "eplb.py"
@@ -84,7 +83,9 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Output dir. Default: outputs/simulate_ep_balance/test_eplb_lplb/<timestamp>/",
     )
-    parser.add_argument("--no-plot", action="store_true", help="Skip drawing png chart.")
+    parser.add_argument(
+        "--no-plot", action="store_true", help="Skip drawing png chart."
+    )
     return parser.parse_args()
 
 
@@ -119,7 +120,9 @@ def _choose_num_groups(num_experts: int) -> int:
     return 1
 
 
-def _pick_topology(num_experts: int, num_gpus_default: int, redundant_ratio: float) -> dict[str, int]:
+def _pick_topology(
+    num_experts: int, num_gpus_default: int, redundant_ratio: float
+) -> dict[str, int]:
     num_gpus = max(4, num_gpus_default) if num_experts >= 64 else 4
     num_groups = _choose_num_groups(num_experts)
     num_nodes = 1
@@ -136,7 +139,9 @@ def _pick_topology(num_experts: int, num_gpus_default: int, redundant_ratio: flo
 def _mock_one_layer_weight(model_name: str, num_experts: int) -> torch.Tensor:
     seed = zlib.crc32(model_name.encode("utf-8")) & 0xFFFFFFFF
     generator = torch.Generator().manual_seed(seed)
-    base = torch.randint(50, 5000, (num_experts,), generator=generator, dtype=torch.int64)
+    base = torch.randint(
+        50, 5000, (num_experts,), generator=generator, dtype=torch.int64
+    )
     slope = torch.linspace(1.0, 2.5, steps=num_experts)
     weight = (base.float() * slope).round().to(torch.float32)
     return weight.view(1, -1)
@@ -185,7 +190,9 @@ def _plot_results(results: dict[str, Any], output_dir: Path) -> None:
     lplb = [results[m]["lplb"]["mean_ms"] for m in models]
 
     plt.figure(figsize=(max(9.5, len(models) * 2.2), 5.4))
-    bars_ours = plt.bar(x - width, ours, width=width, label="Our system", color="#59A14F")
+    bars_ours = plt.bar(
+        x - width, ours, width=width, label="Our system", color="#59A14F"
+    )
     bars_eplb = plt.bar(x, eplb, width=width, label="EPLB", color="#E15759")
     bars_lplb = plt.bar(x + width, lplb, width=width, label="LPLB", color="#4C78A8")
 
@@ -198,15 +205,24 @@ def _plot_results(results: dict[str, Any], output_dir: Path) -> None:
             x_center = bar.get_x() + bar.get_width() / 2.0
             x_text = x_center
             y_text = v + text_offset if v > 0 else zero_marker_y
-            plt.text(x_text, y_text, f"{v:.2f}", ha="center", va="bottom", fontsize=anno_fontsize)
+            plt.text(
+                x_text,
+                y_text,
+                f"{v:.2f}",
+                ha="center",
+                va="bottom",
+                fontsize=anno_fontsize,
+            )
 
     annotate(bars_ours, ours, is_ours=True)
     annotate(bars_eplb, eplb)
     annotate(bars_lplb, lplb)
 
     # Zero-height bars are hard to see; draw a visible marker at y=0 for our system.
-    plt.scatter(x - width, np.zeros_like(x), marker="_", s=500, color="#2E7D32", zorder=4)
-    for x_pos in (x - width):
+    plt.scatter(
+        x - width, np.zeros_like(x), marker="_", s=500, color="#2E7D32", zorder=4
+    )
+    for x_pos in x - width:
         plt.annotate(
             "Our system",
             xy=(float(x_pos), zero_marker_y * 8.0),
@@ -225,7 +241,10 @@ def _plot_results(results: dict[str, Any], output_dir: Path) -> None:
     plt.xticks(x, models, rotation=12, ha="right", fontsize=x_tick_fontsize)
     plt.yticks(fontsize=y_tick_fontsize)
     plt.ylabel("Single-task latency (ms)", fontsize=axis_fontsize)
-    plt.title("One-layer MoE load-balance latency: Our system vs EPLB vs LPLB", fontsize=title_fontsize)
+    plt.title(
+        "One-layer MoE load-balance latency: Our system vs EPLB vs LPLB",
+        fontsize=title_fontsize,
+    )
     plt.ylim(bottom=0.0, top=max_val * 1.18 + text_offset * 3)
     plt.legend(fontsize=legend_fontsize)
     plt.tight_layout()
@@ -240,7 +259,9 @@ def main() -> None:
 
     if args.output_dir is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = REPO_ROOT / "outputs" / "simulate_ep_balance" / "test_eplb_lplb" / timestamp
+        output_dir = (
+            REPO_ROOT / "outputs" / "simulate_ep_balance" / "test_eplb_lplb" / timestamp
+        )
     else:
         output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -273,8 +294,12 @@ def main() -> None:
                 num_gpus=topo["num_gpus"],
             )
 
-        eplb_samples = _benchmark(run_eplb, warmup=args.warmup, iterations=args.iterations)
-        lplb_samples = _benchmark(run_lplb, warmup=args.warmup, iterations=args.iterations)
+        eplb_samples = _benchmark(
+            run_eplb, warmup=args.warmup, iterations=args.iterations
+        )
+        lplb_samples = _benchmark(
+            run_lplb, warmup=args.warmup, iterations=args.iterations
+        )
         results[model_name] = {
             "num_experts": num_experts,
             "topology": topo,
@@ -324,7 +349,9 @@ def main() -> None:
                 ]
             )
         )
-    (output_dir / "timing_summary.csv").write_text("\n".join(csv_lines) + "\n", encoding="utf-8")
+    (output_dir / "timing_summary.csv").write_text(
+        "\n".join(csv_lines) + "\n", encoding="utf-8"
+    )
 
     if not args.no_plot:
         _plot_results(results, output_dir)
