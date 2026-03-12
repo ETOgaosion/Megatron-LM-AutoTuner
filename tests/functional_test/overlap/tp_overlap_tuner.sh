@@ -84,7 +84,7 @@ echo ""
 cd "$PROJECT_ROOT"
 
 # Run the complete tuning workflow
-python -m AutoTuner.Profiler.overlap.main \
+python -m AutoTuner.Profiler.overlap.tp.main \
     --model-name "${MODEL_NAME}" \
     --max-tp-size "${MAX_TP_SIZE}" \
     --max-token-len "${MAX_TOKEN_LEN}" \

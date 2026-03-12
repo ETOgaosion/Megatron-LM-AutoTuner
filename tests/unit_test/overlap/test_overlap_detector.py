@@ -4,16 +4,12 @@ Unit tests for AutoTuner.Profiler.overlap.overlap_detector module.
 These tests use mock trace JSON files to test overlap detection logic.
 """
 
+from dataclasses import dataclass
 import json
 import os
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
 
-from AutoTuner.Profiler.overlap.config_generator import (
-    OverlapMethod,
-    TPOverlapTestConfig,
-)
 from AutoTuner.Profiler.overlap.overlap_detector import (
     OverlapAnalysis,
     OverlapDetector,
@@ -21,6 +17,18 @@ from AutoTuner.Profiler.overlap.overlap_detector import (
     calculate_overlap_ratio,
     is_overlap_effective,
 )
+
+
+@dataclass
+class DummyConfig:
+    tp_size: int = 2
+    operator: str = "fc1"
+    phase: str = "fprop"
+    overlap_method: str = "ring_exchange"
+    config_id: str = "tp2_fc1_fprop_ring_agg0"
+
+    def get_test_id(self) -> str:
+        return self.config_id
 
 
 def create_mock_trace_json(events: list, output_path: str) -> None:
@@ -139,12 +147,7 @@ class TestOverlapAnalysis(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.mock_config = TPOverlapTestConfig(
-            tp_size=2,
-            operator="fc1",
-            phase="fprop",
-            overlap_method=OverlapMethod.RING_EXCHANGE,
-        )
+        self.mock_config = DummyConfig()
 
     def test_forward_overlap_ratio(self):
         """Test forward overlap ratio calculation."""
@@ -227,12 +230,7 @@ class TestOverlapDetector(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.detector = OverlapDetector()
-        self.mock_config = TPOverlapTestConfig(
-            tp_size=2,
-            operator="fc1",
-            phase="fprop",
-            overlap_method=OverlapMethod.RING_EXCHANGE,
-        )
+        self.mock_config = DummyConfig()
         self.temp_dir = tempfile.mkdtemp()
 
     def tearDown(self):
@@ -389,18 +387,11 @@ class TestOverlapDetector(unittest.TestCase):
         create_mock_trace_json(events1, trace_path1)
         create_mock_trace_json(events2, trace_path2)
 
-        config1 = TPOverlapTestConfig(
-            tp_size=2,
-            operator="fc1",
-            phase="fprop",
-            overlap_method=OverlapMethod.RING_EXCHANGE,
-        )
-        config2 = TPOverlapTestConfig(
-            tp_size=2,
-            operator="fc1",
+        config1 = DummyConfig(phase="fprop", config_id="tp2_fc1_fprop_ring_agg0")
+        config2 = DummyConfig(
             phase="dgrad",
-            overlap_method=OverlapMethod.BULK,
-            num_sm=4,
+            overlap_method="bulk",
+            config_id="tp2_fc1_dgrad_bulk_sm4",
         )
 
         results = self.detector.analyze_multiple_traces(
@@ -431,12 +422,7 @@ class TestUtilityFunctions(unittest.TestCase):
 
     def test_is_overlap_effective_true(self):
         """Test overlap effectiveness check (effective)."""
-        mock_config = TPOverlapTestConfig(
-            tp_size=2,
-            operator="fc1",
-            phase="fprop",
-            overlap_method=OverlapMethod.RING_EXCHANGE,
-        )
+        mock_config = DummyConfig()
         analysis = OverlapAnalysis(
             config=mock_config,
             total_gemm_time=1000,
@@ -447,12 +433,7 @@ class TestUtilityFunctions(unittest.TestCase):
 
     def test_is_overlap_effective_false(self):
         """Test overlap effectiveness check (not effective)."""
-        mock_config = TPOverlapTestConfig(
-            tp_size=2,
-            operator="fc1",
-            phase="fprop",
-            overlap_method=OverlapMethod.RING_EXCHANGE,
-        )
+        mock_config = DummyConfig()
         analysis = OverlapAnalysis(
             config=mock_config,
             total_gemm_time=1000,

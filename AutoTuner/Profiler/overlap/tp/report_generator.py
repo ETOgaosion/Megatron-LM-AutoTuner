@@ -19,7 +19,7 @@ from .config_generator import (
     TPOverlapTestConfig,
     TPOverlapTunerConfig,
 )
-from .overlap_detector import OverlapAnalysis
+from ..overlap_detector import OverlapAnalysis
 
 
 @dataclass

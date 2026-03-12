@@ -1,12 +1,12 @@
-"""
-Unit tests for AutoTuner.Profiler.overlap.config_generator module.
-"""
+"""Unit tests for AutoTuner.Profiler.overlap.tp.config_generator."""
 
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from AutoTuner.Profiler.overlap.config_generator import (
+from AutoTuner.Profiler.overlap.tp.config_generator import (
     DEFAULT_CONFIGS,
     OPERATOR_LINEAR_TYPE,
     LinearType,
@@ -19,6 +19,23 @@ from AutoTuner.Profiler.overlap.config_generator import (
     generate_yaml_config_file,
     load_yaml_config,
 )
+
+
+def build_mock_hf_config() -> SimpleNamespace:
+    return SimpleNamespace(
+        hidden_size=1024,
+        intermediate_size=3072,
+        num_attention_heads=16,
+        num_key_value_heads=8,
+    )
+
+
+def make_tuner_config(**kwargs) -> TPOverlapTunerConfig:
+    with patch(
+        "AutoTuner.utils.config.get_hf_model_config",
+        return_value=build_mock_hf_config(),
+    ):
+        return TPOverlapTunerConfig(**kwargs)
 
 
 class TestTPOverlapTestConfig(unittest.TestCase):
@@ -125,7 +142,7 @@ class TestTPOverlapTunerConfig(unittest.TestCase):
 
     def test_auto_fetch_model_params(self):
         """Test that model parameters are auto-fetched from HuggingFace."""
-        tuner_config = TPOverlapTunerConfig(
+        tuner_config = make_tuner_config(
             model_name="Qwen/Qwen2.5-0.5B",
             max_tp_size=4,
         )
@@ -142,7 +159,7 @@ class TestTPOverlapTunerConfig(unittest.TestCase):
 
     def test_default_values(self):
         """Test default values for tuner config."""
-        tuner_config = TPOverlapTunerConfig(model_name="Qwen/Qwen2.5-0.5B")
+        tuner_config = make_tuner_config(model_name="Qwen/Qwen2.5-0.5B")
 
         self.assertEqual(tuner_config.max_tp_size, 8)
         self.assertEqual(tuner_config.max_token_len, 8192)
@@ -157,7 +174,7 @@ class TestTPOverlapConfigGenerator(unittest.TestCase):
 
     def test_tp_sizes_includes_tp1(self):
         """Test that TP sizes include TP=1 as baseline."""
-        tuner_config = TPOverlapTunerConfig(
+        tuner_config = make_tuner_config(
             model_name="Qwen/Qwen2.5-0.5B",
             max_tp_size=8,
         )
@@ -168,7 +185,7 @@ class TestTPOverlapConfigGenerator(unittest.TestCase):
 
     def test_tp_sizes_filtered_by_max(self):
         """Test that TP sizes are filtered by max_tp_size."""
-        tuner_config = TPOverlapTunerConfig(
+        tuner_config = make_tuner_config(
             model_name="Qwen/Qwen2.5-0.5B",
             max_tp_size=4,
         )
@@ -179,7 +196,7 @@ class TestTPOverlapConfigGenerator(unittest.TestCase):
 
     def test_generate_baseline_configs(self):
         """Test baseline config generation."""
-        tuner_config = TPOverlapTunerConfig(model_name="Qwen/Qwen2.5-0.5B")
+        tuner_config = make_tuner_config(model_name="Qwen/Qwen2.5-0.5B")
         generator = TPOverlapConfigGenerator(tuner_config)
 
         configs = generator.generate_baseline_configs(tp_size=2, operator="fc1")
@@ -192,7 +209,7 @@ class TestTPOverlapConfigGenerator(unittest.TestCase):
 
     def test_generate_ring_exchange_configs(self):
         """Test ring_exchange config generation."""
-        tuner_config = TPOverlapTunerConfig(model_name="Qwen/Qwen2.5-0.5B")
+        tuner_config = make_tuner_config(model_name="Qwen/Qwen2.5-0.5B")
         generator = TPOverlapConfigGenerator(tuner_config)
 
         configs = generator.generate_ring_exchange_configs(tp_size=2, operator="fc1")
@@ -206,7 +223,7 @@ class TestTPOverlapConfigGenerator(unittest.TestCase):
 
     def test_generate_bulk_configs(self):
         """Test bulk config generation with binary search num_sm values."""
-        tuner_config = TPOverlapTunerConfig(
+        tuner_config = make_tuner_config(
             model_name="Qwen/Qwen2.5-0.5B",
             min_num_sm=1,
             max_num_sm=16,
@@ -227,7 +244,7 @@ class TestTPOverlapConfigGenerator(unittest.TestCase):
 
     def test_generate_all_configs_tp1_only_baseline(self):
         """Test that TP=1 only generates baseline configs (no overlap)."""
-        tuner_config = TPOverlapTunerConfig(
+        tuner_config = make_tuner_config(
             model_name="Qwen/Qwen2.5-0.5B",
             max_tp_size=2,
             operators=["fc1"],
@@ -249,7 +266,7 @@ class TestTPOverlapConfigGenerator(unittest.TestCase):
 
     def test_generate_all_configs_count(self):
         """Test total config count for all operators."""
-        tuner_config = TPOverlapTunerConfig(
+        tuner_config = make_tuner_config(
             model_name="Qwen/Qwen2.5-0.5B",
             max_tp_size=8,
             operators=["fc1", "fc2", "qkv", "proj"],
@@ -321,7 +338,11 @@ class TestYAMLFunctions(unittest.TestCase):
             yaml_path = f.name
 
         try:
-            generate_single_test_yaml(config, yaml_path)
+            with patch(
+                "AutoTuner.utils.config.get_hf_model_config",
+                return_value=build_mock_hf_config(),
+            ):
+                generate_single_test_yaml(config, yaml_path)
             loaded = load_yaml_config(yaml_path)
 
             # Should have the test config

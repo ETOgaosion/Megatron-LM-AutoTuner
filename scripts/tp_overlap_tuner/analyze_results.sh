@@ -58,7 +58,7 @@ echo ""
 # Run analysis with skip-profiling flag
 cd "$PROJECT_ROOT"
 
-python -m AutoTuner.Profiler.overlap.tuner \
+python -m AutoTuner.Profiler.overlap.tp.main \
     --output-dir "${OUTPUT_DIR}" \
     --skip-profiling
 

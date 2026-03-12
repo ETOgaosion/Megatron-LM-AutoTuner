@@ -10,11 +10,13 @@ This module implements the complete TP overlap tuning workflow:
     4. Generate report for each operator with optimal configurations
 
 Usage:
-    python -m AutoTuner.Profiler.overlap.main --model-name Qwen/Qwen3-0.6B
-    python -m AutoTuner.Profiler.overlap.main --model-name meta-llama/Llama-2-7b --max-tp-size 4
+    python -m AutoTuner.Profiler.overlap.tp.main --model-name Qwen/Qwen3-0.6B
+    python -m AutoTuner.Profiler.overlap.tp.main --model-name meta-llama/Llama-2-7b --max-tp-size 4
 """
 
 import argparse
+import json
+import os
 import sys
 from datetime import datetime
 from typing import List, Optional
@@ -42,13 +44,13 @@ Workflow:
 
 Examples:
   # Run complete tuning workflow
-  python -m AutoTuner.Profiler.overlap.main --model-name Qwen/Qwen3-0.6B
+  python -m AutoTuner.Profiler.overlap.tp.main --model-name Qwen/Qwen3-0.6B
 
   # Tune with specific TP size limit
-  python -m AutoTuner.Profiler.overlap.main --model-name meta-llama/Llama-2-7b --max-tp-size 4
+  python -m AutoTuner.Profiler.overlap.tp.main --model-name meta-llama/Llama-2-7b --max-tp-size 4
 
   # Tune specific operators only
-  python -m AutoTuner.Profiler.overlap.main --model-name Qwen/Qwen3-0.6B --operators qkv proj
+  python -m AutoTuner.Profiler.overlap.tp.main --model-name Qwen/Qwen3-0.6B --operators qkv proj
 """,
     )
 
@@ -56,9 +58,10 @@ Examples:
     parser.add_argument(
         "--model-name",
         type=str,
-        required=True,
+        default=None,
         help="Model name from HuggingFace. Model parameters (hidden_size, ffn_hidden_size, "
-        "num_attention_heads, num_kv_heads) are automatically fetched.",
+        "num_attention_heads, num_kv_heads) are automatically fetched. "
+        "Optional with --skip-profiling if it can be inferred from output-dir/test_cases/test_cases.json.",
     )
 
     # Step 1: Test case generation parameters
@@ -109,8 +112,40 @@ Examples:
         default=None,
         help="Output directory for results. (default: auto-generated with timestamp)",
     )
+    parser.add_argument(
+        "--skip-profiling",
+        action="store_true",
+        help="Skip profiling and analyze existing traces in output-dir.",
+    )
 
     return parser.parse_args(argv)
+
+
+def _resolve_model_name(args: argparse.Namespace) -> str:
+    """Resolve the model name from CLI args or a previous tuning output."""
+    if args.model_name:
+        return args.model_name
+
+    if not args.skip_profiling or not args.output_dir:
+        raise ValueError("--model-name is required unless --skip-profiling can infer it.")
+
+    test_cases_path = os.path.join(args.output_dir, "test_cases", "test_cases.json")
+    if not os.path.exists(test_cases_path):
+        raise ValueError(
+            "--model-name was not provided and no prior test_cases/test_cases.json "
+            f"was found under {args.output_dir}"
+        )
+
+    with open(test_cases_path, "r") as f:
+        test_cases_data = json.load(f)
+
+    model_name = test_cases_data.get("model")
+    if not model_name:
+        raise ValueError(
+            f"Could not infer model name from {test_cases_path}; please pass --model-name."
+        )
+
+    return model_name
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -138,12 +173,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     print("TP OVERLAP TUNER")
     print("=" * 70)
     print("")
+    model_name = _resolve_model_name(args)
+
     print("Step 0: [INPUT] Loading model configuration...")
-    print(f"  Model: {args.model_name}")
+    print(f"  Model: {model_name}")
 
     # Create tuner config (model params auto-fetched from model_name)
     tuner_config = TPOverlapTunerConfig(
-        model_name=args.model_name,
+        model_name=model_name,
         max_tp_size=args.max_tp_size,
         max_token_len=args.max_token_len,
         operators=args.operators,
@@ -196,7 +233,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     # Run the complete workflow (profile + analyze + report)
-    report = tuner.run(skip_profiling=False)
+    report = tuner.run(skip_profiling=args.skip_profiling)
 
     # ========================================
     # Summary

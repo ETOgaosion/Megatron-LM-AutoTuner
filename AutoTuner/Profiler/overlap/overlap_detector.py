@@ -8,7 +8,6 @@ and communication operations from torch profiler traces.
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from .config_generator import TPOverlapTestConfig
 from .trace_analyzer import TraceAnalyzer, TraceEvent
 
 
@@ -47,7 +46,7 @@ class TimeInterval:
 class OverlapAnalysis:
     """Results of overlap analysis for a configuration."""
 
-    config: TPOverlapTestConfig
+    config: Any
     # Forward pass metrics
     forward_gemm_time: float = 0.0
     forward_comm_time: float = 0.0
@@ -106,12 +105,23 @@ class OverlapAnalysis:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
+        overlap_method = getattr(self.config, "overlap_method", None)
+        if hasattr(overlap_method, "value"):
+            overlap_method = overlap_method.value
+
+        config_id = None
+        get_test_id = getattr(self.config, "get_test_id", None)
+        if callable(get_test_id):
+            config_id = get_test_id()
+        else:
+            config_id = getattr(self.config, "config_id", None)
+
         return {
-            "config_id": self.config.get_test_id(),
-            "operator": self.config.operator,
-            "phase": self.config.phase,
-            "tp_size": self.config.tp_size,
-            "overlap_method": self.config.overlap_method.value,
+            "config_id": config_id,
+            "operator": getattr(self.config, "operator", None),
+            "phase": getattr(self.config, "phase", None),
+            "tp_size": getattr(self.config, "tp_size", None),
+            "overlap_method": overlap_method,
             # Forward pass metrics
             "forward_gemm_time_us": self.forward_gemm_time,
             "forward_comm_time_us": self.forward_comm_time,
@@ -147,7 +157,7 @@ class OverlapDetector:
         pass
 
     def analyze_overlap(
-        self, trace_path: str, config: TPOverlapTestConfig
+        self, trace_path: str, config: Any
     ) -> OverlapAnalysis:
         """Analyze a trace file and compute overlap metrics.
 
@@ -336,7 +346,7 @@ class OverlapDetector:
         return forward, backward
 
     def analyze_multiple_traces(
-        self, trace_configs: List[Tuple[str, TPOverlapTestConfig]]
+        self, trace_configs: List[Tuple[str, Any]]
     ) -> List[OverlapAnalysis]:
         """Analyze multiple trace files.
 

@@ -59,7 +59,7 @@ echo ""
 # Run the tuner
 cd "$PROJECT_ROOT"
 
-python -m AutoTuner.Profiler.overlap.tuner \
+python -m AutoTuner.Profiler.overlap.tp.main \
     --model-name "${MODEL_NAME}" \
     --max-tp-size "${MAX_TP_SIZE}" \
     --operators ${OPERATORS} \
