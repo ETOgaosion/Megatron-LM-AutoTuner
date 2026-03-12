@@ -1,7 +1,8 @@
-# Overlap Utilities and TP Overlap Tuner
+# Overlap Utilities, TP Tuner, and CP Profiler
 
 `AutoTuner/Profiler/overlap` contains shared trace parsing and overlap analysis
-utilities, plus the TP-specific tuner under `AutoTuner/Profiler/overlap/tp/`.
+utilities, plus the TP-specific tuner under `AutoTuner/Profiler/overlap/tp/`
+and the CP-specific profiler under `AutoTuner/Profiler/overlap/cp/`.
 
 ## Shared Modules
 
@@ -342,6 +343,12 @@ AutoTuner/Profiler/overlap/
 ├── __init__.py                # Shared package exports
 ├── trace_analyzer.py          # Shared torch profiler JSON parsing
 ├── overlap_detector.py        # Shared overlap calculation
+├── cp/
+│   ├── __init__.py
+│   ├── main.py                # CP profiler CLI entry point
+│   ├── runner.py              # CP profiling orchestration
+│   ├── cp_overlap_trace_analyzer.py
+│   └── test_cp_overlap_trace_analyzer.py
 └── tp/
     ├── __init__.py
     ├── main.py                # TP tuner CLI entry point
@@ -374,3 +381,62 @@ export NVTE_FUSED_ATTN=0    # Disable fused attention
 
 - TP only happens in a single machine (8 GPUs max, TP < 8)
 - Pipeline method not used for reduce-scatter (only ring_exchange and bulk)
+
+## CP Overlap Profiler
+
+The CP overlap workflow profiles `TEAttenWithCPEnhanced` with `CP=2` and
+analyzes a single
+`TransformerEngine-Enhanced/transformer_engine/pytorch/attention/dot_product_attention/context_parallel_nvshmem.py(479): forward`
+range per trace.
+
+### What the CP analyzer measures
+
+- Compute: `flash::flash_fwd_kernel` events on streams that contain exactly one
+  such kernel inside the selected `forward` range.
+- Communication: `Memcpy PtoP (Device -> Device)` events on streams that
+  contain exactly one such memcpy inside the selected `forward` range.
+- Overlap ratio: `overlapped_comm_time / total_compute_time`, matching the
+  single-range TP overlap convention.
+
+### CP CLI
+
+Run a fresh profile with one or more `(seqlen, max_token_len)` cases:
+
+```bash
+python -m AutoTuner.Profiler.overlap.cp.main \
+  --model-name Qwen/Qwen3-0.6B \
+  --case 40960:40960 \
+  --case 32768:8192
+```
+
+Reuse existing traces in a prior output directory:
+
+```bash
+python -m AutoTuner.Profiler.overlap.cp.main \
+  --output-dir outputs/cp_overlap_tuner/<timestamp> \
+  --skip-profiling \
+  --range-index 0
+```
+
+Analyze a single trace directly:
+
+```bash
+python -m AutoTuner.Profiler.overlap.cp.cp_overlap_trace_analyzer \
+  --trace outputs/<timestamp>/<model>/torch_profiler/*.pt.trace.json \
+  --range-index 0
+```
+
+### CP Output Files
+
+```text
+outputs/cp_overlap_tuner/<timestamp>/
+├── test_cases/
+│   ├── cases_manifest.json
+│   └── seq*_tok*.json
+├── traces/
+│   └── <case_id>/
+│       ├── cp_overlap_analysis.json
+│       └── <model>/torch_profiler/*.pt.trace.json
+├── cp_overlap_report.json
+└── summary.txt
+```

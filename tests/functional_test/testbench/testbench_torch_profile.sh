@@ -84,6 +84,9 @@ fi
 
 export NVTE_FLASH_ATTN=1
 export NVTE_FUSED_ATTN=0
+# export NVSHMEM_DEBUG=INFO 
+# export NVSHMEM_VERSION=true 
+# export NVSHMEM_INFO=true 
 torchrun ${DISTRIBUTED_ARGS[@]} -m AutoTuner.testbench.profile.main \
     ${PROFILE_ARGS[@]} \
     ${OPTIONAL_PROFILE_ARGS[@]} \
