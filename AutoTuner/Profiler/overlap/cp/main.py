@@ -4,27 +4,13 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from datetime import datetime
 from typing import List, Optional
 
 from .cp_overlap_trace_analyzer import DEFAULT_FORWARD_PATTERN
-from .runner import CPOverlapInputCase, CPOverlapRunner, CPOverlapRunnerConfig
-
-
-def _parse_case(value: str) -> CPOverlapInputCase:
-    try:
-        seqlen_raw, max_token_len_raw = value.split(":", maxsplit=1)
-        return CPOverlapInputCase(
-            seqlen=int(seqlen_raw),
-            max_token_len=int(max_token_len_raw),
-        )
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(
-            "--case must use the form <seqlen>:<max_token_len>"
-        ) from exc
+from .runner import CPOverlapRunner, CPOverlapRunnerConfig
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -42,11 +28,18 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--case",
-        action="append",
-        type=_parse_case,
+        "--seqlen-range",
+        type=int,
+        nargs=2,
+        metavar=("START", "END"),
         default=None,
-        help="Input case in the form <seqlen>:<max_token_len>. Repeat to add more cases.",
+        help="Inclusive seqlen range to profile.",
+    )
+    parser.add_argument(
+        "--max-token-len",
+        type=int,
+        default=None,
+        help="Fixed max_token_len used for every generated case.",
     )
     parser.add_argument(
         "--batch-size", type=int, default=128, help="Batch size for generated cases."
@@ -69,6 +62,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         type=str,
         default="megatron",
         help="System field written into the generated test cases.",
+    )
+    parser.add_argument(
+        "--seqlen-step",
+        type=int,
+        default=1024,
+        help="Step used to expand the seqlen range into concrete cases.",
     )
     parser.add_argument(
         "--cp-size",
@@ -121,6 +120,8 @@ def _resolve_model_name(args: argparse.Namespace) -> str:
             f"{manifest_path} was found."
         )
 
+    import json
+
     with open(manifest_path, "r") as handle:
         manifest = json.load(handle)
     model_name = manifest.get("model")
@@ -131,42 +132,39 @@ def _resolve_model_name(args: argparse.Namespace) -> str:
     return model_name
 
 
-def _resolve_cases(args: argparse.Namespace, output_dir: str) -> List[CPOverlapInputCase]:
-    if args.case:
-        return [
-            CPOverlapInputCase(
-                seqlen=case.seqlen,
-                max_token_len=case.max_token_len,
-                batch_size=args.batch_size,
-                micro_batch_size=args.micro_batch_size,
-                shape=args.shape,
-                system=args.system,
-            )
-            for case in args.case
-        ]
+def _resolve_generation_inputs(
+    args: argparse.Namespace, output_dir: str
+) -> tuple[int, int, int, int]:
+    if args.seqlen_range is not None:
+        if args.max_token_len is None:
+            raise ValueError("--max-token-len is required with --seqlen-range.")
+        return (
+            args.seqlen_range[0],
+            args.seqlen_range[1],
+            args.max_token_len,
+            args.seqlen_step,
+        )
 
     if not args.skip_profiling:
-        return [
-            CPOverlapInputCase(
-                seqlen=40960,
-                max_token_len=40960,
-                batch_size=args.batch_size,
-                micro_batch_size=args.micro_batch_size,
-                shape=args.shape,
-                system=args.system,
-            )
-        ]
+        return (40960, 40960, 40960, args.seqlen_step)
 
     manifest_path = os.path.join(output_dir, "test_cases", "cases_manifest.json")
     if not os.path.exists(manifest_path):
         raise ValueError(
-            "No --case values were provided and no existing cases manifest was found "
+            "No --seqlen-range was provided and no existing cases manifest was found "
             f"under {manifest_path}."
         )
 
+    import json
+
     with open(manifest_path, "r") as handle:
         manifest = json.load(handle)
-    return [CPOverlapInputCase(**case_data) for case_data in manifest.get("cases", [])]
+    return (
+        int(manifest["seqlen_start"]),
+        int(manifest["seqlen_end"]),
+        int(manifest["max_token_len"]),
+        int(manifest.get("seqlen_step", args.seqlen_step)),
+    )
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -177,7 +175,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         output_dir = os.path.join("outputs", "cp_overlap_tuner", timestamp)
 
     model_name = _resolve_model_name(args)
-    cases = _resolve_cases(args, output_dir)
+    seqlen_start, seqlen_end, max_token_len, seqlen_step = _resolve_generation_inputs(
+        args, output_dir
+    )
 
     print("=" * 70)
     print("CP OVERLAP PROFILER")
@@ -185,22 +185,26 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"Model: {model_name}")
     print(f"CP Size: {args.cp_size}")
     print(f"Output Directory: {output_dir}")
-    print("Cases:")
-    for case in cases:
-        print(
-            "  - "
-            f"seqlen={case.seqlen}, max_token_len={case.max_token_len}, "
-            f"batch_size={case.batch_size}, micro_batch_size={case.micro_batch_size}, "
-            f"shape={case.shape}"
-        )
+    print(
+        "Seqlen Range: "
+        f"{seqlen_start}..{seqlen_end} (step {seqlen_step}), "
+        f"max_token_len={max_token_len}"
+    )
     print("")
 
     runner = CPOverlapRunner(
         CPOverlapRunnerConfig(
             model_name=model_name,
-            cases=cases,
             output_dir=output_dir,
+            seqlen_start=seqlen_start,
+            seqlen_end=seqlen_end,
+            max_token_len=max_token_len,
             cp_size=args.cp_size,
+            batch_size=args.batch_size,
+            micro_batch_size=args.micro_batch_size,
+            shape=args.shape,
+            system=args.system,
+            seqlen_step=seqlen_step,
             seed=args.seed,
             range_index=args.range_index,
             forward_pattern=args.forward_pattern,

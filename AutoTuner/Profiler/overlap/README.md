@@ -400,13 +400,23 @@ range per trace.
 
 ### CP CLI
 
-Run a fresh profile with one or more `(seqlen, max_token_len)` cases:
+Run a fresh profile with a `seqlen` range and fixed `max_token_len`:
 
 ```bash
 python -m AutoTuner.Profiler.overlap.cp.main \
   --model-name Qwen/Qwen3-0.6B \
-  --case 40960:40960 \
-  --case 32768:8192
+  --seqlen-range 32768 40960 \
+  --max-token-len 40960
+```
+
+Optionally control how densely the range is expanded:
+
+```bash
+python -m AutoTuner.Profiler.overlap.cp.main \
+  --model-name Qwen/Qwen3-0.6B \
+  --seqlen-range 8192 32768 \
+  --max-token-len 32768 \
+  --seqlen-step 4096
 ```
 
 Reuse existing traces in a prior output directory:
