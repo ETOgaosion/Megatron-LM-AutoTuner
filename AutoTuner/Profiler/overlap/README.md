@@ -1,10 +1,24 @@
-# TP Overlap Tuner
+# Overlap Utilities and TP Overlap Tuner
 
-Auto-tuning framework for TP (Tensor Parallel) communication/computation overlap configurations in RLHF training with Megatron-LM.
+`AutoTuner/Profiler/overlap` contains shared trace parsing and overlap analysis
+utilities, plus the TP-specific tuner under `AutoTuner/Profiler/overlap/tp/`.
 
-## Overview
+## Shared Modules
 
-The TP Overlap Tuner automatically finds optimal configurations for overlapping GEMM computations with TP collective communications (all-gather, reduce-scatter). It profiles different overlap methods and SM allocations to maximize throughput.
+- `trace_analyzer.py`: torch profiler JSON parsing and event classification.
+- `overlap_detector.py`: overlap interval aggregation and overlap metrics.
+
+## TP Overlap Tuner
+
+Auto-tuning framework for TP (Tensor Parallel) communication/computation overlap
+configurations in RLHF training with Megatron-LM.
+
+### Overview
+
+The TP Overlap Tuner automatically finds optimal configurations for overlapping
+GEMM computations with TP collective communications (all-gather,
+reduce-scatter). It profiles different overlap methods and SM allocations to
+maximize throughput.
 
 ### Workflow
 
@@ -29,8 +43,11 @@ The tuner follows this workflow:
 
 ### Overlap Methods
 
-- **ring_exchange**: Ring-based all-gather/reduce-scatter. Avoids occupying normal computation SM. Best for forward pass (fprop) and some backward passes (dgrad).
-- **bulk**: Bulk collective operations with configurable SM count. Binary search finds optimal num_sm. Best for backward passes (dgrad, wgrad).
+- **ring_exchange**: Ring-based all-gather/reduce-scatter. Avoids occupying
+  normal computation SM. Best for forward pass (fprop) and some backward passes
+  (dgrad).
+- **bulk**: Bulk collective operations with configurable SM count. Binary
+  search finds optimal num_sm. Best for backward passes (dgrad, wgrad).
 
 ## Quick Start
 
@@ -49,19 +66,20 @@ bash tests/functional_test/overlap/tp_overlap_tuner.sh
 
 ```bash
 # Run complete tuning workflow (model params auto-fetched from HuggingFace)
-python -m AutoTuner.Profiler.overlap.main --model-name Qwen/Qwen3-0.6B
+python -m AutoTuner.Profiler.overlap.tp.main --model-name Qwen/Qwen3-0.6B
 
 # Tune with specific TP size limit
-python -m AutoTuner.Profiler.overlap.main --model-name meta-llama/Llama-2-7b --max-tp-size 4
+python -m AutoTuner.Profiler.overlap.tp.main --model-name meta-llama/Llama-2-7b --max-tp-size 4
 
 # Tune specific operators only
-python -m AutoTuner.Profiler.overlap.main --model-name Qwen/Qwen3-0.6B --operators qkv proj
+python -m AutoTuner.Profiler.overlap.tp.main --model-name Qwen/Qwen3-0.6B --operators qkv proj
 ```
 
 ### Using Python API
 
 ```python
-from AutoTuner.Profiler.overlap import TPOverlapTuner, TPOverlapTunerConfig
+from AutoTuner.Profiler.overlap import OverlapDetector, TraceAnalyzer
+from AutoTuner.Profiler.overlap.tp import TPOverlapTuner, TPOverlapTunerConfig
 
 # Configure the tuner (model params auto-fetched from model_name)
 config = TPOverlapTunerConfig(
@@ -89,7 +107,7 @@ for rec in report.recommendations:
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `--model-name` | (required) | Model name from HuggingFace. Model parameters are automatically fetched. |
+| `--model-name` | (required for fresh runs) | Model name from HuggingFace. Optional with `--skip-profiling` if it can be inferred from `output-dir/test_cases/test_cases.json`. |
 | `--max-tp-size` | `8` | Maximum TP size to test (tests 2, 4, 8 up to this value) |
 | `--max-token-len` | `8192` | Maximum token length. Use high value for peak computational intensity. |
 | `--operators` | `fc1 fc2 qkv proj` | Operators to tune |
@@ -97,6 +115,7 @@ for rec in report.recommendations:
 | `--max-num-sm` | `16` | Maximum num_sm for bulk method binary search |
 | `--overlap-threshold` | `0.5` | Minimum overlap ratio to consider effective |
 | `--output-dir` | auto-generated | Output directory for results |
+| `--skip-profiling` | `false` | Analyze existing traces in `--output-dir` without profiling |
 
 ## Output Files
 
@@ -120,7 +139,8 @@ outputs/tp_overlap_tuner/<timestamp>/
 
 ### Output YAML Format
 
-The generated `optimal_tp_comm_overlap_cfg.yaml` can be used directly with Megatron-LM:
+The generated `optimal_tp_comm_overlap_cfg.yaml` can be used directly with
+Megatron-LM:
 
 ```yaml
 qkv_fprop:
@@ -137,6 +157,7 @@ fc1_dgrad:
 ```
 
 To use the optimal config:
+
 ```bash
 cp outputs/tp_overlap_tuner/<timestamp>/optimal_tp_comm_overlap_cfg.yaml \
    AutoTuner/testbench/profile/configs/local/tp_comm_overlap_cfg.yaml
@@ -171,11 +192,13 @@ The `tuning_report.json` includes detailed metrics for each configuration:
 ```
 
 Key metrics:
+
 - `*_e2e_time_us`: End-to-end execution time (wall clock from first to last event)
 - `operator_e2e_time_us`: Total Linear operator execution time
 - `*_overlap_ratio`: Ratio of overlap time to min(GEMM, comm) time
 
-The JSON report also includes TP scaling efficiency analysis with TP=1 as baseline:
+The JSON report also includes TP scaling efficiency analysis with TP=1 as
+baseline:
 
 ```json
 {
@@ -200,6 +223,7 @@ The JSON report also includes TP scaling efficiency analysis with TP=1 as baseli
 ### Step 0: [INPUT] Model Configuration
 
 Model parameters are automatically fetched from HuggingFace:
+
 - `hidden_size`
 - `ffn_hidden_size` (intermediate_size)
 - `num_attention_heads`
@@ -208,6 +232,7 @@ Model parameters are automatically fetched from HuggingFace:
 ### Step 1: Generate Test Cases
 
 Uses binary search strategy for `num_sm` parameter:
+
 - Tests TP=2 first to see if overlap is beneficial
 - Adjusts TP size (2, 4, 8) to vary computational pressure
 - For ring_exchange: tests aggregate=0 and aggregate=1
@@ -218,6 +243,7 @@ Total ~288 configurations (3 TP sizes × 4 operators × ~24 configs/operator)
 ### Step 2: Run Profiling
 
 For each configuration:
+
 - Generates `tp_comm_overlap_cfg.yaml`
 - Runs torch profiler with `--run-one-data` flag
 - Uses high `max_token_len` for peak computational intensity
@@ -225,6 +251,7 @@ For each configuration:
 ### Step 3: Analyze Traces
 
 Parses torch profiler JSON to detect:
+
 - GEMM kernels: `cutlass`, `cublas`, `sm*_xmma`, etc.
 - Communication kernels: `userbuffers`, `Memcpy PtoP`, `kuserbuffers`, `nccl`
 
@@ -233,12 +260,14 @@ Calculates overlap ratio: `overlap_time / min(gemm_time, comm_time)`
 **TP Scaling Efficiency Check:**
 
 The tuner uses TP=1 (no tensor parallelism) as the baseline for comparison:
+
 - TP=1 represents pure computation without communication overhead
 - Rule: If using TP=n, then `Time(TP=n)` should be ≈ `Time(TP=1) / n`
 - Tolerance: 20% (configurable)
 - If scaling is not efficient, the smaller TP size (or no TP) is recommended
 
 Example:
+
 - TP=1 (baseline): 2000us (pure computation, no comm)
 - TP=2: Expected 1000us (1/2 of TP=1), Actual 1100us → ratio=1.1 → EFFICIENT
 - TP=4: Expected 500us (1/4 of TP=1), Actual 600us → ratio=1.2 → EFFICIENT (within 20%)
@@ -248,6 +277,7 @@ Example:
 ### Step 4: Generate Report
 
 Produces:
+
 - Best config per operator/phase (highest overlap ratio)
 - Recommendations for effective overlap (>50% ratio)
 - **Optimal TP size based on scaling efficiency analysis**
@@ -255,8 +285,8 @@ Produces:
 
 ## TP Overlap Trace Analyzer (Single Range)
 
-Use this tool to inspect a single `run_micro_batch` NVTX range in a torch profiler
-JSON trace and compute overlap ratio as:
+Use this tool to inspect a single `run_micro_batch` NVTX range in a torch
+profiler JSON trace and compute overlap ratio as:
 
 ```
 overlap_ratio = overlapped_comm_time / total_compute_time
@@ -272,7 +302,7 @@ overlap_ratio = overlapped_comm_time / total_compute_time
 ### Usage
 
 ```bash
-python -m AutoTuner.Profiler.overlap.tp_overlap_trace_analyzer \
+python -m AutoTuner.Profiler.overlap.tp.tp_overlap_trace_analyzer \
   --trace outputs/<timestamp>/<model>/torch_profiler/*.pt.trace.json \
   --linear-type ColumnParallelLinear
 ```
@@ -280,7 +310,7 @@ python -m AutoTuner.Profiler.overlap.tp_overlap_trace_analyzer \
 Pick an explicit `run_micro_batch` range (0-based):
 
 ```bash
-python -m AutoTuner.Profiler.overlap.tp_overlap_trace_analyzer \
+python -m AutoTuner.Profiler.overlap.tp.tp_overlap_trace_analyzer \
   --trace outputs/<timestamp>/<model>/torch_profiler/*.pt.trace.json \
   --linear-type RowParallelLinear \
   --range-index 0
@@ -289,7 +319,7 @@ python -m AutoTuner.Profiler.overlap.tp_overlap_trace_analyzer \
 Write JSON output to a file:
 
 ```bash
-python -m AutoTuner.Profiler.overlap.tp_overlap_trace_analyzer \
+python -m AutoTuner.Profiler.overlap.tp.tp_overlap_trace_analyzer \
   --trace outputs/<timestamp>/<model>/torch_profiler/*.pt.trace.json \
   --linear-type ColumnParallelLinear \
   --output-json outputs/overlap_summary.json
@@ -308,15 +338,18 @@ python -m AutoTuner.Profiler.overlap.tp_overlap_trace_analyzer \
 
 ```
 AutoTuner/Profiler/overlap/
-├── __init__.py           # Package exports
-├── main.py               # CLI entry point (complete workflow)
-├── tuner.py              # Main orchestrator (TPOverlapTuner)
-├── config_generator.py   # Test configuration generation
-├── trace_analyzer.py     # Torch profiler JSON parsing
-├── tp_overlap_trace_analyzer.py # Single-range overlap analyzer
-├── overlap_detector.py   # Overlap calculation
-├── report_generator.py   # Report & YAML generation
-└── test_trace_analyzer.py # Unit tests
+├── README.md                  # Shared utilities + TP tuner docs
+├── __init__.py                # Shared package exports
+├── trace_analyzer.py          # Shared torch profiler JSON parsing
+├── overlap_detector.py        # Shared overlap calculation
+└── tp/
+    ├── __init__.py
+    ├── main.py                # TP tuner CLI entry point
+    ├── tuner.py               # TPOverlapTuner orchestrator
+    ├── config_generator.py    # TP test configuration generation
+    ├── tp_overlap_trace_analyzer.py
+    ├── report_generator.py    # TP report and YAML generation
+    └── test_trace_analyzer.py
 ```
 
 ## Requirements

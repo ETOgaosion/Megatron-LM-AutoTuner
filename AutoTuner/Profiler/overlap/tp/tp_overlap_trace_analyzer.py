@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from .trace_analyzer import TraceAnalyzer, TraceEvent
+from ..trace_analyzer import TraceAnalyzer, TraceEvent
 
 COMPUTE_EXTRA_PATTERNS = [
     r"relu",

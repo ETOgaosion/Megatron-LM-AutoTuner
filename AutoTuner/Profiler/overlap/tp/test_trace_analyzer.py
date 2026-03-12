@@ -3,19 +3,18 @@
 Test script for TraceAnalyzer.
 
 Run with:
-    python -m AutoTuner.Profiler.overlap.test_trace_analyzer
+    python -m AutoTuner.Profiler.overlap.tp.test_trace_analyzer
 """
 
 import os
 import sys
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 def test_trace_analyzer():
     """Test the TraceAnalyzer with the sample trace file."""
-    from AutoTuner.Profiler.overlap.trace_analyzer import (
-        TraceAnalyzer,
-        analyze_trace_file,
-    )
+    from AutoTuner.Profiler.overlap.trace_analyzer import TraceAnalyzer, analyze_trace_file
 
     # Sample trace path
     sample_trace = (
@@ -87,7 +86,7 @@ def test_trace_analyzer():
 
 def test_config_generator():
     """Test the TPOverlapConfigGenerator."""
-    from AutoTuner.Profiler.overlap.config_generator import (
+    from AutoTuner.Profiler.overlap.tp.config_generator import (
         TPOverlapConfigGenerator,
         TPOverlapTunerConfig,
     )
@@ -97,18 +96,21 @@ def test_config_generator():
     print("Testing TPOverlapConfigGenerator")
     print("=" * 60)
 
-    config = TPOverlapTunerConfig(
-        model_name="Qwen/Qwen3-0.6B",
+    hf_config = SimpleNamespace(
         hidden_size=1024,
-        ffn_hidden_size=3072,
+        intermediate_size=3072,
         num_attention_heads=16,
-        num_kv_heads=8,
-        max_tp_size=4,
-        operators=["fc1", "qkv"],
+        num_key_value_heads=8,
     )
+    with patch("AutoTuner.utils.config.get_hf_model_config", return_value=hf_config):
+        config = TPOverlapTunerConfig(
+            model_name="Qwen/Qwen3-0.6B",
+            max_tp_size=4,
+            operators=["fc1", "qkv"],
+        )
 
-    generator = TPOverlapConfigGenerator(config)
-    all_configs = generator.generate_all_configs()
+        generator = TPOverlapConfigGenerator(config)
+        all_configs = generator.generate_all_configs()
 
     print(f"Generated {len(all_configs)} test configurations")
     print("")
@@ -132,7 +134,7 @@ def test_config_generator():
 
 def test_overlap_detector():
     """Test the OverlapDetector with sample trace."""
-    from AutoTuner.Profiler.overlap.config_generator import (
+    from AutoTuner.Profiler.overlap.tp.config_generator import (
         OverlapMethod,
         TPOverlapTestConfig,
     )
@@ -182,7 +184,7 @@ def test_overlap_detector():
 
 def main():
     """Run all tests."""
-    print("Running TP Overlap Tuner Tests")
+    print("Running overlap package tests")
     print("")
 
     success = True

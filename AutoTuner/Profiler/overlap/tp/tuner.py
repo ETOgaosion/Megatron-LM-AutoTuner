@@ -22,7 +22,7 @@ from .config_generator import (
     TPOverlapTunerConfig,
     generate_single_test_yaml,
 )
-from .overlap_detector import OverlapAnalysis, OverlapDetector
+from ..overlap_detector import OverlapAnalysis, OverlapDetector
 from .report_generator import ReportGenerator, TuningReport
 
 
