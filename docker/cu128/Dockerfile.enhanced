@@ -1,5 +1,7 @@
 FROM whatcanyousee/megatron-autotuner-env:mcore0.15.1_te2.7
 
+RUN rm -rf /workspace/deepep-nvshmem
+
 RUN wget https://developer.download.nvidia.com/compute/nvshmem/3.5.19/local_installers/nvshmem-local-repo-ubuntu2404-3.5.19_3.5.19-1_amd64.deb && \
     dpkg -i nvshmem-local-repo-ubuntu2404-3.5.19_3.5.19-1_amd64.deb && \
     cp /var/nvshmem-local-repo-ubuntu2404-3.5.19/nvshmem-*-keyring.gpg /usr/share/keyrings/ && \
@@ -10,5 +12,13 @@ RUN mkdir /usr/local/nvshmem && \
     ln -s /usr/bin/nvshmem /usr/local/nvshmem/bin && \
     ln -s /usr/include/nvshmem /usr/local/nvshmem/include && \
     ln -s /usr/lib/x86_64-linux-gnu/nvshmem/12 /usr/local/nvshmem/lib
+
+RUN pip install nvshmem4py-cu12
+
+RUN echo "export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/nvshmem/12/:\$LD_LIBRARY_PATH" >> ~/.bashrc
+
+RUN echo "export PATH=/usr/local/nvshmem/bin:\$PATH" >> ~/.bashrc
+
+RUN echo "export NVSHMEM_HOME=/usr/local/nvshmem" >> ~/.bashrc
 
 ENV NVSHMEM_HOME=/usr/local/nvshmem
