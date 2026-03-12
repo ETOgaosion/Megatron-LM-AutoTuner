@@ -34,9 +34,16 @@ class CPOverlapInputCase:
 @dataclass
 class CPOverlapRunnerConfig:
     model_name: str
-    cases: List[CPOverlapInputCase]
     output_dir: str
+    seqlen_start: int
+    seqlen_end: int
+    max_token_len: int
     cp_size: int = 2
+    batch_size: int = 128
+    micro_batch_size: int = 2
+    shape: str = "thd"
+    system: str = "megatron"
+    seqlen_step: int = 1024
     profile_script: str = "scripts/cp_overlap_tuner/profile_single_case.sh"
     seed: int = 0
     range_index: Optional[int] = None
@@ -61,6 +68,37 @@ class CPOverlapRunner:
     def __init__(self, config: CPOverlapRunnerConfig):
         self.config = config
         os.makedirs(self.config.output_dir, exist_ok=True)
+        self.cases = self._generate_cases()
+
+    def _generate_cases(self) -> List[CPOverlapInputCase]:
+        if self.config.seqlen_start <= 0 or self.config.seqlen_end <= 0:
+            raise ValueError("seqlen range values must be positive.")
+        if self.config.seqlen_start > self.config.seqlen_end:
+            raise ValueError("seqlen_start must be <= seqlen_end.")
+        if self.config.seqlen_step <= 0:
+            raise ValueError("seqlen_step must be positive.")
+
+        seqlens = list(
+            range(
+                self.config.seqlen_start,
+                self.config.seqlen_end + 1,
+                self.config.seqlen_step,
+            )
+        )
+        if seqlens[-1] != self.config.seqlen_end:
+            seqlens.append(self.config.seqlen_end)
+
+        return [
+            CPOverlapInputCase(
+                seqlen=seqlen,
+                max_token_len=self.config.max_token_len,
+                batch_size=self.config.batch_size,
+                micro_batch_size=self.config.micro_batch_size,
+                shape=self.config.shape,
+                system=self.config.system,
+            )
+            for seqlen in seqlens
+        ]
 
     def _write_test_cases_files(self) -> Dict[str, str]:
         test_cases_dir = os.path.join(self.config.output_dir, "test_cases")
@@ -69,14 +107,22 @@ class CPOverlapRunner:
         manifest = {
             "model": self.config.model_name,
             "cp_size": self.config.cp_size,
-            "cases": [case.to_test_case_dict() for case in self.config.cases],
+            "seqlen_start": self.config.seqlen_start,
+            "seqlen_end": self.config.seqlen_end,
+            "seqlen_step": self.config.seqlen_step,
+            "max_token_len": self.config.max_token_len,
+            "batch_size": self.config.batch_size,
+            "micro_batch_size": self.config.micro_batch_size,
+            "shape": self.config.shape,
+            "system": self.config.system,
+            "cases": [case.to_test_case_dict() for case in self.cases],
         }
         manifest_path = os.path.join(test_cases_dir, "cases_manifest.json")
         with open(manifest_path, "w") as handle:
             json.dump(manifest, handle, indent=2)
 
         case_files: Dict[str, str] = {}
-        for case in self.config.cases:
+        for case in self.cases:
             case_path = os.path.join(test_cases_dir, f"{case.get_case_id()}.json")
             with open(case_path, "w") as handle:
                 json.dump(
@@ -99,7 +145,7 @@ class CPOverlapRunner:
 
     def _run_profiling(self, case_files: Dict[str, str]) -> List[ProfilingResult]:
         results: List[ProfilingResult] = []
-        for case in self.config.cases:
+        for case in self.cases:
             results.append(self._profile_single_case(case, case_files[case.get_case_id()]))
         return results
 
@@ -183,7 +229,7 @@ class CPOverlapRunner:
 
     def _load_existing_traces(self) -> List[ProfilingResult]:
         results: List[ProfilingResult] = []
-        for case in self.config.cases:
+        for case in self.cases:
             result = ProfilingResult(case=case)
             case_output_dir = os.path.join(
                 self.config.output_dir, "traces", case.get_case_id()
