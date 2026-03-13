@@ -12,6 +12,7 @@ from transformers import PretrainedConfig
 from typing_extensions import override
 
 from AutoTuner.utils.structs import InputTestCase
+from AutoTuner.utils.memory import MemoryTrackerContext, get_memory_str
 
 from ..ops.te_grouped_mlp import TEGroupedMLPForTest
 from ..profile.configs.config_struct import ProfileMode
