@@ -1,0 +1,9 @@
+{
+  "model_name": "Qwen/Qwen3-0.6B",
+  "prompt_len": 4096,
+  "response_len": 1024,
+  "nprocs_per_node": 8,
+  "output_dir": "outputs/algorithm/functional_dense",
+  "max_tp_size": 8,
+  "tp_max_token_len": 8192
+}

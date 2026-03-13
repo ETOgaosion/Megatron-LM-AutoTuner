@@ -1,0 +1,9 @@
+{
+  "model_name": "Qwen/Qwen3-30B-A3B",
+  "prompt_len": 4096,
+  "response_len": 1024,
+  "nprocs_per_node": 16,
+  "output_dir": "outputs/algorithm/functional_moe",
+  "max_tp_size": 8,
+  "tp_max_token_len": 8192
+}
