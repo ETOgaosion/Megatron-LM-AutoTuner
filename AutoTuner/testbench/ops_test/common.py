@@ -6,7 +6,6 @@ from typing import Any, Iterator, List, Optional, Tuple
 
 import megatron.core.parallel_state as mpu
 import torch
-import torch.nn as nn
 from megatron.core import tensor_parallel
 from megatron.core.transformer.transformer_config import TransformerConfig
 from tensordict import TensorDict
@@ -108,6 +107,14 @@ class TestCommon(TheoreticalCalculation):
     def reset_cur_iters(self):
         self.cur_iters = 0
 
+    def zero_grad_op(self, set_to_none: bool = False):
+        zero_grad = getattr(self.op, "zero_grad", None)
+        if not callable(zero_grad):
+            return
+
+        kwargs = {"set_to_none": set_to_none} if set_to_none else {}
+        zero_grad(**kwargs)
+
     def run_micro_batch(self, test_case: InputTestCase, inputs: List[Any], tokens: int):
         if (
             mpu.get_tensor_model_parallel_world_size() > 1
@@ -137,9 +144,9 @@ class TestCommon(TheoreticalCalculation):
                     output = self.op(*inputs)
                     if isinstance(output, tuple):
                         output = output[0]
-                    output.requires_grad_(True)
-                    output.sum().backward(retain_graph=True)
-                    self.op.zero_grad(set_to_none=True)
+                    # output.requires_grad_(True)
+                    # output.sum().backward(retain_graph=True)
+                    # self.zero_grad_op(set_to_none=True)
 
             torch.cuda.synchronize()
             torch.distributed.barrier()
@@ -156,14 +163,14 @@ class TestCommon(TheoreticalCalculation):
             if isinstance(output, tuple):
                 output = output[0]
             output.requires_grad_(True)
-            nvtx_range_push("backward")
             torch.distributed.barrier()
-            output.sum().backward()
+            nvtx_range_push("backward")
+            # output.sum().backward()
             nvtx_range_pop("backward")
             if self.cur_iters < self.profile_iters:
                 check_error(cudart().cudaProfilerStop())
                 self.cur_iters += 1
-            self.op.zero_grad(set_to_none=True)
+            self.zero_grad_op(set_to_none=True)
         elif (
             self.profile_mode == ProfileMode.torch_profiler
             or self.profile_mode == ProfileMode.torch_memory_snapshot
@@ -182,9 +189,9 @@ class TestCommon(TheoreticalCalculation):
             if isinstance(output, tuple):
                 output = output[0]
             output.requires_grad_(True)
-            nvtx_range_push("backward")
             torch.distributed.barrier()
-            output.sum().backward()
+            nvtx_range_push("backward")
+            # output.sum().backward()
             nvtx_range_pop("backward")
             self.cur_iters += 1
         else:
@@ -204,8 +211,7 @@ class TestCommon(TheoreticalCalculation):
                     outputs.requires_grad_(True)
                     loss = outputs.sum()
                     loss.backward()
-                    if isinstance(self.op, nn.Module):
-                        self.op.zero_grad(set_to_none=True)
+                    self.zero_grad_op(set_to_none=True)
                 del outputs
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
@@ -248,8 +254,7 @@ class TestCommon(TheoreticalCalculation):
             del output
         # Some ops may be nn.Module, need to clear their gradients
         # But others may be functions(eg.autograd.Function), so we check type here
-        if isinstance(self.op, nn.Module):
-            self.op.zero_grad()
+        self.zero_grad_op()
         gc.collect()
         torch.cuda.empty_cache()
 

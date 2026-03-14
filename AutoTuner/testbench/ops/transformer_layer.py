@@ -81,10 +81,12 @@ class TransformerLayerForTest(CommonOpsForTest, TransformerLayer):
             packed_seq_params=packed_seq_params,
         )
         nvtx_range_pop(suffix="Attention Layer")
+        self.debug_stage_sync("Attention Layer")
 
         nvtx_range_push(suffix="Mlp Layer")
         output = self._forward_mlp(hidden_states)
         nvtx_range_pop(suffix="Mlp Layer")
+        self.debug_stage_sync("Mlp Layer")
 
         return output
 

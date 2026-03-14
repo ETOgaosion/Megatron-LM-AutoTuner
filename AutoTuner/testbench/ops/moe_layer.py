@@ -80,24 +80,32 @@ class MoELayerForTest(MoELayer, CommonOpsForTest):
 
         # MoE forward: route -> dispatch -> compute -> combine
         def custom_forward(hidden_states):
+            nvtx_range_push(suffix="shared_experts")
+            shared_expert_output = self.shared_experts_compute(hidden_states)
+            nvtx_range_pop(suffix="shared_experts")
+            self.debug_stage_sync("shared_experts")
             nvtx_range_push(suffix="routing")
-            hidden_states, probs, residual = self.router_and_preprocess(hidden_states)
+            probs, routing_map = self.route(hidden_states)
+            hidden_states, probs = self.preprocess(hidden_states, probs, routing_map)
             nvtx_range_pop(suffix="routing")
+            self.debug_stage_sync("routing")
             nvtx_range_push(suffix="dispatch")
             dispatched_input, probs = self.dispatch(hidden_states, probs)
             nvtx_range_pop(suffix="dispatch")
+            self.debug_stage_sync("dispatch")
             nvtx_range_push(suffix="expert compute")
-            output, shared_expert_output, mlp_bias = self.experts_compute(
-                dispatched_input, probs, residual
-            )
+            output, mlp_bias = self.routed_experts_compute(dispatched_input, probs)
             nvtx_range_pop(suffix="expert compute")
+            self.debug_stage_sync("expert compute")
             nvtx_range_push(suffix="combine")
-            output = self.combine(output, shared_expert_output)
+            output = self.combine(output)
+            output = self.postprocess(output, shared_expert_output)
             nvtx_range_pop(suffix="combine")
+            self.debug_stage_sync("combine")
             return output, mlp_bias
 
         if self.moe_layer_recompute:
-            if self.config.fp8:
+            if self.config.fp8 or self.config.fp4:
                 output, mlp_bias = te_checkpoint(
                     custom_forward,
                     False,
@@ -126,25 +134,6 @@ class MoELayerForTest(MoELayer, CommonOpsForTest):
         combine step.
         """
         shared_expert_output = None
-        if self.use_shared_expert and not self.shared_expert_overlap:
-            # Compute the shared expert separately when not overlapped with communication.
-            nvtx_range_push(suffix="shared_experts")
-            if self.shared_experts_recompute:
-                if self.config.fp8:
-                    shared_expert_output = te_checkpoint(
-                        self.shared_experts,
-                        False,
-                        tensor_parallel.random.get_cuda_rng_tracker,
-                        parallel_state.get_tensor_model_parallel_group(),
-                        residual,
-                    )
-                else:
-                    shared_expert_output = tensor_parallel.checkpoint(
-                        self.shared_experts, False, residual
-                    )
-            else:
-                shared_expert_output = self.shared_experts(residual)
-            nvtx_range_pop(suffix="shared_experts")
         nvtx_range_push(suffix="dispatch_postprocess")
         dispatched_input, tokens_per_expert, permuted_probs = (
             self.token_dispatcher.dispatch_postprocess(hidden_states, probs)

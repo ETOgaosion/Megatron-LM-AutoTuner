@@ -69,7 +69,7 @@ class TestTransformerLayer(TestWithHiddenInputs):
                 self.op = TransformerLayerForTest(
                     tf_config,
                     submodules=layer_submodules,
-                    layer_number=tf_config.num_layers,
+                    layer_number=1,
                     hidden_dropout=(
                         tf_config.hidden_dropout
                         if tf_config.hidden_dropout is not None
@@ -100,7 +100,7 @@ class TestTransformerLayer(TestWithHiddenInputs):
             self.op = TransformerLayerForTest(
                 tf_config,
                 submodules=layer_submodules,
-                layer_number=tf_config.num_layers,
+                layer_number=1,
                 hidden_dropout=(
                     tf_config.hidden_dropout
                     if tf_config.hidden_dropout is not None
