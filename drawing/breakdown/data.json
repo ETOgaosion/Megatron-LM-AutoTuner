@@ -1,0 +1,64 @@
+[
+    {
+        "machine": "RTX5090",
+        "ours": {
+            "attn": {
+                "duration": 27.381,
+                "unit": "ms"
+            },
+            "moe": {
+                "duration": 15.683,
+                "unit": "ms"
+            },
+            "total": {
+                "duration": 48.6,
+                "unit": "ms"
+            }
+        },
+        "baseline": {
+            "attn": {
+                "duration": 33.064,
+                "unit": "ms"
+            },
+            "moe": {
+                "duration": 17.964,
+                "unit": "ms"
+            },
+            "total": {
+                "duration": 56.547,
+                "unit": "ms"
+            }
+        }
+    },
+    {
+        "machine": "A100",
+        "ours": {
+            "attn": {
+                "duration": 12.345,
+                "unit": "ms"
+            },
+            "moe": {
+                "duration": 10.131,
+                "unit": "ms"
+            },
+            "total": {
+                "duration": 23.110,
+                "unit": "ms"
+            }
+        },
+        "baseline": {
+            "attn": {
+                "duration": 15.678,
+                "unit": "ms"
+            },
+            "moe": {
+                "duration": 10.234,
+                "unit": "ms"
+            },
+            "total": {
+                "duration": 25.912,
+                "unit": "ms"
+            }
+        }
+    }
+]

@@ -153,3 +153,39 @@ python drawing/cp_overlap_effect/plot_cp_overlap_effect.py \
   -o outputs/drawing/cp_overlap_effect/custom/cp_overlap_effect.png \
   --font-size 16
 ```
+
+## `breakdown/plot_breakdown.py`
+
+Draw stacked latency breakdown bars from `drawing/breakdown/data.json`:
+- two bars per machine: `Baseline` and `Ours`
+- stacked segments: `attn`, `moe`, and `other` (`total - attn - moe` when non-zero)
+- per-machine total reduction annotation above each pair (for example `-20.3%`)
+
+### Run
+
+```bash
+python drawing/breakdown/plot_breakdown.py
+```
+
+### Output
+
+- Default output image path:
+  - `outputs/drawing/breakdown/<timestamp>/breakdown.png`
+- You can override it with `-o /path/to/output.png`
+
+### Common Options
+
+- `-i`, `--input`: input JSON path (default `drawing/breakdown/data.json`)
+- `-o`, `--output`: output image path
+- `--title`: figure title (default `Latency Breakdown: Baseline vs Ours`)
+- `--font-size`: base font size (default `14`)
+- `--dpi`: image dpi (default `180`)
+
+### Example With Custom Output
+
+```bash
+python drawing/breakdown/plot_breakdown.py \
+  -i drawing/breakdown/data.json \
+  -o outputs/drawing/breakdown/custom/breakdown.png \
+  --font-size 15
+```

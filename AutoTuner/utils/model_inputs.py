@@ -11,6 +11,7 @@ from tensordict import TensorDict
 from transformers import PretrainedConfig
 
 from verl.utils.megatron.pipeline_parallel import make_batch_generator
+from verl.models.mcore.util import preprocess_packed_seqs
 from verl.utils.model import compute_position_id_with_mask, create_random_mask
 from verl.utils.seqlen_balancing import rearrange_micro_batches
 
@@ -119,7 +120,10 @@ def _get_one_model_input_megatron_thd(
     input_ids_rmpad, packed_seq_params = generate_thd_input(
         input_ids=input_ids, attention_mask=attention_mask
     )
-    return input_ids_rmpad, attention_mask, position_ids, packed_seq_params
+    position_ids_rmpad, _ = preprocess_packed_seqs(
+        position_ids, attention_mask, pre_process=True
+    )
+    return input_ids_rmpad, attention_mask, position_ids_rmpad, packed_seq_params
 
 
 def get_one_model_input(
@@ -159,7 +163,10 @@ def get_thd_model_input_from_bshd(
         input_ids_rmpad, packed_seq_params = generate_thd_input(
             input_ids=input_ids, attention_mask=attention_mask
         )
-        return input_ids_rmpad, attention_mask, position_ids, packed_seq_params
+        position_ids_rmpad, _ = preprocess_packed_seqs(
+            position_ids, attention_mask, pre_process=True
+        )
+        return input_ids_rmpad, attention_mask, position_ids_rmpad, packed_seq_params
     elif system == "fsdp":
         input_ids_rmpad, indices, *_ = unpad_input(
             input_ids.unsqueeze(-1), attention_mask

@@ -147,6 +147,9 @@ class TestAttnFuncWithCPAndKVP2PNVSHMEM(TestWithHiddenInputs):
         query_layer, key_layer, value_layer = [
             x.contiguous() if not x.is_contiguous() else x for x in [q, k, v]
         ]
+        for tensor in (query_layer, key_layer, value_layer):
+            if isinstance(tensor, torch.Tensor) and tensor.is_floating_point():
+                tensor.requires_grad_(True)
 
         packed_seq_kwargs = (
             {
